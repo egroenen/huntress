@@ -1173,6 +1173,9 @@ export const createRepositories = (database: SqliteDatabase) => {
         noProgressSince: row.no_progress_since,
       }));
     },
+    deleteAll(): void {
+      database.prepare('DELETE FROM transmission_torrent_state').run();
+    },
   };
 
   return {

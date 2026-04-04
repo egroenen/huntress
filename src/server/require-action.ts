@@ -15,6 +15,7 @@ type ActionName =
   | 'run-dry'
   | 'run-live'
   | 'recover-run'
+  | 'reset-transmission-cache'
   | 'save-settings'
   | `clear-suppression:${number}`
   | `test-connection:${'sonarr' | 'radarr' | 'prowlarr' | 'transmission'}`;

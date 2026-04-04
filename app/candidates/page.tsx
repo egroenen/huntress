@@ -451,6 +451,7 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
           <DataTable
             columns={[
               { key: 'title', label: 'Title' },
+              { key: 'mediaKey', label: 'Media key' },
               { key: 'wantedState', label: 'Wanted state' },
               { key: 'decision', label: 'Decision' },
               { key: 'reason', label: 'Reason code' },
@@ -459,6 +460,7 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
             ]}
             rows={pagedCandidates[app].map((candidate) => ({
               title: candidate.title,
+              mediaKey: <code className="reason-code">{candidate.mediaKey}</code>,
               wantedState: candidate.wantedState,
               decision: (
                 <StatusBadge

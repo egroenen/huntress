@@ -18,6 +18,7 @@ export interface ConsoleActionTokens {
   runDry: string;
   runLive: string;
   recoverRun: string;
+  resetTransmissionCache: string;
 }
 
 export interface DependencyHealthCard {

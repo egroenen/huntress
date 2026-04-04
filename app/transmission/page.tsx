@@ -31,7 +31,24 @@ export default async function TransmissionPage() {
     >
       <SectionCard
         title="Recent torrent observations"
-        subtitle="Rows are ordered by latest removal or observation time."
+        subtitle="Rows are ordered by latest removal or observation time. Use reset if older bad linkage needs to be cleared and rebuilt from fresh Arr queue data."
+        actions={
+          <form action="/api/actions/reset-transmission-cache" method="post">
+            <input
+              type="hidden"
+              name="csrfToken"
+              value={runtime.csrfTokens.resetTransmissionCache}
+            />
+            <button
+              type="submit"
+              className="console-button console-button--ghost"
+              title="Delete cached Transmission observation rows so linked media can be rebuilt from fresh queue and torrent data."
+              aria-label="Reset cached Transmission observations"
+            >
+              Reset cache
+            </button>
+          </form>
+        }
       >
         <DataTable
           columns={[
