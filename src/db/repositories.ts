@@ -817,6 +817,29 @@ export const createRepositories = (database: SqliteDatabase) => {
 
       return rows.map((row) => toRunHistoryRecord(row));
     },
+    countAll(): number {
+      const row = database
+        .prepare<[], { total: number } | undefined>(
+          'SELECT COUNT(*) AS total FROM run_history'
+        )
+        .get();
+
+      return row?.total ?? 0;
+    },
+    listPage(limit: number, offset: number): RunHistoryRecord[] {
+      const rows = database
+        .prepare<[number, number], RunHistoryRow>(
+          `
+            SELECT *
+            FROM run_history
+            ORDER BY started_at DESC, id DESC
+            LIMIT ? OFFSET ?
+          `
+        )
+        .all(limit, offset);
+
+      return rows.map((row) => toRunHistoryRecord(row));
+    },
   };
 
   const activityLog = {
@@ -931,6 +954,39 @@ export const createRepositories = (database: SqliteDatabase) => {
           `
         )
         .all(runId);
+
+      return rows.map((row) => toSearchAttemptRecord(row));
+    },
+    countByRunId(runId: string): number {
+      const row = database
+        .prepare<[string], { total: number } | undefined>(
+          `
+            SELECT COUNT(*) AS total
+            FROM search_attempt
+            WHERE run_id = ?
+          `
+        )
+        .get(runId);
+
+      return row?.total ?? 0;
+    },
+    listPageByRunId(
+      runId: string,
+      limit: number,
+      offset: number
+    ): SearchAttemptRecord[] {
+      const rows = database
+        .prepare<[string, number, number], SearchAttemptRow>(
+          `
+            SELECT run_id, media_key, app, wanted_state, decision, reason_code, dry_run,
+                   arr_command_id, attempted_at, completed_at, outcome
+            FROM search_attempt
+            WHERE run_id = ?
+            ORDER BY attempted_at ASC, id ASC
+            LIMIT ? OFFSET ?
+          `
+        )
+        .all(runId, limit, offset);
 
       return rows.map((row) => toSearchAttemptRecord(row));
     },

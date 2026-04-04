@@ -265,3 +265,93 @@ test('database state persists cleanly across restart boundaries', async () => {
     secondDatabase.close();
   }
 });
+
+test('run history and attempt repositories support paged queries', async () => {
+  const databasePath = await createDatabasePath();
+  const database = await initializeDatabase(databasePath);
+
+  try {
+    for (let index = 1; index <= 3; index += 1) {
+      database.repositories.runHistory.create({
+        id: `run-${index}`,
+        runType: 'scheduled',
+        startedAt: `2026-04-0${index}T12:00:00.000Z`,
+        finishedAt: `2026-04-0${index}T12:05:00.000Z`,
+        status: 'success',
+        candidateCount: index,
+        dispatchCount: index,
+        skipCount: 0,
+        errorCount: 0,
+        summary: {},
+      });
+    }
+
+    database.repositories.searchAttempts.insertMany([
+      {
+        runId: 'run-3',
+        mediaKey: 'sonarr:episode:1',
+        app: 'sonarr',
+        wantedState: 'missing',
+        decision: 'dispatch',
+        reasonCode: 'ELIGIBLE_MISSING_RECENT',
+        dryRun: false,
+        arrCommandId: 1,
+        attemptedAt: '2026-04-03T12:00:00.000Z',
+        completedAt: '2026-04-03T12:00:01.000Z',
+        outcome: 'accepted',
+      },
+      {
+        runId: 'run-3',
+        mediaKey: 'sonarr:episode:2',
+        app: 'sonarr',
+        wantedState: 'missing',
+        decision: 'skip',
+        reasonCode: 'SKIP_COOLDOWN_ACTIVE',
+        dryRun: false,
+        arrCommandId: null,
+        attemptedAt: '2026-04-03T12:00:02.000Z',
+        completedAt: null,
+        outcome: null,
+      },
+      {
+        runId: 'run-3',
+        mediaKey: 'sonarr:episode:3',
+        app: 'sonarr',
+        wantedState: 'missing',
+        decision: 'skip',
+        reasonCode: 'SKIP_ITEM_SUPPRESSED',
+        dryRun: false,
+        arrCommandId: null,
+        attemptedAt: '2026-04-03T12:00:03.000Z',
+        completedAt: null,
+        outcome: null,
+      },
+    ]);
+
+    assert.equal(database.repositories.runHistory.countAll(), 3);
+    assert.deepEqual(
+      database.repositories.runHistory.listPage(2, 0).map((run) => run.id),
+      ['run-3', 'run-2']
+    );
+    assert.deepEqual(
+      database.repositories.runHistory.listPage(2, 2).map((run) => run.id),
+      ['run-1']
+    );
+
+    assert.equal(database.repositories.searchAttempts.countByRunId('run-3'), 3);
+    assert.deepEqual(
+      database
+        .repositories.searchAttempts.listPageByRunId('run-3', 2, 0)
+        .map((attempt) => attempt.mediaKey),
+      ['sonarr:episode:1', 'sonarr:episode:2']
+    );
+    assert.deepEqual(
+      database
+        .repositories.searchAttempts.listPageByRunId('run-3', 2, 2)
+        .map((attempt) => attempt.mediaKey),
+      ['sonarr:episode:3']
+    );
+  } finally {
+    database.close();
+  }
+});
