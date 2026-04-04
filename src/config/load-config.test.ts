@@ -54,7 +54,7 @@ transmission_guard:
   stall_no_progress_for: "12h"
   suppress_same_release_for: "7d"
   item_cooldown_after_loop: "24h"
-  delete_local_data: false
+  delete_local_data: true
 safety:
   panic_disable_search: false
   stop_on_prowlarr_outage: true

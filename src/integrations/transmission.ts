@@ -33,6 +33,7 @@ const transmissionTorrentSchema = z.object({
 const transmissionTorrentListSchema = z.object({
   torrents: z.array(transmissionTorrentSchema),
 });
+const transmissionEmptyArgumentsSchema = z.record(z.string(), z.unknown());
 
 interface TransmissionRpcEnvelope {
   method: string;
@@ -208,6 +209,18 @@ export const createTransmissionClient = (options: TransmissionClientOptions) => 
         doneDate: torrent.doneDate,
         activityDate: torrent.activityDate,
       }));
+    },
+    async removeTorrent(hashString: string, deleteLocalData: boolean): Promise<void> {
+      await doRpcRequest(
+        {
+          method: 'torrent-remove',
+          arguments: {
+            ids: [hashString],
+            'delete-local-data': deleteLocalData,
+          },
+        },
+        transmissionEmptyArgumentsSchema
+      );
     },
   };
 };

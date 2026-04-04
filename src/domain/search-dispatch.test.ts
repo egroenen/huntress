@@ -121,7 +121,7 @@ const createResolvedConfig = (): ResolvedConfig => {
       stallNoProgressForMs: 12 * 3_600_000,
       suppressSameReleaseForMs: 7 * 86_400_000,
       itemCooldownAfterLoopMs: 24 * 3_600_000,
-      deleteLocalData: false,
+      deleteLocalData: true,
     },
     safety: {
       panicDisableSearch: false,

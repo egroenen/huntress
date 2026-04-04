@@ -1,6 +1,6 @@
 # T010: Transmission Guard and Suppressions
 
-Status: Backlog
+Status: Done
 
 ## Goal
 
@@ -32,7 +32,7 @@ Monitor Transmission, detect loop-prone or failed torrents, remove them when app
 
 ## Implementation Notes
 
-- Default to `deleteLocalData=false`.
+- Default to `deleteLocalData=true`.
 - Suppression should be time-based by default and configurable.
 - Be conservative about removal decisions to avoid false positives.
 

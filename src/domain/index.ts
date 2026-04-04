@@ -20,3 +20,8 @@ export {
   type ArrStateSyncSummary,
   type ArrSyncClients,
 } from './state-sync.js';
+export {
+  runTransmissionGuard,
+  type TransmissionGuardReason,
+  type TransmissionGuardRunSummary,
+} from './transmission-guard.js';
