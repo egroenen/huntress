@@ -17,13 +17,17 @@ const prowlarrHealthResponseSchema = z.array(
 const prowlarrIndexerStatusResponseSchema = z.array(
   z
     .object({
-      id: z.number(),
-      name: z.string(),
+      id: z.number().optional(),
+      indexerId: z.number().optional(),
+      name: z.string().optional(),
       enable: z.boolean().optional(),
       enabled: z.boolean().optional(),
       status: z.string().nullable().optional(),
       failureMessage: z.string().nullable().optional(),
       protocol: z.string().nullable().optional(),
+      disabledTill: z.string().nullable().optional(),
+      mostRecentFailure: z.string().nullable().optional(),
+      initialFailure: z.string().nullable().optional(),
     })
     .passthrough()
 );
@@ -65,7 +69,7 @@ export const createProwlarrClient = (options: ProwlarrClientOptions) => {
       return result.map((entry) => ({
         source: entry.source ?? null,
         type: entry.type ?? null,
-        level: entry.level ?? null,
+        level: entry.level ?? entry.type ?? null,
         message: entry.message,
       }));
     },
@@ -76,14 +80,30 @@ export const createProwlarrClient = (options: ProwlarrClientOptions) => {
         createRequestOptions(options)
       );
 
-      return result.map((entry) => ({
-        id: entry.id,
-        name: entry.name,
-        enabled: entry.enabled ?? entry.enable ?? false,
-        status: entry.status ?? null,
-        failureMessage: entry.failureMessage ?? null,
-        protocol: entry.protocol ?? null,
-      }));
+      return result.map((entry) => {
+        const id = entry.id ?? entry.indexerId ?? -1;
+        const inferredStatus =
+          entry.status ??
+          (entry.disabledTill || entry.mostRecentFailure || entry.initialFailure
+            ? 'failed'
+            : null);
+        const inferredFailureMessage =
+          entry.failureMessage ??
+          (entry.disabledTill
+            ? `Disabled until ${entry.disabledTill}`
+            : entry.mostRecentFailure
+              ? `Most recent failure at ${entry.mostRecentFailure}`
+              : null);
+
+        return {
+          id,
+          name: entry.name ?? `Indexer #${id}`,
+          enabled: entry.enabled ?? entry.enable ?? true,
+          status: inferredStatus,
+          failureMessage: inferredFailureMessage,
+          protocol: entry.protocol ?? null,
+        };
+      });
     },
   };
 };

@@ -155,12 +155,18 @@ export const probeDependencyHealth = async (
     prowlarrIndexerStatus.value
   ) {
     const healthSummary = summarizeProwlarrHealth(prowlarrHealth.value);
-    const enabledIndexerCount = prowlarrIndexerStatus.value.filter(
-      (record) => record.enabled
-    ).length;
     const failingIndexerCount = prowlarrIndexerStatus.value.filter(
       (record) => record.enabled && record.status && record.status.toLowerCase() !== 'ok'
     ).length;
+    const failingSummary =
+      failingIndexerCount === 1
+        ? '1 indexer health issue reported.'
+        : `${failingIndexerCount} indexer health issues reported.`;
+    const failingDetail =
+      prowlarrIndexerStatus.value
+        .filter((record) => record.enabled && record.status && record.status.toLowerCase() !== 'ok')
+        .map((record) => record.failureMessage ?? record.name)
+        .find(Boolean) ?? null;
 
     dependencyCards.push({
       name: 'Prowlarr',
@@ -171,12 +177,14 @@ export const probeDependencyHealth = async (
             ? 'degraded'
             : healthSummary.status,
       summary:
-        healthSummary.status === 'healthy'
-          ? `${enabledIndexerCount} enabled indexers reporting healthy.`
+        failingIndexerCount > 0
+          ? failingSummary
+          : healthSummary.status === 'healthy'
+            ? 'No active Prowlarr health issues reported.'
           : healthSummary.summary,
       detail:
         failingIndexerCount > 0
-          ? `${failingIndexerCount} enabled indexers are not healthy.`
+          ? failingDetail
           : (healthSummary.detail ?? null),
     });
   } else {

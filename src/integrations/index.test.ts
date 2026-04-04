@@ -274,14 +274,14 @@ test('Radarr client normalizes wanted movie responses', async () => {
 test('Prowlarr client normalizes health and indexer status', async () => {
   const server = await startJsonServer((request, response) => {
     response.setHeader('Content-Type', 'application/json');
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
 
-    if (request.url === '/api/v1/health') {
+    if (url.pathname === '/api/v1/health') {
       response.end(
         JSON.stringify([
           {
             source: 'IndexerStatusCheck',
             type: 'warning',
-            level: 'warn',
             message: 'Indexer degraded',
           },
         ])
@@ -289,16 +289,13 @@ test('Prowlarr client normalizes health and indexer status', async () => {
       return;
     }
 
-    if (request.url === '/api/v1/indexerstatus') {
+    if (url.pathname === '/api/v1/indexerstatus') {
       response.end(
         JSON.stringify([
           {
-            id: 5,
-            name: 'Tracker One',
-            enabled: true,
-            status: 'ok',
-            failureMessage: null,
-            protocol: 'torrent',
+            indexerId: 5,
+            disabledTill: '2026-04-05T05:13:31Z',
+            mostRecentFailure: '2026-04-04T05:13:31Z',
           },
         ])
       );
@@ -321,8 +318,10 @@ test('Prowlarr client normalizes health and indexer status', async () => {
     ]);
 
     assert.equal(health[0]?.message, 'Indexer degraded');
+    assert.equal(health[0]?.level, 'warning');
     assert.equal(indexers[0]?.enabled, true);
-    assert.equal(indexers[0]?.name, 'Tracker One');
+    assert.equal(indexers[0]?.name, 'Indexer #5');
+    assert.equal(indexers[0]?.status, 'failed');
   } finally {
     await server.close();
   }
