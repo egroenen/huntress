@@ -640,6 +640,18 @@ select {
   color: #13263b;
 }
 
+.candidate-action-button {
+  background: #2d6ea3;
+  border-color: #1d4f78;
+  color: #f8fbff;
+}
+
+.candidate-action-button:hover {
+  background: #225982;
+  border-color: #163d5d;
+  color: #f8fbff;
+}
+
 .config-pre {
   margin: 0;
   padding: 1rem;

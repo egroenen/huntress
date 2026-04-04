@@ -479,7 +479,7 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
                   <input type="hidden" name="mediaKey" value={candidate.mediaKey} />
                   <button
                     type="submit"
-                    className="table-inline-button"
+                    className="table-inline-button candidate-action-button"
                     title="Manually trigger a scoped search for this item now. This overrides normal cooldown and rolling search limits."
                     aria-label={`Manual fetch ${candidate.title}`}
                   >
