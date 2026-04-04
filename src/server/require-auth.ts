@@ -57,6 +57,10 @@ export const requireAuthenticatedConsoleContext = async () => {
         `action:recover-run:${authenticated.sessionId}`,
         runtime.config.auth.sessionSecret
       ),
+      manualFetch: createCsrfToken(
+        `action:manual-fetch:${authenticated.sessionId}`,
+        runtime.config.auth.sessionSecret
+      ),
       resetTransmissionCache: createCsrfToken(
         `action:reset-transmission-cache:${authenticated.sessionId}`,
         runtime.config.auth.sessionSecret

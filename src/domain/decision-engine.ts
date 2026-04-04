@@ -10,6 +10,7 @@ export type PriorityBucket =
   | 'cutoff_backlog';
 
 export type ReasonCode =
+  | 'MANUAL_OVERRIDE_FETCH'
   | 'ELIGIBLE_MISSING_RECENT'
   | 'ELIGIBLE_MISSING_BACKLOG'
   | 'ELIGIBLE_CUTOFF_RECENT'

@@ -9,7 +9,7 @@ import type { ResolvedConfig } from '@/src/config';
 import { initializeDatabase } from '@/src/db';
 import { createRadarrClient, createSonarrClient } from '@/src/integrations';
 
-import { executeSearchDispatchRun } from './search-dispatch';
+import { executeManualFetch, executeSearchDispatchRun } from './search-dispatch';
 
 interface TestServerContext {
   url: string;
@@ -446,6 +446,135 @@ test('executeSearchDispatchRun stops live dispatch when rolling search budgets a
         ['radarr:movie:201', 'THROTTLE_GLOBAL_15M_BUDGET', 'throttled'],
       ]
     );
+  } finally {
+    database.close();
+    await server.close();
+  }
+});
+
+test('executeManualFetch bypasses normal cooldown and rolling-rate limits', async () => {
+  const commandBodies: Array<Record<string, unknown>> = [];
+  const server = await startJsonServer((request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+
+    if (request.method === 'POST' && request.url?.endsWith('/api/v3/command')) {
+      let body = '';
+      request.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+      request.on('end', () => {
+        commandBodies.push(JSON.parse(body) as Record<string, unknown>);
+        response.end(JSON.stringify({ id: 77, name: 'EpisodeSearch', status: 'queued' }));
+      });
+      return;
+    }
+
+    response.statusCode = 404;
+    response.end(JSON.stringify({ message: 'not found' }));
+  });
+
+  const databasePath = await createDatabasePath();
+  const database = await seedEligibleItems(databasePath);
+  const config = createResolvedConfig();
+
+  database.repositories.runHistory.create(createRunHistoryRecord('prior-run', 'manual_live'));
+  database.repositories.runHistory.create(createRunHistoryRecord('manual-fetch', 'manual_live'));
+  database.repositories.searchAttempts.insertMany([
+    {
+      runId: 'prior-run',
+      mediaKey: 'sonarr:episode:old',
+      app: 'sonarr',
+      wantedState: 'missing',
+      decision: 'dispatch',
+      reasonCode: 'ELIGIBLE_MISSING_RECENT',
+      dryRun: false,
+      arrCommandId: 11,
+      attemptedAt: '2026-04-04T11:50:00.000Z',
+      completedAt: '2026-04-04T11:50:01.000Z',
+      outcome: 'accepted',
+    },
+    {
+      runId: 'prior-run',
+      mediaKey: 'sonarr:episode:older',
+      app: 'sonarr',
+      wantedState: 'missing',
+      decision: 'dispatch',
+      reasonCode: 'ELIGIBLE_MISSING_RECENT',
+      dryRun: false,
+      arrCommandId: 12,
+      attemptedAt: '2026-04-04T11:52:00.000Z',
+      completedAt: '2026-04-04T11:52:01.000Z',
+      outcome: 'accepted',
+    },
+    {
+      runId: 'prior-run',
+      mediaKey: 'sonarr:episode:ancient',
+      app: 'sonarr',
+      wantedState: 'missing',
+      decision: 'dispatch',
+      reasonCode: 'ELIGIBLE_MISSING_RECENT',
+      dryRun: false,
+      arrCommandId: 13,
+      attemptedAt: '2026-04-04T11:54:00.000Z',
+      completedAt: '2026-04-04T11:54:01.000Z',
+      outcome: 'accepted',
+    },
+    {
+      runId: 'prior-run',
+      mediaKey: 'sonarr:episode:ancient-2',
+      app: 'sonarr',
+      wantedState: 'missing',
+      decision: 'dispatch',
+      reasonCode: 'ELIGIBLE_MISSING_RECENT',
+      dryRun: false,
+      arrCommandId: 14,
+      attemptedAt: '2026-04-04T11:56:00.000Z',
+      completedAt: '2026-04-04T11:56:01.000Z',
+      outcome: 'accepted',
+    },
+  ]);
+
+  const existing = database.repositories.mediaItemState.getByMediaKey('sonarr:episode:101');
+  if (!existing) {
+    throw new Error('Expected seeded Sonarr item');
+  }
+
+  database.repositories.mediaItemState.upsert({
+    ...existing,
+    nextEligibleAt: '2026-04-06T12:00:00.000Z',
+    retryCount: 2,
+  });
+
+  try {
+    const summary = await executeManualFetch({
+      database,
+      config,
+      clients: {
+        sonarr: createSonarrClient({
+          baseUrl: server.url,
+          apiKey: 'sonarr-key',
+        }),
+        radarr: createRadarrClient({
+          baseUrl: server.url,
+          apiKey: 'radarr-key',
+        }),
+      },
+      runId: 'manual-fetch',
+      mediaKey: 'sonarr:episode:101',
+      now: new Date('2026-04-04T12:00:00.000Z'),
+    });
+
+    const attempts = database.repositories.searchAttempts.listByRunId('manual-fetch');
+    const updatedItem =
+      database.repositories.mediaItemState.getByMediaKey('sonarr:episode:101');
+
+    assert.equal(summary.dispatchCount, 1);
+    assert.equal(summary.errorCount, 0);
+    assert.equal(summary.summary.manualOverride, true);
+    assert.equal(attempts.length, 1);
+    assert.equal(attempts[0]?.reasonCode, 'MANUAL_OVERRIDE_FETCH');
+    assert.equal(updatedItem?.lastSearchAt, '2026-04-04T12:00:00.000Z');
+    assert.deepEqual(commandBodies, [{ name: 'EpisodeSearch', episodeIds: [101] }]);
   } finally {
     database.close();
     await server.close();

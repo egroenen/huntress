@@ -1,5 +1,8 @@
+import { randomUUID } from 'node:crypto';
+
 import { loadConfig } from '@/src/config';
 import {
+  executeManualFetch,
   executeSearchDispatchRun,
   runTransmissionGuard,
   syncArrState,
@@ -299,4 +302,91 @@ export const runManualCycle = async (
 export const recoverActiveRun = async (reason?: string) => {
   const runtime = await getRuntimeContext();
   return runtime.scheduler.recoverActiveRun(reason);
+};
+
+export const runManualFetch = async (mediaKey: string) => {
+  const runtime = await getRuntimeContext();
+  const startedAt = new Date();
+  const startedAtIso = startedAt.toISOString();
+  const runId = `manual_fetch_${randomUUID()}`;
+
+  runtime.database.repositories.runHistory.create({
+    id: runId,
+    runType: 'manual_live',
+    startedAt: startedAtIso,
+    finishedAt: null,
+    status: 'running',
+    candidateCount: 0,
+    dispatchCount: 0,
+    skipCount: 0,
+    errorCount: 0,
+    summary: {
+      manualFetch: true,
+      mediaKey,
+      manualOverride: true,
+    },
+  });
+
+  try {
+    const summary = await executeManualFetch({
+      database: runtime.database,
+      config: runtime.config,
+      clients: {
+        sonarr: runtime.clients.sonarr,
+        radarr: runtime.clients.radarr,
+      },
+      runId,
+      mediaKey,
+      now: startedAt,
+    });
+
+    runtime.database.repositories.runHistory.update({
+      id: runId,
+      runType: 'manual_live',
+      startedAt: startedAtIso,
+      finishedAt: new Date().toISOString(),
+      status: summary.errorCount > 0 ? 'failed' : 'success',
+      candidateCount: summary.candidateCount,
+      dispatchCount: summary.dispatchCount,
+      skipCount: summary.skipCount,
+      errorCount: summary.errorCount,
+      summary: summary.summary,
+    });
+
+    return {
+      accepted: true,
+      runId,
+    };
+  } catch (error) {
+    runtime.database.repositories.runHistory.update({
+      id: runId,
+      runType: 'manual_live',
+      startedAt: startedAtIso,
+      finishedAt: new Date().toISOString(),
+      status: 'failed',
+      candidateCount: 1,
+      dispatchCount: 0,
+      skipCount: 0,
+      errorCount: 1,
+      summary: {
+        manualFetch: true,
+        mediaKey,
+        manualOverride: true,
+        error:
+          error instanceof Error
+            ? {
+                name: error.name,
+                message: error.message,
+              }
+            : {
+                message: 'Unknown manual fetch error',
+              },
+      },
+    });
+
+    return {
+      accepted: true,
+      runId,
+    };
+  }
 };

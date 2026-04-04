@@ -18,6 +18,7 @@ export interface ConsoleActionTokens {
   runDry: string;
   runLive: string;
   recoverRun: string;
+  manualFetch: string;
   resetTransmissionCache: string;
 }
 

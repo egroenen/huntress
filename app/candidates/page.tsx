@@ -457,6 +457,7 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
               { key: 'reason', label: 'Reason code' },
               { key: 'retryCount', label: 'Retries', align: 'right' },
               { key: 'nextEligibleAt', label: 'Next eligible' },
+              { key: 'actions', label: 'Actions', align: 'right' },
             ]}
             rows={pagedCandidates[app].map((candidate) => ({
               title: candidate.title,
@@ -472,6 +473,20 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
               reason: <ReasonCodeBadge reasonCode={candidate.reasonCode} />,
               retryCount: candidate.retryCount,
               nextEligibleAt: formatTimestamp(candidate.nextEligibleAt),
+              actions: (
+                <form action="/api/actions/manual-fetch" method="post">
+                  <input type="hidden" name="csrfToken" value={runtime.csrfTokens.manualFetch} />
+                  <input type="hidden" name="mediaKey" value={candidate.mediaKey} />
+                  <button
+                    type="submit"
+                    className="console-button console-button--ghost"
+                    title="Manually trigger a scoped search for this item now. This overrides normal cooldown and rolling search limits."
+                    aria-label={`Manual fetch ${candidate.title}`}
+                  >
+                    Fetch now
+                  </button>
+                </form>
+              ),
             }))}
             emptyMessage={`No ${app} candidates are currently available.`}
           />

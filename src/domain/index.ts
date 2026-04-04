@@ -9,8 +9,11 @@ export {
   type SearchDecision,
 } from './decision-engine';
 export {
+  executeManualFetch,
   executeSearchDispatchRun,
   getSearchCandidatePreview,
+  type ManualFetchInput,
+  type ManualFetchSummary,
   type SearchDispatchClients,
   type SearchDispatchRunInput,
   type SearchDispatchRunSummary,

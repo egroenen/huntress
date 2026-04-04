@@ -45,6 +45,24 @@ export interface SearchDispatchRunSummary {
   summary: Record<string, unknown>;
 }
 
+export interface ManualFetchInput {
+  database: DatabaseContext;
+  config: ResolvedConfig;
+  clients: SearchDispatchClients;
+  runId: string;
+  mediaKey: string;
+  activityTracker?: ActivityTracker;
+  now?: Date;
+}
+
+export interface ManualFetchSummary {
+  candidateCount: number;
+  dispatchCount: number;
+  skipCount: number;
+  errorCount: number;
+  summary: Record<string, unknown>;
+}
+
 interface RuntimeThrottleState {
   latestDispatchAt: string | null;
   dispatchedSince15m: number;
@@ -218,6 +236,173 @@ const dispatchCandidate = async (
   }
 
   return clients.radarr.searchMovie(item.arrId);
+};
+
+const getDecisionAppFromItem = (
+  item: MediaItemStateRecord
+): CandidateDecision['app'] => {
+  return item.mediaType === 'sonarr_episode' ? 'sonarr' : 'radarr';
+};
+
+export const executeManualFetch = async (
+  input: ManualFetchInput
+): Promise<ManualFetchSummary> => {
+  const attemptAt = input.now ?? new Date();
+  const attemptAtIso = attemptAt.toISOString();
+  const item = input.database.repositories.mediaItemState.getByMediaKey(input.mediaKey);
+
+  if (!item) {
+    throw new Error(`Media item not found for ${input.mediaKey}`);
+  }
+
+  const app = getDecisionAppFromItem(item);
+  const attempts: SearchAttemptRecord[] = [];
+
+  input.activityTracker?.info({
+    source: app,
+    stage: 'manual_dispatch_request',
+    message: `Manually dispatching ${app} search for ${item.title}`,
+    detail: 'Manual override ignores normal candidate limits and cooldowns.',
+    progressCurrent: 1,
+    progressTotal: 1,
+  });
+
+  try {
+    const command = await dispatchCandidate(input.clients, item);
+
+    logger.info({
+      event: 'search_dispatched',
+      runId: input.runId,
+      app,
+      mediaKey: item.mediaKey,
+      title: item.title,
+      wantedState: item.wantedState,
+      reasonCode: 'MANUAL_OVERRIDE_FETCH',
+      arrCommandId: command.id,
+      manualOverride: true,
+    });
+    recordSearchDispatch({
+      app,
+      outcome: 'accepted',
+    });
+
+    attempts.push(
+      createAttempt({
+        runId: input.runId,
+        mediaKey: item.mediaKey,
+        app,
+        wantedState: item.wantedState,
+        decision: 'dispatch',
+        reasonCode: 'MANUAL_OVERRIDE_FETCH',
+        dryRun: false,
+        arrCommandId: command.id,
+        attemptedAt: attemptAtIso,
+        completedAt: attemptAtIso,
+        outcome: 'accepted',
+      })
+    );
+    input.database.repositories.searchAttempts.insertMany(attempts);
+    updateMediaItemAfterDispatch(input.database, input.config, item, attemptAtIso);
+    updateSearchRateMetrics(getSearchRateSnapshot(input.database, input.config, attemptAt));
+
+    input.activityTracker?.info({
+      source: app,
+      stage: 'manual_dispatch_complete',
+      message: `Queued manual ${app} search for ${item.title}`,
+      detail: command.id ? `Command ${command.id}` : null,
+      progressCurrent: 1,
+      progressTotal: 1,
+    });
+
+    return {
+      candidateCount: 1,
+      dispatchCount: 1,
+      skipCount: 0,
+      errorCount: 0,
+      summary: {
+        manualFetch: true,
+        mediaKey: item.mediaKey,
+        title: item.title,
+        app,
+        manualOverride: true,
+        arrCommandId: command.id,
+      },
+    };
+  } catch (error) {
+    logger.error({
+      event: 'search_dispatch_failed',
+      runId: input.runId,
+      app,
+      mediaKey: item.mediaKey,
+      title: item.title,
+      reasonCode: 'MANUAL_OVERRIDE_FETCH',
+      manualOverride: true,
+      error:
+        error instanceof Error
+          ? {
+              name: error.name,
+              message: error.message,
+            }
+          : {
+              message: 'Unknown dispatch error',
+            },
+    });
+    recordSearchDispatch({
+      app,
+      outcome: 'failed',
+    });
+
+    attempts.push(
+      createAttempt({
+        runId: input.runId,
+        mediaKey: item.mediaKey,
+        app,
+        wantedState: item.wantedState,
+        decision: 'dispatch',
+        reasonCode: 'MANUAL_OVERRIDE_FETCH',
+        dryRun: false,
+        arrCommandId: null,
+        attemptedAt: attemptAtIso,
+        completedAt: attemptAtIso,
+        outcome:
+          error instanceof Error ? `failed:${error.name}:${error.message}` : 'failed',
+      })
+    );
+    input.database.repositories.searchAttempts.insertMany(attempts);
+    updateSearchRateMetrics(getSearchRateSnapshot(input.database, input.config, attemptAt));
+
+    input.activityTracker?.error({
+      source: app,
+      stage: 'manual_dispatch_failed',
+      message: `Failed to queue manual ${app} search for ${item.title}`,
+      detail: error instanceof Error ? error.message : 'Unknown error',
+      progressCurrent: 1,
+      progressTotal: 1,
+    });
+
+    return {
+      candidateCount: 1,
+      dispatchCount: 0,
+      skipCount: 0,
+      errorCount: 1,
+      summary: {
+        manualFetch: true,
+        mediaKey: item.mediaKey,
+        title: item.title,
+        app,
+        manualOverride: true,
+        error:
+          error instanceof Error
+            ? {
+                name: error.name,
+                message: error.message,
+              }
+            : {
+                message: 'Unknown dispatch error',
+              },
+      },
+    };
+  }
 };
 
 export const executeSearchDispatchRun = async (

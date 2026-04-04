@@ -16,6 +16,7 @@ type ActionName =
   | 'run-live'
   | 'recover-run'
   | 'reset-transmission-cache'
+  | 'manual-fetch'
   | 'save-settings'
   | `clear-suppression:${number}`
   | `test-connection:${'sonarr' | 'radarr' | 'prowlarr' | 'transmission'}`;
