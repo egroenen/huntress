@@ -13,7 +13,7 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 25;
 const DEFAULT_SORT = 'engine';
 
 type CandidateSort =
@@ -35,6 +35,11 @@ interface CandidateFilters {
   decision: CandidateFilterDecision;
   wantedState: CandidateFilterWantedState;
   sort: CandidateSort;
+}
+
+interface CandidateSectionState {
+  sonarrCollapsed: boolean;
+  radarrCollapsed: boolean;
 }
 
 const formatTimestamp = (value: string | null): string => {
@@ -101,6 +106,11 @@ const parseSort = (value: string | string[] | undefined): CandidateSort => {
   }
 };
 
+const parseCollapsed = (value: string | string[] | undefined): boolean => {
+  const normalized = parseStringParam(value);
+  return normalized === '1' || normalized === 'true';
+};
+
 const clampPage = (page: number, totalItems: number): number => {
   const totalPages = Math.max(Math.ceil(totalItems / PAGE_SIZE), 1);
   return Math.min(page, totalPages);
@@ -111,7 +121,8 @@ const buildCandidateParams = (
   pages: {
     sonarrPage: number;
     radarrPage: number;
-  }
+  },
+  sections: CandidateSectionState
 ): URLSearchParams => {
   const params = new URLSearchParams();
 
@@ -134,15 +145,24 @@ const buildCandidateParams = (
   params.set('sonarrPage', String(pages.sonarrPage));
   params.set('radarrPage', String(pages.radarrPage));
 
+  if (sections.sonarrCollapsed) {
+    params.set('sonarrCollapsed', '1');
+  }
+
+  if (sections.radarrCollapsed) {
+    params.set('radarrCollapsed', '1');
+  }
+
   return params;
 };
 
 const buildPageHref = (
   sonarrPage: number,
   radarrPage: number,
-  filters: CandidateFilters
+  filters: CandidateFilters,
+  sections: CandidateSectionState
 ): string => {
-  return `/candidates?${buildCandidateParams(filters, { sonarrPage, radarrPage }).toString()}`;
+  return `/candidates?${buildCandidateParams(filters, { sonarrPage, radarrPage }, sections).toString()}`;
 };
 
 const renderPagination = (input: {
@@ -153,6 +173,7 @@ const renderPagination = (input: {
   matchingItems: number;
   otherPage: number;
   filters: CandidateFilters;
+  sections: CandidateSectionState;
 }): ReactNode => {
   const totalPages = Math.max(Math.ceil(input.totalItems / PAGE_SIZE), 1);
 
@@ -171,12 +192,12 @@ const renderPagination = (input: {
   const nextPage = Math.min(input.currentPage + 1, totalPages);
   const previousHref =
     input.app === 'sonarr'
-      ? buildPageHref(previousPage, input.otherPage, input.filters)
-      : buildPageHref(input.otherPage, previousPage, input.filters);
+      ? buildPageHref(previousPage, input.otherPage, input.filters, input.sections)
+      : buildPageHref(input.otherPage, previousPage, input.filters, input.sections);
   const nextHref =
     input.app === 'sonarr'
-      ? buildPageHref(nextPage, input.otherPage, input.filters)
-      : buildPageHref(input.otherPage, nextPage, input.filters);
+      ? buildPageHref(nextPage, input.otherPage, input.filters, input.sections)
+      : buildPageHref(input.otherPage, nextPage, input.filters, input.sections);
 
   return (
     <div className="table-pagination">
@@ -204,6 +225,27 @@ const renderPagination = (input: {
       </div>
     </div>
   );
+};
+
+const buildCollapseHref = (
+  app: 'sonarr' | 'radarr',
+  collapsed: boolean,
+  filters: CandidateFilters,
+  pages: {
+    sonarrPage: number;
+    radarrPage: number;
+  },
+  sections: CandidateSectionState
+): string => {
+  const nextSections: CandidateSectionState = {
+    ...sections,
+    sonarrCollapsed:
+      app === 'sonarr' ? collapsed : sections.sonarrCollapsed,
+    radarrCollapsed:
+      app === 'radarr' ? collapsed : sections.radarrCollapsed,
+  };
+
+  return `/candidates?${buildCandidateParams(filters, pages, nextSections).toString()}`;
 };
 
 const getComparableTimestamp = (value: string | null): number | null => {
@@ -332,6 +374,10 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
     wantedState: parseWantedStateFilter(searchParams.wantedState),
     sort: parseSort(searchParams.sort),
   };
+  const sections: CandidateSectionState = {
+    sonarrCollapsed: parseCollapsed(searchParams.sonarrCollapsed),
+    radarrCollapsed: parseCollapsed(searchParams.radarrCollapsed),
+  };
   const filteredCandidates = {
     sonarr: sortCandidates(filterCandidates(candidates.sonarr, filters), filters.sort),
     radarr: sortCandidates(filterCandidates(candidates.radarr, filters), filters.sort),
@@ -436,6 +482,7 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
                   matchingItems: candidates.sonarr.length,
                   otherPage: radarrPage,
                   filters,
+                  sections,
                 })
               : renderPagination({
                   app: 'radarr',
@@ -445,51 +492,81 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
                   matchingItems: candidates.radarr.length,
                   otherPage: sonarrPage,
                   filters,
+                  sections,
                 })
           }
         >
-          <DataTable
-            columns={[
-              { key: 'title', label: 'Title' },
-              { key: 'mediaKey', label: 'Media key' },
-              { key: 'wantedState', label: 'Wanted state' },
-              { key: 'decision', label: 'Decision' },
-              { key: 'reason', label: 'Reason code' },
-              { key: 'retryCount', label: 'Retries', align: 'right' },
-              { key: 'nextEligibleAt', label: 'Next eligible' },
-              { key: 'actions', label: 'Actions', align: 'right' },
-            ]}
-            rows={pagedCandidates[app].map((candidate) => ({
-              title: candidate.title,
-              mediaKey: <code className="reason-code">{candidate.mediaKey}</code>,
-              wantedState: candidate.wantedState,
-              decision: (
-                <StatusBadge
-                  status={candidate.decision === 'dispatch' ? 'success' : 'degraded'}
-                >
-                  {candidate.decision}
-                </StatusBadge>
-              ),
-              reason: <ReasonCodeBadge reasonCode={candidate.reasonCode} />,
-              retryCount: candidate.retryCount,
-              nextEligibleAt: formatTimestamp(candidate.nextEligibleAt),
-              actions: (
-                <form action="/api/actions/manual-fetch" method="post" className="table-inline-form">
-                  <input type="hidden" name="csrfToken" value={runtime.csrfTokens.manualFetch} />
-                  <input type="hidden" name="mediaKey" value={candidate.mediaKey} />
-                  <button
-                    type="submit"
-                    className="table-inline-button candidate-action-button"
-                    title="Manually trigger a scoped search for this item now. This overrides normal cooldown and rolling search limits."
-                    aria-label={`Manual fetch ${candidate.title}`}
+          <div className="candidate-section-controls">
+            <a
+              href={buildCollapseHref(
+                app,
+                !(app === 'sonarr' ? sections.sonarrCollapsed : sections.radarrCollapsed),
+                filters,
+                {
+                  sonarrPage,
+                  radarrPage,
+                },
+                sections
+              )}
+              className="console-link"
+            >
+              {app === 'sonarr'
+                ? sections.sonarrCollapsed
+                  ? 'Expand section'
+                  : 'Collapse section'
+                : sections.radarrCollapsed
+                  ? 'Expand section'
+                  : 'Collapse section'}
+            </a>
+          </div>
+          {(app === 'sonarr' ? sections.sonarrCollapsed : sections.radarrCollapsed) ? null : (
+            <DataTable
+              columns={[
+                { key: 'title', label: 'Title' },
+                { key: 'mediaKey', label: 'Media key' },
+                { key: 'wantedState', label: 'Wanted state' },
+                { key: 'decision', label: 'Decision' },
+                { key: 'reason', label: 'Reason code' },
+                { key: 'retryCount', label: 'Retries', align: 'right' },
+                { key: 'nextEligibleAt', label: 'Next eligible' },
+                { key: 'actions', label: 'Actions', align: 'right' },
+              ]}
+              rows={pagedCandidates[app].map((candidate) => ({
+                title: candidate.title,
+                mediaKey: <code className="reason-code">{candidate.mediaKey}</code>,
+                wantedState: candidate.wantedState,
+                decision: (
+                  <StatusBadge
+                    status={candidate.decision === 'dispatch' ? 'success' : 'degraded'}
                   >
-                    Fetch now
-                  </button>
-                </form>
-              ),
-            }))}
-            emptyMessage={`No ${app} candidates are currently available.`}
-          />
+                    {candidate.decision}
+                  </StatusBadge>
+                ),
+                reason: <ReasonCodeBadge reasonCode={candidate.reasonCode} />,
+                retryCount: candidate.retryCount,
+                nextEligibleAt: formatTimestamp(candidate.nextEligibleAt),
+                actions: (
+                  <form
+                    action="/api/actions/manual-fetch"
+                    method="post"
+                    className="table-inline-form"
+                  >
+                    <input type="hidden" name="csrfToken" value={runtime.csrfTokens.manualFetch} />
+                    <input type="hidden" name="mediaKey" value={candidate.mediaKey} />
+                    <button
+                      type="submit"
+                      className="candidate-action-button"
+                      title="Manually trigger a scoped search for this item now. This overrides normal cooldown and rolling search limits."
+                      aria-label={`Manual fetch ${candidate.title}`}
+                    >
+                      Fetch now
+                    </button>
+                  </form>
+                ),
+              }))}
+              emptyMessage={`No ${app} candidates are currently available.`}
+            />
+          )}
         </SectionCard>
       ))}
     </ConsoleShell>

@@ -581,6 +581,12 @@ select {
   gap: 1rem;
 }
 
+.candidate-section-controls {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.85rem 1rem 0;
+}
+
 .table-app-label {
   display: inline-flex;
   align-items: center;
@@ -640,9 +646,21 @@ select {
 }
 
 .candidate-action-button {
+  appearance: none;
+  border: 1px solid #1d4f78;
+  border-radius: 3px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
   background: #2d6ea3;
-  border-color: #1d4f78;
   color: #f8fbff;
+  padding: 0.45rem 0.7rem;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .candidate-action-button:hover {
