@@ -101,6 +101,8 @@ const createResolvedConfig = (): ResolvedConfig => {
     },
     sync: {
       wantedPageSize: 250,
+      fullScanPageThreshold: 20,
+      maxWantedPagesPerCollection: 4,
     },
     policies: {
       sonarr: {

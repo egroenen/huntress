@@ -4,6 +4,7 @@ import { joinUrl, requestJson, type HttpRequestOptions } from './http';
 import type {
   ArrCommandResponse,
   ArrQueueRecord,
+  ArrWantedPageResult,
   ArrSystemStatus,
   ArrWantedRecord,
 } from './types';
@@ -150,41 +151,71 @@ interface ArrPaginatedResponse<TItem> {
   records: TItem[];
 }
 
-const fetchWantedCollection = async <TItem>(input: {
+const fetchWantedPage = async <TItem>(input: {
   options: ArrClientOptions;
   path: string;
+  page: number;
   arraySchema: z.ZodType<TItem[]>;
   paginatedSchema: z.ZodType<ArrPaginatedResponse<TItem>>;
   stagePrefix: string;
-}): Promise<TItem[]> => {
+}): Promise<{
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  totalRecords: number;
+  records: TItem[];
+}> => {
   const source = input.options.serviceName ?? 'sonarr';
   const requestedPageSize = input.options.wantedPageSize ?? DEFAULT_WANTED_PAGE_SIZE;
   reportActivity(input.options, {
     source,
     stage: `${input.stagePrefix}_page`,
-    message: `Requesting ${source} ${input.path.replace('/api/v3/wanted/', '')} page 1`,
-    progressCurrent: 1,
+    message: `Requesting ${source} ${input.path.replace('/api/v3/wanted/', '')} page ${input.page}`,
+    progressCurrent: input.page,
     progressTotal: null,
     detail: `${input.path} (pageSize=${requestedPageSize})`,
     metadata: {
       path: input.path,
+      page: input.page,
       requestedPageSize,
     },
   });
 
-  const firstPageRaw = await requestJson(
-    buildPagedEndpoint(input.options.baseUrl, input.path, 1, requestedPageSize),
+  const pageRaw = await requestJson(
+    buildPagedEndpoint(input.options.baseUrl, input.path, input.page, requestedPageSize),
     z.unknown(),
     createRequestOptions(input.options)
   );
 
-  const arrayResult = input.arraySchema.safeParse(firstPageRaw);
+  const arrayResult = input.arraySchema.safeParse(pageRaw);
 
   if (arrayResult.success) {
-    return arrayResult.data;
+    reportActivity(input.options, {
+      source,
+      stage: `${input.stagePrefix}_page`,
+      message: `Loaded ${source} ${input.path.replace('/api/v3/wanted/', '')} page 1 of 1`,
+      progressCurrent: 1,
+      progressTotal: 1,
+      detail: `${arrayResult.data.length} records accumulated`,
+      metadata: {
+        path: input.path,
+        page: 1,
+        requestedPageSize,
+        pageSize: arrayResult.data.length,
+        totalRecords: arrayResult.data.length,
+      },
+    });
+
+    return {
+      page: 1,
+      pageSize: arrayResult.data.length,
+      totalPages: 1,
+      totalRecords: arrayResult.data.length,
+      records: arrayResult.data,
+    };
   }
 
-  const paginatedResult = input.paginatedSchema.parse(firstPageRaw);
+  const paginatedResult = input.paginatedSchema.parse(pageRaw);
   const records = [...paginatedResult.records];
   const pageSize = paginatedResult.pageSize ?? paginatedResult.records.length;
   const totalRecords = paginatedResult.totalRecords ?? paginatedResult.records.length;
@@ -194,59 +225,65 @@ const fetchWantedCollection = async <TItem>(input: {
   reportActivity(input.options, {
     source,
     stage: `${input.stagePrefix}_page`,
-    message: `Loaded ${source} ${input.path.replace('/api/v3/wanted/', '')} page 1 of ${totalPages}`,
-    progressCurrent: 1,
+    message: `Loaded ${source} ${input.path.replace('/api/v3/wanted/', '')} page ${input.page} of ${totalPages}`,
+    progressCurrent: input.page,
     progressTotal: totalPages,
     detail: `${records.length} records accumulated`,
     metadata: {
       path: input.path,
+      page: input.page,
       requestedPageSize,
       pageSize,
       totalRecords,
     },
   });
 
-  if (pageSize <= 0 || totalRecords <= records.length) {
-    return records;
+  return {
+    page: paginatedResult.page ?? input.page,
+    pageSize,
+    totalPages,
+    totalRecords,
+    records,
+  };
+};
+
+const fetchWantedCollection = async <TItem>(input: {
+  options: ArrClientOptions;
+  path: string;
+  arraySchema: z.ZodType<TItem[]>;
+  paginatedSchema: z.ZodType<ArrPaginatedResponse<TItem>>;
+  stagePrefix: string;
+}): Promise<{
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  totalRecords: number;
+  records: TItem[];
+}> => {
+  const firstPage = await fetchWantedPage({
+    ...input,
+    page: 1,
+  });
+
+  if (firstPage.totalPages <= 1 || firstPage.totalRecords <= firstPage.records.length) {
+    return firstPage;
   }
 
-  for (let page = 2; page <= totalPages; page += 1) {
-    reportActivity(input.options, {
-      source,
-      stage: `${input.stagePrefix}_page`,
-      message: `Requesting ${source} ${input.path.replace('/api/v3/wanted/', '')} page ${page} of ${totalPages}`,
-      progressCurrent: page,
-      progressTotal: totalPages,
-      detail: `${input.path} (pageSize=${requestedPageSize})`,
-      metadata: {
-        path: input.path,
-        requestedPageSize,
-      },
+  const records = [...firstPage.records];
+
+  for (let page = 2; page <= firstPage.totalPages; page += 1) {
+    const nextPage = await fetchWantedPage({
+      ...input,
+      page,
     });
-    const nextPage = await requestJson(
-      buildPagedEndpoint(input.options.baseUrl, input.path, page, requestedPageSize),
-      input.paginatedSchema,
-      createRequestOptions(input.options)
-    );
 
     records.push(...nextPage.records);
-    reportActivity(input.options, {
-      source,
-      stage: `${input.stagePrefix}_page`,
-      message: `Loaded ${source} ${input.path.replace('/api/v3/wanted/', '')} page ${page} of ${totalPages}`,
-      progressCurrent: page,
-      progressTotal: totalPages,
-      detail: `${records.length} records accumulated`,
-      metadata: {
-        path: input.path,
-        requestedPageSize,
-        pageSize,
-        totalRecords,
-      },
-    });
   }
 
-  return records;
+  return {
+    ...firstPage,
+    records,
+  };
 };
 
 export const fetchArrSystemStatus = async (
@@ -319,7 +356,7 @@ export const fetchSonarrWanted = async (
     stagePrefix: `wanted_${kind}`,
   });
 
-  return result.map((entry) => ({
+  return result.records.map((entry) => ({
     itemType: 'episode',
     itemId: entry.id,
     parentId: entry.seriesId,
@@ -344,7 +381,7 @@ export const fetchRadarrWanted = async (
     stagePrefix: `wanted_${kind}`,
   });
 
-  return result.map((entry) => ({
+  return result.records.map((entry) => ({
     itemType: 'movie',
     itemId: entry.id,
     parentId: null,
@@ -355,6 +392,72 @@ export const fetchRadarrWanted = async (
     releaseDate: entry.digitalRelease ?? entry.physicalRelease ?? entry.inCinemas ?? null,
     payload: entry,
   }));
+};
+
+export const fetchSonarrWantedPage = async (
+  options: ArrClientOptions,
+  kind: 'missing' | 'cutoff',
+  page: number
+): Promise<ArrWantedPageResult> => {
+  const result = await fetchWantedPage({
+    options,
+    path: `/api/v3/wanted/${kind}`,
+    page,
+    arraySchema: sonarrWantedResponseSchema,
+    paginatedSchema: paginatedSonarrWantedResponseSchema,
+    stagePrefix: `wanted_${kind}`,
+  });
+
+  return {
+    page: result.page,
+    pageSize: result.pageSize,
+    totalPages: result.totalPages,
+    totalRecords: result.totalRecords,
+    records: result.records.map((entry) => ({
+      itemType: 'episode',
+      itemId: entry.id,
+      parentId: entry.seriesId,
+      title: entry.series?.title ? `${entry.series.title} - ${entry.title}` : entry.title,
+      monitored: entry.monitored,
+      hasFile: entry.hasFile ?? null,
+      qualityCutoffNotMet: kind === 'cutoff' ? true : null,
+      releaseDate: entry.airDateUtc ?? null,
+      payload: entry,
+    })),
+  };
+};
+
+export const fetchRadarrWantedPage = async (
+  options: ArrClientOptions,
+  kind: 'missing' | 'cutoff',
+  page: number
+): Promise<ArrWantedPageResult> => {
+  const result = await fetchWantedPage({
+    options,
+    path: `/api/v3/wanted/${kind}`,
+    page,
+    arraySchema: radarrWantedResponseSchema,
+    paginatedSchema: paginatedRadarrWantedResponseSchema,
+    stagePrefix: `wanted_${kind}`,
+  });
+
+  return {
+    page: result.page,
+    pageSize: result.pageSize,
+    totalPages: result.totalPages,
+    totalRecords: result.totalRecords,
+    records: result.records.map((entry) => ({
+      itemType: 'movie',
+      itemId: entry.id,
+      parentId: null,
+      title: entry.title,
+      monitored: entry.monitored,
+      hasFile: entry.hasFile ?? null,
+      qualityCutoffNotMet: kind === 'cutoff' ? (entry.qualityCutoffNotMet ?? true) : null,
+      releaseDate: entry.digitalRelease ?? entry.physicalRelease ?? entry.inCinemas ?? null,
+      payload: entry,
+    })),
+  };
 };
 
 export const dispatchArrCommand = async (

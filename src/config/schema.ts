@@ -48,6 +48,8 @@ export const rawConfigSchema = z.object({
   }),
   sync: z.object({
     wanted_page_size: z.number().int().positive().default(250),
+    full_scan_page_threshold: z.number().int().positive().default(20),
+    max_wanted_pages_per_collection: z.number().int().positive().default(4),
   }),
   policies: z.object({
     sonarr: z.object({
@@ -149,6 +151,8 @@ export const resolvedConfigSchema = z
     }),
     sync: z.object({
       wantedPageSize: z.number().int().positive(),
+      fullScanPageThreshold: z.number().int().positive(),
+      maxWantedPagesPerCollection: z.number().int().positive(),
     }),
     policies: z.object({
       sonarr: resolvedSearchPolicySchema,

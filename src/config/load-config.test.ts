@@ -37,6 +37,8 @@ scheduler:
   max_run_duration: "30m"
 sync:
   wanted_page_size: 250
+  full_scan_page_threshold: 20
+  max_wanted_pages_per_collection: 4
 policies:
   sonarr:
     max_searches_per_cycle: 6
@@ -100,6 +102,8 @@ test('loadConfig resolves a valid config file and redacts secrets', async () => 
   assert.equal(config.auth.sessionIdleTtlMs, 86_400_000);
   assert.equal(config.scheduler.maxRunDurationMs, 1_800_000);
   assert.equal(config.sync.wantedPageSize, 250);
+  assert.equal(config.sync.fullScanPageThreshold, 20);
+  assert.equal(config.sync.maxWantedPagesPerCollection, 4);
   assert.equal(config.instances.sonarr.apiKey, 'sonarr-key');
   assert.equal(config.safety.rollingSearchLimits.per15m, 4);
   assert.equal(redactedConfig.instances.sonarr.apiKey, '[redacted]');

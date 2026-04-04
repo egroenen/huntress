@@ -43,6 +43,7 @@ test('initializeDatabase creates the schema on an empty database', async () => {
           'service_state',
           'sqlite_sequence',
           'transmission_torrent_state',
+          'wanted_page_coverage',
         ].includes(table)
       ),
       [
@@ -58,10 +59,11 @@ test('initializeDatabase creates the schema on an empty database', async () => {
         'service_state',
         'sqlite_sequence',
         'transmission_torrent_state',
+        'wanted_page_coverage',
       ]
     );
 
-    assert.equal(database.appliedMigrations.length, 2);
+    assert.equal(database.appliedMigrations.length, 3);
   } finally {
     database.close();
   }
@@ -72,7 +74,7 @@ test('initializeDatabase does not reapply migrations on a second startup', async
   const firstDatabase = await initializeDatabase(databasePath);
 
   try {
-    assert.equal(firstDatabase.appliedMigrations.length, 2);
+    assert.equal(firstDatabase.appliedMigrations.length, 3);
   } finally {
     firstDatabase.close();
   }
@@ -88,7 +90,7 @@ test('initializeDatabase does not reapply migrations on a second startup', async
       .get();
 
     assert.equal(secondDatabase.appliedMigrations.length, 0);
-    assert.equal(row?.total, 2);
+    assert.equal(row?.total, 3);
   } finally {
     secondDatabase.close();
   }
@@ -133,6 +135,15 @@ test('repositories can write and read core records', async () => {
       lastSeenAt: '2026-04-04T00:00:00.000Z',
       stateHash: 'state-hash-1',
     });
+    database.repositories.wantedPageCoverage.upsert({
+      app: 'sonarr',
+      collectionKind: 'missing',
+      pageNumber: 4,
+      lastFetchedAt: '2026-04-04T00:02:00.000Z',
+      lastFetchStatus: 'success',
+      lastObservedTotalPages: 12,
+      lastObservedTotalRecords: 2400,
+    });
 
     const serviceState = database.repositories.serviceState.get<{
       completed: boolean;
@@ -140,6 +151,10 @@ test('repositories can write and read core records', async () => {
     const user = database.repositories.appUsers.findByUsername('admin');
     const mediaItem =
       database.repositories.mediaItemState.getByMediaKey('radarr:movie:1');
+    const coverage = database.repositories.wantedPageCoverage.listByCollection(
+      'sonarr',
+      'missing'
+    );
     database.repositories.activityLog.insert({
       occurredAt: '2026-04-04T00:01:00.000Z',
       level: 'info',
@@ -160,6 +175,7 @@ test('repositories can write and read core records', async () => {
     assert.equal(user?.username, 'admin');
     assert.equal(mediaItem?.title, 'Example Movie');
     assert.equal(database.repositories.mediaItemState.count(), 1);
+    assert.equal(coverage[0]?.pageNumber, 4);
     assert.equal(activity[0]?.message, 'Starting sync');
   } finally {
     database.close();

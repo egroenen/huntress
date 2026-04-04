@@ -2,12 +2,14 @@ import type {
   ArrCommandResponse,
   ArrQueueRecord,
   ArrSystemStatus,
+  ArrWantedPageResult,
   ArrWantedRecord,
 } from './types';
 import {
   dispatchArrCommand,
   fetchArrQueue,
   fetchArrSystemStatus,
+  fetchRadarrWantedPage,
   fetchRadarrWanted,
   type ArrClientOptions,
 } from './arr-shared';
@@ -27,8 +29,14 @@ export const createRadarrClient = (options: RadarrClient) => {
     getWantedMissing(): Promise<ArrWantedRecord[]> {
       return fetchRadarrWanted(clientOptions, 'missing');
     },
+    getWantedMissingPage(page: number): Promise<ArrWantedPageResult> {
+      return fetchRadarrWantedPage(clientOptions, 'missing', page);
+    },
     getWantedCutoff(): Promise<ArrWantedRecord[]> {
       return fetchRadarrWanted(clientOptions, 'cutoff');
+    },
+    getWantedCutoffPage(page: number): Promise<ArrWantedPageResult> {
+      return fetchRadarrWantedPage(clientOptions, 'cutoff', page);
     },
     getQueueDetails(): Promise<ArrQueueRecord[]> {
       return fetchArrQueue(clientOptions);

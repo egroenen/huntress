@@ -352,6 +352,142 @@ test('syncArrState preserves retry history and marks disappeared items as ignore
   }
 });
 
+test('syncArrState incrementally expands wanted page coverage for large collections', async () => {
+  const requestedMissingPages: number[] = [];
+
+  const server = await startJsonServer((request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+
+    if (url.pathname === '/sonarr/api/v3/wanted/missing') {
+      const page = Number(url.searchParams.get('page') ?? '1');
+      requestedMissingPages.push(page);
+      response.end(
+        JSON.stringify({
+          page,
+          pageSize: 1,
+          totalRecords: 6,
+          records: [
+            {
+              id: 100 + page,
+              seriesId: 88,
+              title: `Episode ${page}`,
+              monitored: true,
+              airDateUtc: `2026-03-0${page}T00:00:00Z`,
+              series: { title: 'Paged Show' },
+            },
+          ],
+        })
+      );
+      return;
+    }
+
+    if (url.pathname === '/sonarr/api/v3/wanted/cutoff') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    if (url.pathname === '/sonarr/api/v3/queue/details') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    if (url.pathname === '/radarr/api/v3/wanted/missing') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    if (url.pathname === '/radarr/api/v3/wanted/cutoff') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    if (url.pathname === '/radarr/api/v3/queue/details') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    response.statusCode = 404;
+    response.end(JSON.stringify({ error: 'not found' }));
+  });
+
+  const databasePath = await createDatabasePath();
+  const database = await initializeDatabase(databasePath);
+
+  try {
+    const syncConfig = {
+      wantedPageSize: 250,
+      fullScanPageThreshold: 2,
+      maxWantedPagesPerCollection: 3,
+    };
+
+    const firstSummary = await syncArrState({
+      database,
+      clients: {
+        sonarr: createSonarrClient({
+          baseUrl: `${server.url}/sonarr`,
+          apiKey: 'sonarr-key',
+          wantedPageSize: 250,
+        }),
+        radarr: createRadarrClient({
+          baseUrl: `${server.url}/radarr`,
+          apiKey: 'radarr-key',
+          wantedPageSize: 250,
+        }),
+      },
+      syncConfig,
+      now: new Date('2026-04-04T12:00:00.000Z'),
+    });
+
+    const firstRunPages = new Set(requestedMissingPages);
+    const firstCoverage = database.repositories.wantedPageCoverage.listByCollection(
+      'sonarr',
+      'missing'
+    );
+
+    assert.equal(firstSummary.sonarr.missingPagesFetched, 3);
+    assert.equal(firstSummary.sonarr.missingTotalPages, 6);
+    assert.equal(firstRunPages.has(1), true);
+    assert.equal(firstRunPages.size, 3);
+    assert.equal(firstCoverage.length, 3);
+
+    requestedMissingPages.length = 0;
+
+    const secondSummary = await syncArrState({
+      database,
+      clients: {
+        sonarr: createSonarrClient({
+          baseUrl: `${server.url}/sonarr`,
+          apiKey: 'sonarr-key',
+          wantedPageSize: 250,
+        }),
+        radarr: createRadarrClient({
+          baseUrl: `${server.url}/radarr`,
+          apiKey: 'radarr-key',
+          wantedPageSize: 250,
+        }),
+      },
+      syncConfig,
+      now: new Date('2026-04-05T12:00:00.000Z'),
+    });
+
+    const secondRunPages = new Set(requestedMissingPages);
+    const secondCoverage = database.repositories.wantedPageCoverage.listByCollection(
+      'sonarr',
+      'missing'
+    );
+
+    assert.equal(secondSummary.sonarr.missingPagesFetched, 3);
+    assert.equal(secondSummary.sonarr.missingTotalPages, 6);
+    assert.equal(secondRunPages.has(1), true);
+    assert.equal(secondRunPages.size, 3);
+    assert.equal(secondCoverage.length, 5);
+  } finally {
+    database.close();
+    await server.close();
+  }
+});
+
 test('sync and dispatch work together in a mocked end-to-end cycle', async () => {
   const commandBodies: unknown[] = [];
   const server = await startJsonServer(async (request, response) => {
@@ -520,6 +656,8 @@ test('sync and dispatch work together in a mocked end-to-end cycle', async () =>
         },
         sync: {
           wantedPageSize: 250,
+          fullScanPageThreshold: 20,
+          maxWantedPagesPerCollection: 4,
         },
         policies: {
           sonarr: {

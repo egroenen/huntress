@@ -181,6 +181,7 @@ const buildRuntimeCore = async () => {
           sonarr: runtimeState.clients.sonarr,
           radarr: runtimeState.clients.radarr,
         },
+        syncConfig: runtimeState.config.sync,
         activityTracker,
       });
 

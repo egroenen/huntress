@@ -1,6 +1,6 @@
 # T018: Incremental Arr Page Coverage
 
-Status: Backlog
+Status: Done
 
 ## Goal
 

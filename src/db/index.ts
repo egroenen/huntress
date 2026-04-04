@@ -13,4 +13,5 @@ export {
   type SearchAttemptRecord,
   type ServiceStateRecord,
   type TransmissionTorrentStateRecord,
+  type WantedPageCoverageRecord,
 } from './repositories';

@@ -7,6 +7,7 @@ export type {
   ArrCommandResponse,
   ArrQueueRecord,
   ArrSystemStatus,
+  ArrWantedPageResult,
   ArrWantedRecord,
   DependencyHealth,
   ProwlarrHealthRecord,

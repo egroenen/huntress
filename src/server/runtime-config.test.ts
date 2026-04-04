@@ -40,6 +40,8 @@ scheduler:
   max_run_duration: "30m"
 sync:
   wanted_page_size: 250
+  full_scan_page_threshold: 20
+  max_wanted_pages_per_collection: 4
 policies:
   sonarr:
     max_searches_per_cycle: 6

@@ -53,6 +53,16 @@ export interface MediaItemStateRecord {
   stateHash: string;
 }
 
+export interface WantedPageCoverageRecord {
+  app: 'sonarr' | 'radarr';
+  collectionKind: 'missing' | 'cutoff';
+  pageNumber: number;
+  lastFetchedAt: string;
+  lastFetchStatus: 'success' | 'failed';
+  lastObservedTotalPages: number;
+  lastObservedTotalRecords: number;
+}
+
 export interface RunHistoryRecord {
   id: string;
   runType: string;
@@ -183,6 +193,16 @@ interface MediaItemStateRow {
   state_hash: string;
 }
 
+interface WantedPageCoverageRow {
+  app: 'sonarr' | 'radarr';
+  collection_kind: 'missing' | 'cutoff';
+  page_number: number;
+  last_fetched_at: string;
+  last_fetch_status: 'success' | 'failed';
+  last_observed_total_pages: number;
+  last_observed_total_records: number;
+}
+
 const encodeJson = (value: unknown): string => JSON.stringify(value);
 const decodeJson = <T>(value: string): T => JSON.parse(value) as T;
 const toBoolean = (value: number): boolean => value === 1;
@@ -207,6 +227,20 @@ const toMediaItemStateRecord = (row: MediaItemStateRow): MediaItemStateRecord =>
     suppressionReason: row.suppression_reason,
     lastSeenAt: row.last_seen_at,
     stateHash: row.state_hash,
+  };
+};
+
+const toWantedPageCoverageRecord = (
+  row: WantedPageCoverageRow
+): WantedPageCoverageRecord => {
+  return {
+    app: row.app,
+    collectionKind: row.collection_kind,
+    pageNumber: row.page_number,
+    lastFetchedAt: row.last_fetched_at,
+    lastFetchStatus: row.last_fetch_status,
+    lastObservedTotalPages: row.last_observed_total_pages,
+    lastObservedTotalRecords: row.last_observed_total_records,
   };
 };
 
@@ -615,6 +649,75 @@ export const createRepositories = (database: SqliteDatabase) => {
         .get();
 
       return row?.total ?? 0;
+    },
+  };
+
+  const wantedPageCoverage = {
+    upsert(record: WantedPageCoverageRecord): void {
+      database
+        .prepare(
+          `
+            INSERT INTO wanted_page_coverage (
+              app, collection_kind, page_number, last_fetched_at, last_fetch_status,
+              last_observed_total_pages, last_observed_total_records
+            )
+            VALUES (
+              @app, @collection_kind, @page_number, @last_fetched_at, @last_fetch_status,
+              @last_observed_total_pages, @last_observed_total_records
+            )
+            ON CONFLICT(app, collection_kind, page_number) DO UPDATE SET
+              last_fetched_at = excluded.last_fetched_at,
+              last_fetch_status = excluded.last_fetch_status,
+              last_observed_total_pages = excluded.last_observed_total_pages,
+              last_observed_total_records = excluded.last_observed_total_records
+          `
+        )
+        .run({
+          app: record.app,
+          collection_kind: record.collectionKind,
+          page_number: record.pageNumber,
+          last_fetched_at: record.lastFetchedAt,
+          last_fetch_status: record.lastFetchStatus,
+          last_observed_total_pages: record.lastObservedTotalPages,
+          last_observed_total_records: record.lastObservedTotalRecords,
+        });
+    },
+    listByCollection(
+      app: WantedPageCoverageRecord['app'],
+      collectionKind: WantedPageCoverageRecord['collectionKind']
+    ): WantedPageCoverageRecord[] {
+      const rows = database
+        .prepare<
+          [WantedPageCoverageRecord['app'], WantedPageCoverageRecord['collectionKind']],
+          WantedPageCoverageRow
+        >(
+          `
+            SELECT app, collection_kind, page_number, last_fetched_at, last_fetch_status,
+                   last_observed_total_pages, last_observed_total_records
+            FROM wanted_page_coverage
+            WHERE app = ? AND collection_kind = ?
+            ORDER BY page_number ASC
+          `
+        )
+        .all(app, collectionKind);
+
+      return rows.map((row) => toWantedPageCoverageRecord(row));
+    },
+    deletePagesAbove(
+      app: WantedPageCoverageRecord['app'],
+      collectionKind: WantedPageCoverageRecord['collectionKind'],
+      maxPageNumber: number
+    ): number {
+      const result = database
+        .prepare(
+          `
+            DELETE FROM wanted_page_coverage
+            WHERE app = ? AND collection_kind = ? AND page_number > ?
+          `
+        )
+        .run(app, collectionKind, maxPageNumber);
+
+      return result.changes;
     },
   };
 
@@ -1078,6 +1181,7 @@ export const createRepositories = (database: SqliteDatabase) => {
     appSessions,
     loginAttempts,
     mediaItemState,
+    wantedPageCoverage,
     runHistory,
     activityLog,
     searchAttempts,

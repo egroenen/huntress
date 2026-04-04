@@ -22,6 +22,14 @@ export interface ArrWantedRecord {
   payload: unknown;
 }
 
+export interface ArrWantedPageResult {
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  totalRecords: number;
+  records: ArrWantedRecord[];
+}
+
 export interface ArrCommandResponse {
   id: number | null;
   name: string | null;

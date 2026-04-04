@@ -157,6 +157,8 @@ const resolveConfig = (
     },
     sync: {
       wantedPageSize: rawConfig.sync.wanted_page_size,
+      fullScanPageThreshold: rawConfig.sync.full_scan_page_threshold,
+      maxWantedPagesPerCollection: rawConfig.sync.max_wanted_pages_per_collection,
     },
     policies: {
       sonarr: resolveSearchPolicy(rawConfig.policies.sonarr),

@@ -174,4 +174,23 @@ export const migrations: MigrationDefinition[] = [
       CREATE INDEX idx_activity_log_run_id ON activity_log(run_id, occurred_at DESC);
     `,
   },
+  {
+    version: '0003_wanted_page_coverage',
+    description: 'Track wanted-page fetch coverage for incremental Arr sync',
+    sql: `
+      CREATE TABLE wanted_page_coverage (
+        app TEXT NOT NULL,
+        collection_kind TEXT NOT NULL,
+        page_number INTEGER NOT NULL,
+        last_fetched_at TEXT NOT NULL,
+        last_fetch_status TEXT NOT NULL,
+        last_observed_total_pages INTEGER NOT NULL,
+        last_observed_total_records INTEGER NOT NULL,
+        PRIMARY KEY (app, collection_kind, page_number)
+      );
+
+      CREATE INDEX idx_wanted_page_coverage_collection
+      ON wanted_page_coverage(app, collection_kind, last_fetched_at ASC, page_number ASC);
+    `,
+  },
 ];

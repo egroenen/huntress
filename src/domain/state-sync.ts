@@ -1,8 +1,13 @@
 import { createHash } from 'node:crypto';
 
-import type { DatabaseContext, MediaItemStateRecord } from '@/src/db';
+import type {
+  DatabaseContext,
+  MediaItemStateRecord,
+  WantedPageCoverageRecord,
+} from '@/src/db';
 import type {
   ArrQueueRecord,
+  ArrWantedPageResult,
   ArrWantedRecord,
   RadarrApiClient,
   SonarrApiClient,
@@ -29,7 +34,11 @@ export interface AppStateSyncSummary {
   status: 'synced' | 'not_configured';
   syncedAt: string;
   missingCount: number;
+  missingPagesFetched: number;
+  missingTotalPages: number;
   cutoffCount: number;
+  cutoffPagesFetched: number;
+  cutoffTotalPages: number;
   queueCount: number;
   upsertedCount: number;
   ignoredCount: number;
@@ -44,6 +53,14 @@ export interface ArrStateSyncSummary {
 export interface ArrSyncClients {
   sonarr: SonarrApiClient | null;
   radarr: RadarrApiClient | null;
+}
+
+type WantedCollectionKind = 'missing' | 'cutoff';
+
+interface SyncCoverageConfig {
+  wantedPageSize: number;
+  fullScanPageThreshold: number;
+  maxWantedPagesPerCollection: number;
 }
 
 const SONARR_MEDIA_TYPE: MediaType = 'sonarr_episode';
@@ -197,17 +214,240 @@ const buildIgnoredRecord = (
   };
 };
 
+const DEFAULT_SYNC_COVERAGE_CONFIG: SyncCoverageConfig = {
+  wantedPageSize: 250,
+  fullScanPageThreshold: 20,
+  maxWantedPagesPerCollection: 4,
+};
+
+const buildCoverageTieBreaker = (
+  app: ArrAppName,
+  collectionKind: WantedCollectionKind,
+  pageNumber: number
+): number => {
+  return createHash('sha1')
+    .update(`${app}:${collectionKind}:${pageNumber}`)
+    .digest()
+    .readUInt32BE(0);
+};
+
+const selectWantedPages = (input: {
+  app: ArrAppName;
+  collectionKind: WantedCollectionKind;
+  totalPages: number;
+  coverage: WantedPageCoverageRecord[];
+  config: SyncCoverageConfig;
+}): {
+  mode: 'full' | 'incremental';
+  pages: number[];
+  reason: string;
+} => {
+  if (input.totalPages <= 1) {
+    return {
+      mode: 'full',
+      pages: [1],
+      reason: 'Single-page collection.',
+    };
+  }
+
+  if (input.totalPages <= input.config.fullScanPageThreshold) {
+    return {
+      mode: 'full',
+      pages: Array.from({ length: input.totalPages }, (_, index) => index + 1),
+      reason: `Total pages ${input.totalPages} within full-scan threshold ${input.config.fullScanPageThreshold}.`,
+    };
+  }
+
+  const coverageByPage = new Map(
+    input.coverage.map((record) => [record.pageNumber, record] as const)
+  );
+  const additionalPages = Array.from(
+    { length: Math.max(input.totalPages - 1, 0) },
+    (_, index) => index + 2
+  )
+    .map((pageNumber) => ({
+      pageNumber,
+      coverage: coverageByPage.get(pageNumber) ?? null,
+      tieBreaker: buildCoverageTieBreaker(
+        input.app,
+        input.collectionKind,
+        pageNumber
+      ),
+    }))
+    .sort((left, right) => {
+      if (!left.coverage && right.coverage) {
+        return -1;
+      }
+
+      if (left.coverage && !right.coverage) {
+        return 1;
+      }
+
+      if (!left.coverage && !right.coverage) {
+        return left.tieBreaker - right.tieBreaker;
+      }
+
+      const fetchedAtComparison = left.coverage!.lastFetchedAt.localeCompare(
+        right.coverage!.lastFetchedAt
+      );
+
+      if (fetchedAtComparison !== 0) {
+        return fetchedAtComparison;
+      }
+
+      return left.tieBreaker - right.tieBreaker;
+    })
+    .slice(0, Math.max(input.config.maxWantedPagesPerCollection - 1, 0))
+    .map((entry) => entry.pageNumber);
+
+  return {
+    mode: 'incremental',
+    pages: [1, ...additionalPages],
+    reason: `Total pages ${input.totalPages} exceeds threshold ${input.config.fullScanPageThreshold}; selected ${additionalPages.length} additional least-recently-fetched pages.`,
+  };
+};
+
+const updateWantedPageCoverage = (input: {
+  database: DatabaseContext;
+  app: ArrAppName;
+  collectionKind: WantedCollectionKind;
+  fetchedAt: string;
+  pageResult: ArrWantedPageResult;
+  status: WantedPageCoverageRecord['lastFetchStatus'];
+}): void => {
+  input.database.repositories.wantedPageCoverage.upsert({
+    app: input.app,
+    collectionKind: input.collectionKind,
+    pageNumber: input.pageResult.page,
+    lastFetchedAt: input.fetchedAt,
+    lastFetchStatus: input.status,
+    lastObservedTotalPages: input.pageResult.totalPages,
+    lastObservedTotalRecords: input.pageResult.totalRecords,
+  });
+};
+
+const fetchWantedCollectionWithCoverage = async (input: {
+  app: ArrAppName;
+  collectionKind: WantedCollectionKind;
+  database: DatabaseContext;
+  syncedAt: string;
+  syncConfig: SyncCoverageConfig;
+  fetchPage: (page: number) => Promise<ArrWantedPageResult>;
+  activityTracker?: ActivityTracker;
+}): Promise<{
+  records: ArrWantedRecord[];
+  pagesFetched: number;
+  totalPages: number;
+}> => {
+  const firstPage = await input.fetchPage(1);
+
+  updateWantedPageCoverage({
+    database: input.database,
+    app: input.app,
+    collectionKind: input.collectionKind,
+    fetchedAt: input.syncedAt,
+    pageResult: firstPage,
+    status: 'success',
+  });
+
+  const prunedPages = input.database.repositories.wantedPageCoverage.deletePagesAbove(
+    input.app,
+    input.collectionKind,
+    firstPage.totalPages
+  );
+
+  if (prunedPages > 0) {
+    input.activityTracker?.info({
+      source: input.app,
+      stage: `wanted_${input.collectionKind}_coverage_prune`,
+      message: `Pruned ${prunedPages} stale ${input.collectionKind} coverage pages`,
+      detail: `Total pages now ${firstPage.totalPages}`,
+    });
+  }
+
+  if (firstPage.totalPages <= 1) {
+    return {
+      records: firstPage.records,
+      pagesFetched: 1,
+      totalPages: firstPage.totalPages,
+    };
+  }
+
+  const coverage = input.database.repositories.wantedPageCoverage.listByCollection(
+    input.app,
+    input.collectionKind
+  );
+  const selection = selectWantedPages({
+    app: input.app,
+    collectionKind: input.collectionKind,
+    totalPages: firstPage.totalPages,
+    coverage,
+    config: input.syncConfig,
+  });
+
+  input.activityTracker?.info({
+    source: input.app,
+    stage: `wanted_${input.collectionKind}_selection`,
+    message:
+      selection.mode === 'full'
+        ? `Using full scan for ${input.app} ${input.collectionKind}`
+        : `Using incremental coverage for ${input.app} ${input.collectionKind}`,
+    detail: `${selection.reason} Pages ${selection.pages.join(', ')}`,
+    progressCurrent: selection.pages.length,
+    progressTotal: firstPage.totalPages,
+  });
+
+  const records = [...firstPage.records];
+
+  for (const pageNumber of selection.pages.slice(1)) {
+    try {
+      const pageResult = await input.fetchPage(pageNumber);
+      records.push(...pageResult.records);
+      updateWantedPageCoverage({
+        database: input.database,
+        app: input.app,
+        collectionKind: input.collectionKind,
+        fetchedAt: input.syncedAt,
+        pageResult,
+        status: 'success',
+      });
+    } catch (error) {
+      input.database.repositories.wantedPageCoverage.upsert({
+        app: input.app,
+        collectionKind: input.collectionKind,
+        pageNumber,
+        lastFetchedAt: input.syncedAt,
+        lastFetchStatus: 'failed',
+        lastObservedTotalPages: firstPage.totalPages,
+        lastObservedTotalRecords: firstPage.totalRecords,
+      });
+      throw error;
+    }
+  }
+
+  return {
+    records,
+    pagesFetched: selection.pages.length,
+    totalPages: firstPage.totalPages,
+  };
+};
+
 const syncAppState = async (input: {
   app: ArrAppName;
   mediaType: MediaType;
   database: DatabaseContext;
-  getWantedMissing?: () => Promise<ArrWantedRecord[]>;
-  getWantedCutoff?: () => Promise<ArrWantedRecord[]>;
+  getWantedMissingPage?: (page: number) => Promise<ArrWantedPageResult>;
+  getWantedCutoffPage?: (page: number) => Promise<ArrWantedPageResult>;
   getQueueDetails?: () => Promise<ArrQueueRecord[]>;
   syncedAt: string;
+  syncConfig: SyncCoverageConfig;
   activityTracker?: ActivityTracker;
 }): Promise<AppStateSyncSummary> => {
-  if (!input.getWantedMissing || !input.getWantedCutoff || !input.getQueueDetails) {
+  if (
+    !input.getWantedMissingPage ||
+    !input.getWantedCutoffPage ||
+    !input.getQueueDetails
+  ) {
     input.activityTracker?.info({
       source: input.app,
       stage: 'not_configured',
@@ -218,7 +458,11 @@ const syncAppState = async (input: {
       status: 'not_configured',
       syncedAt: input.syncedAt,
       missingCount: 0,
+      missingPagesFetched: 0,
+      missingTotalPages: 0,
       cutoffCount: 0,
+      cutoffPagesFetched: 0,
+      cutoffTotalPages: 0,
       queueCount: 0,
       upsertedCount: 0,
       ignoredCount: 0,
@@ -231,11 +475,29 @@ const syncAppState = async (input: {
     message: `Fetching ${input.app} wanted and queue state`,
   });
 
-  const [missing, cutoff, queue] = await Promise.all([
-    input.getWantedMissing(),
-    input.getWantedCutoff(),
+  const [missingResult, cutoffResult, queue] = await Promise.all([
+    fetchWantedCollectionWithCoverage({
+      app: input.app,
+      collectionKind: 'missing',
+      database: input.database,
+      syncedAt: input.syncedAt,
+      syncConfig: input.syncConfig,
+      fetchPage: input.getWantedMissingPage,
+      ...(input.activityTracker ? { activityTracker: input.activityTracker } : {}),
+    }),
+    fetchWantedCollectionWithCoverage({
+      app: input.app,
+      collectionKind: 'cutoff',
+      database: input.database,
+      syncedAt: input.syncedAt,
+      syncConfig: input.syncConfig,
+      fetchPage: input.getWantedCutoffPage,
+      ...(input.activityTracker ? { activityTracker: input.activityTracker } : {}),
+    }),
     input.getQueueDetails(),
   ]);
+  const missing = missingResult.records;
+  const cutoff = cutoffResult.records;
 
   const wantedSnapshots = mergeWantedSnapshots(input.app, missing, cutoff);
   const queuedMediaKeys = new Set(
@@ -285,7 +547,7 @@ const syncAppState = async (input: {
     source: input.app,
     stage: 'sync_persist_complete',
     message: `Updated ${input.app} state`,
-    detail: `${missing.length} missing, ${cutoff.length} cutoff, ${queue.length} queue entries`,
+    detail: `${missing.length} missing across ${missingResult.pagesFetched}/${missingResult.totalPages} pages, ${cutoff.length} cutoff across ${cutoffResult.pagesFetched}/${cutoffResult.totalPages} pages, ${queue.length} queue entries`,
     progressCurrent: upsertedCount,
     progressTotal: upsertedCount + ignoredCount,
   });
@@ -295,7 +557,11 @@ const syncAppState = async (input: {
     status: 'synced',
     syncedAt: input.syncedAt,
     missingCount: missing.length,
+    missingPagesFetched: missingResult.pagesFetched,
+    missingTotalPages: missingResult.totalPages,
     cutoffCount: cutoff.length,
+    cutoffPagesFetched: cutoffResult.pagesFetched,
+    cutoffTotalPages: cutoffResult.totalPages,
     queueCount: queuedMediaKeys.size,
     upsertedCount,
     ignoredCount,
@@ -305,12 +571,17 @@ const syncAppState = async (input: {
 export const syncArrState = async (input: {
   database: DatabaseContext;
   clients: ArrSyncClients;
+  syncConfig?: Partial<SyncCoverageConfig>;
   now?: Date;
   activityTracker?: ActivityTracker;
 }): Promise<ArrStateSyncSummary> => {
   const syncedAt = (input.now ?? new Date()).toISOString();
   const sonarrClient = input.clients.sonarr;
   const radarrClient = input.clients.radarr;
+  const syncConfig: SyncCoverageConfig = {
+    ...DEFAULT_SYNC_COVERAGE_CONFIG,
+    ...(input.syncConfig ?? {}),
+  };
 
   input.activityTracker?.info({
     source: 'scheduler',
@@ -325,12 +596,15 @@ export const syncArrState = async (input: {
       database: input.database,
       ...(sonarrClient
         ? {
-            getWantedMissing: () => sonarrClient.getWantedMissing(),
-            getWantedCutoff: () => sonarrClient.getWantedCutoff(),
+            getWantedMissingPage: (page: number) =>
+              sonarrClient.getWantedMissingPage(page),
+            getWantedCutoffPage: (page: number) =>
+              sonarrClient.getWantedCutoffPage(page),
             getQueueDetails: () => sonarrClient.getQueueDetails(),
           }
         : {}),
       syncedAt,
+      syncConfig,
       ...(input.activityTracker ? { activityTracker: input.activityTracker } : {}),
     }),
     syncAppState({
@@ -339,12 +613,15 @@ export const syncArrState = async (input: {
       database: input.database,
       ...(radarrClient
         ? {
-            getWantedMissing: () => radarrClient.getWantedMissing(),
-            getWantedCutoff: () => radarrClient.getWantedCutoff(),
+            getWantedMissingPage: (page: number) =>
+              radarrClient.getWantedMissingPage(page),
+            getWantedCutoffPage: (page: number) =>
+              radarrClient.getWantedCutoffPage(page),
             getQueueDetails: () => radarrClient.getQueueDetails(),
           }
         : {}),
       syncedAt,
+      syncConfig,
       ...(input.activityTracker ? { activityTracker: input.activityTracker } : {}),
     }),
   ]);
