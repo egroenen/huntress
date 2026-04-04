@@ -1,7 +1,9 @@
-export interface SchedulerModulePlaceholder {
-  readonly name: 'scheduler';
-}
-
-export const schedulerModulePlaceholder: SchedulerModulePlaceholder = {
-  name: 'scheduler',
-};
+export {
+  createSchedulerCoordinator,
+  type CoordinatedRunStatus,
+  type CoordinatedRunType,
+  type RunExecutionContext,
+  type RunExecutionResult,
+  type RunInvocationResult,
+  type SchedulerCoordinatorOptions,
+} from './run-coordinator.js';

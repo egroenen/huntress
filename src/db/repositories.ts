@@ -66,6 +66,19 @@ export interface RunHistoryRecord {
   summary: Record<string, unknown>;
 }
 
+interface RunHistoryRow {
+  id: string;
+  run_type: string;
+  started_at: string;
+  finished_at: string | null;
+  status: string;
+  candidate_count: number;
+  dispatch_count: number;
+  skip_count: number;
+  error_count: number;
+  summary_json: string;
+}
+
 export interface SearchAttemptRecord {
   runId: string;
   mediaKey: string;
@@ -150,6 +163,21 @@ const toMediaItemStateRecord = (row: MediaItemStateRow): MediaItemStateRecord =>
     suppressionReason: row.suppression_reason,
     lastSeenAt: row.last_seen_at,
     stateHash: row.state_hash,
+  };
+};
+
+const toRunHistoryRecord = (row: RunHistoryRow): RunHistoryRecord => {
+  return {
+    id: row.id,
+    runType: row.run_type,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+    status: row.status,
+    candidateCount: row.candidate_count,
+    dispatchCount: row.dispatch_count,
+    skipCount: row.skip_count,
+    errorCount: row.error_count,
+    summary: decodeJson<Record<string, unknown>>(row.summary_json),
   };
 };
 
@@ -571,23 +599,25 @@ export const createRepositories = (database: SqliteDatabase) => {
           summary_json: encodeJson(record.summary),
         });
     },
+    getById(id: string): RunHistoryRecord | null {
+      const row = database
+        .prepare<
+          [string],
+          RunHistoryRow | undefined
+        >('SELECT * FROM run_history WHERE id = ?')
+        .get(id);
+
+      if (!row) {
+        return null;
+      }
+
+      return toRunHistoryRecord(row);
+    },
     getLatest(): RunHistoryRecord | null {
       const row = database
         .prepare<
           [],
-          | {
-              id: string;
-              run_type: string;
-              started_at: string;
-              finished_at: string | null;
-              status: string;
-              candidate_count: number;
-              dispatch_count: number;
-              skip_count: number;
-              error_count: number;
-              summary_json: string;
-            }
-          | undefined
+          RunHistoryRow | undefined
         >('SELECT * FROM run_history ORDER BY started_at DESC LIMIT 1')
         .get();
 
@@ -595,18 +625,7 @@ export const createRepositories = (database: SqliteDatabase) => {
         return null;
       }
 
-      return {
-        id: row.id,
-        runType: row.run_type,
-        startedAt: row.started_at,
-        finishedAt: row.finished_at,
-        status: row.status,
-        candidateCount: row.candidate_count,
-        dispatchCount: row.dispatch_count,
-        skipCount: row.skip_count,
-        errorCount: row.error_count,
-        summary: decodeJson<Record<string, unknown>>(row.summary_json),
-      };
+      return toRunHistoryRecord(row);
     },
   };
 
