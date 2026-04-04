@@ -90,9 +90,13 @@ const formatTimestamp = (value: string | null): string => {
 export const StatusBadge = ({
   status,
   children,
+  title,
+  ariaLabel,
 }: {
   status: string;
   children?: ReactNode;
+  title?: string;
+  ariaLabel?: string;
 }) => {
   const normalizedStatus = [
     'healthy',
@@ -107,7 +111,11 @@ export const StatusBadge = ({
     : 'degraded';
 
   return (
-    <span className={`status-badge status-badge--${normalizedStatus}`}>
+    <span
+      className={`status-badge status-badge--${normalizedStatus}`}
+      title={title}
+      aria-label={ariaLabel}
+    >
       {children ?? status.replace('_', ' ')}
     </span>
   );
@@ -226,14 +234,36 @@ export const ConsoleShell = ({
 
           <div className="console-header__meta">
             <div className="header-status-stack">
-              <StatusBadge status={mode === 'live' ? 'success' : 'degraded'}>
+              <StatusBadge
+                status={mode === 'live' ? 'success' : 'degraded'}
+                title={
+                  mode === 'live'
+                    ? 'Live dispatch is enabled. Manual and scheduled live cycles can send real searches to Sonarr and Radarr, subject to safety rules.'
+                    : 'Dry-run mode is enabled. The system will evaluate and record decisions, but it will not send real searches.'
+                }
+                ariaLabel={
+                  mode === 'live'
+                    ? 'Live dispatch enabled'
+                    : 'Dry-run mode enabled'
+                }
+              >
                 {mode === 'live' ? 'live dispatch' : 'dry-run mode'}
               </StatusBadge>
               {schedulerStatus.startupGraceActive ? (
-                <StatusBadge status="degraded">startup grace active</StatusBadge>
+                <StatusBadge
+                  status="degraded"
+                  title="Startup grace is active. Automatic live dispatch is temporarily paused while the service settles after startup."
+                  ariaLabel="Startup grace active"
+                >
+                  startup grace active
+                </StatusBadge>
               ) : null}
               {schedulerStatus.activeRun ? (
-                <StatusBadge status="running">
+                <StatusBadge
+                  status="running"
+                  title={`A ${schedulerStatus.activeRun.runType.replace('_', ' ')} is currently active. Open Status to watch detailed progress or use Recover run if it is stuck.`}
+                  ariaLabel={`${schedulerStatus.activeRun.runType.replace('_', ' ')} run active`}
+                >
                   {schedulerStatus.activeRun.runType.replace('_', ' ')} running
                 </StatusBadge>
               ) : null}
