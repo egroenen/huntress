@@ -16,7 +16,7 @@ Monitor Transmission, detect loop-prone or failed torrents, remove them when app
   - repeated known-bad release fingerprints
 - Remove torrents from Transmission according to policy.
 - Create `release_suppression` records with configurable expiry.
-- Update linked `media_item_state` suppression windows where appropriate.
+- Prefer authoritative Arr queue/download linkage over fuzzy title matching when possible.
 - Surface removal reasons and suppression reasons clearly.
 
 ## Out of Scope

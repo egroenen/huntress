@@ -266,7 +266,8 @@ test('runTransmissionGuard removes errored torrents and creates suppressions', a
     assert.equal(summary.suppressionCount, 1);
     assert.equal(summary.linkedCount, 1);
     assert.equal(suppression?.reason, 'TX_ERROR_REMOVE');
-    assert.equal(mediaItem?.suppressionReason, 'TX_ERROR_REMOVE');
+    assert.equal(mediaItem?.suppressionReason, null);
+    assert.equal(mediaItem?.suppressedUntil, null);
     assert.equal(torrentState?.removalReason, 'TX_ERROR_REMOVE');
     assert.deepEqual(
       observedBodies
@@ -274,6 +275,86 @@ test('runTransmissionGuard removes errored torrents and creates suppressions', a
         .map((body) => (body as { method: string }).method),
       ['torrent-get', 'torrent-remove']
     );
+  } finally {
+    database.close();
+    await server.close();
+  }
+});
+
+test('runTransmissionGuard prefers Arr queue download id links over title guessing', async () => {
+  const server = await startTransmissionServer((_, response, body) => {
+    const method =
+      typeof body === 'object' && body !== null && 'method' in body
+        ? (body as { method: string }).method
+        : null;
+
+    if (method === 'torrent-get') {
+      response.end(
+        JSON.stringify({
+          result: 'success',
+          arguments: {
+            torrents: [
+              {
+                id: 4,
+                hashString: 'abc123hash',
+                name: 'Completely Different Release Name 1080p WEB',
+                status: 4,
+                percentDone: 0.1,
+                error: 3,
+                errorString: 'Tracker error',
+                eta: 0,
+                rateDownload: 0,
+                rateUpload: 0,
+                addedDate: 1,
+                doneDate: 0,
+                activityDate: 1,
+              },
+            ],
+          },
+        })
+      );
+      return;
+    }
+
+    if (method === 'torrent-remove') {
+      response.end(JSON.stringify({ result: 'success', arguments: {} }));
+      return;
+    }
+
+    response.statusCode = 404;
+    response.end(JSON.stringify({ result: 'unknown', arguments: {} }));
+  });
+
+  const databasePath = await createDatabasePath();
+  const database = await seedMediaItem(databasePath);
+  const config = createResolvedConfig();
+  database.repositories.serviceState.set({
+    key: 'arr_queue_download_map:radarr',
+    value: {
+      abc123hash: 'radarr:movie:201',
+    },
+    updatedAt: '2026-04-04T12:00:00.000Z',
+  });
+
+  try {
+    const summary = await runTransmissionGuard({
+      database,
+      config,
+      client: createTransmissionClient({
+        baseUrl: server.url,
+        username: 'user',
+        password: 'pass',
+      }),
+      now: new Date('2026-04-04T12:00:00.000Z'),
+    });
+
+    assert.equal(summary.linkedCount, 1);
+    assert.equal(
+      database.repositories.transmissionTorrentState.getByHash('abc123hash')
+        ?.linkedMediaKey,
+      'radarr:movie:201'
+    );
+    assert.equal(summary.suppressionCount, 1);
   } finally {
     database.close();
     await server.close();

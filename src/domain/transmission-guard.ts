@@ -35,6 +35,102 @@ const normalizeFingerprint = (value: string): string => {
     .trim();
 };
 
+const normalizeDownloadId = (value: string): string => value.trim().toLowerCase();
+
+const escapeRegExp = (value: string): string => {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+const MIN_AUTO_LINK_TITLE_LENGTH = 3;
+
+const EPISODE_RELEASE_PATTERN =
+  /(?:^| )(?:s\d{1,2}e\d{1,3}|season \d{1,2} episode \d{1,3}|20\d{2} \d{2} \d{2})(?: |$)/i;
+
+const includesPhrase = (haystack: string, phrase: string): boolean => {
+  if (!phrase) {
+    return false;
+  }
+
+  return new RegExp(`(?:^| )${escapeRegExp(phrase)}(?: |$)`, 'i').test(haystack);
+};
+
+const getEpisodeSeriesTitle = (item: MediaItemStateRecord): string | null => {
+  if (item.mediaType !== 'sonarr_episode') {
+    return null;
+  }
+
+  const separatorIndex = item.title.indexOf(' - ');
+
+  if (separatorIndex <= 0) {
+    return null;
+  }
+
+  return item.title.slice(0, separatorIndex).trim() || null;
+};
+
+const buildEpisodeSeriesCounts = (
+  mediaItems: MediaItemStateRecord[]
+): Map<string, number> => {
+  const counts = new Map<string, number>();
+
+  for (const item of mediaItems) {
+    const seriesTitle = getEpisodeSeriesTitle(item);
+
+    if (!seriesTitle) {
+      continue;
+    }
+
+    const normalizedSeriesTitle = normalizeFingerprint(seriesTitle);
+
+    if (normalizedSeriesTitle.length < MIN_AUTO_LINK_TITLE_LENGTH) {
+      continue;
+    }
+
+    counts.set(
+      normalizedSeriesTitle,
+      (counts.get(normalizedSeriesTitle) ?? 0) + 1
+    );
+  }
+
+  return counts;
+};
+
+const matchesTorrentToMediaItem = (input: {
+  torrentName: string;
+  item: MediaItemStateRecord;
+  episodeSeriesCounts: Map<string, number>;
+}): boolean => {
+  const normalizedTorrentName = normalizeFingerprint(input.torrentName);
+
+  if (input.item.mediaType === 'radarr_movie') {
+    const normalizedMovieTitle = normalizeFingerprint(input.item.title);
+
+    if (normalizedMovieTitle.length < MIN_AUTO_LINK_TITLE_LENGTH) {
+      return false;
+    }
+
+    return includesPhrase(normalizedTorrentName, normalizedMovieTitle);
+  }
+
+  const seriesTitle = getEpisodeSeriesTitle(input.item);
+
+  if (!seriesTitle || !EPISODE_RELEASE_PATTERN.test(normalizedTorrentName)) {
+    return false;
+  }
+
+  const normalizedSeriesTitle = normalizeFingerprint(seriesTitle);
+
+  if (normalizedSeriesTitle.length < MIN_AUTO_LINK_TITLE_LENGTH) {
+    return false;
+  }
+
+  if ((input.episodeSeriesCounts.get(normalizedSeriesTitle) ?? 0) !== 1) {
+    return false;
+  }
+
+  return includesPhrase(normalizedTorrentName, normalizedSeriesTitle);
+};
+
 const listMediaItems = (database: DatabaseContext): MediaItemStateRecord[] => {
   return [
     ...database.repositories.mediaItemState.listByMediaType('sonarr_episode'),
@@ -42,17 +138,67 @@ const listMediaItems = (database: DatabaseContext): MediaItemStateRecord[] => {
   ];
 };
 
+const getQueueDownloadMap = (database: DatabaseContext): Record<string, string> => {
+  const sonarrMap =
+    database.repositories.serviceState.get<Record<string, string>>(
+      'arr_queue_download_map:sonarr'
+    )?.value ?? {};
+  const radarrMap =
+    database.repositories.serviceState.get<Record<string, string>>(
+      'arr_queue_download_map:radarr'
+    )?.value ?? {};
+
+  return {
+    ...sonarrMap,
+    ...radarrMap,
+  };
+};
+
 const linkTorrentToMediaKey = (
   torrent: TransmissionTorrentRecord,
-  mediaItems: MediaItemStateRecord[]
+  mediaItems: MediaItemStateRecord[],
+  queueDownloadMap: Record<string, string>,
+  previousLinkedMediaKey: string | null
 ): string | null => {
-  const normalizedTorrentName = normalizeFingerprint(torrent.name);
-  const matches = mediaItems.filter((item) => {
-    const normalizedTitle = normalizeFingerprint(item.title);
-    return normalizedTitle.length > 0 && normalizedTorrentName.includes(normalizedTitle);
-  });
+  const queueLinkedMediaKey =
+    queueDownloadMap[normalizeDownloadId(torrent.hashString)] ?? null;
 
-  return matches.length === 1 ? (matches[0]?.mediaKey ?? null) : null;
+  if (queueLinkedMediaKey) {
+    return queueLinkedMediaKey;
+  }
+
+  const episodeSeriesCounts = buildEpisodeSeriesCounts(mediaItems);
+  const matches = mediaItems.filter((item) =>
+    matchesTorrentToMediaItem({
+      torrentName: torrent.name,
+      item,
+      episodeSeriesCounts,
+    })
+  );
+
+  if (matches.length === 1) {
+    return matches[0]?.mediaKey ?? null;
+  }
+
+  if (!previousLinkedMediaKey) {
+    return null;
+  }
+
+  const previousItem =
+    mediaItems.find((item) => item.mediaKey === previousLinkedMediaKey) ?? null;
+
+  if (
+    previousItem &&
+    matchesTorrentToMediaItem({
+      torrentName: torrent.name,
+      item: previousItem,
+      episodeSeriesCounts,
+    })
+  ) {
+    return previousItem.mediaKey;
+  }
+
+  return null;
 };
 
 const buildTorrentStateRecord = (
@@ -80,7 +226,7 @@ const buildTorrentStateRecord = (
     errorString: current.errorString,
     firstSeenAt: previous?.firstSeenAt ?? nowIso,
     lastSeenAt: nowIso,
-    linkedMediaKey: linkedMediaKey ?? previous?.linkedMediaKey ?? null,
+    linkedMediaKey,
     removedAt: previous?.removedAt ?? null,
     removalReason: previous?.removalReason ?? null,
     noProgressSince,
@@ -127,27 +273,6 @@ const hasActiveSuppressedRelease = (
     );
 };
 
-const markMediaSuppressed = (
-  database: DatabaseContext,
-  mediaKey: string,
-  nowIso: string,
-  suppressUntilIso: string,
-  suppressionReason: string
-): void => {
-  const existing = database.repositories.mediaItemState.getByMediaKey(mediaKey);
-
-  if (!existing) {
-    return;
-  }
-
-  database.repositories.mediaItemState.upsert({
-    ...existing,
-    suppressedUntil: suppressUntilIso,
-    suppressionReason,
-    lastSeenAt: nowIso,
-  });
-};
-
 const removeTorrentAndSuppress = async (input: {
   database: DatabaseContext;
   client: TransmissionApiClient;
@@ -183,13 +308,6 @@ const removeTorrentAndSuppress = async (input: {
     createdAt: nowIso,
     expiresAt: suppressUntilIso,
   });
-  markMediaSuppressed(
-    input.database,
-    input.torrentState.linkedMediaKey,
-    nowIso,
-    suppressUntilIso,
-    input.reason
-  );
 
   return { suppressionCreated: true };
 };
@@ -227,6 +345,7 @@ export const runTransmissionGuard = async (input: {
   });
   const torrents = await input.client.getTorrents();
   const mediaItems = listMediaItems(input.database);
+  const queueDownloadMap = getQueueDownloadMap(input.database);
 
   let removedCount = 0;
   let suppressionCount = 0;
@@ -244,7 +363,12 @@ export const runTransmissionGuard = async (input: {
     const previous = input.database.repositories.transmissionTorrentState.getByHash(
       torrent.hashString
     );
-    const linkedMediaKey = linkTorrentToMediaKey(torrent, mediaItems);
+    const linkedMediaKey = linkTorrentToMediaKey(
+      torrent,
+      mediaItems,
+      queueDownloadMap,
+      previous?.linkedMediaKey ?? null
+    );
 
     if (linkedMediaKey) {
       linkedCount += 1;

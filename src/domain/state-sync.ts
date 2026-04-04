@@ -63,6 +63,11 @@ interface SyncCoverageConfig {
   maxWantedPagesPerCollection: number;
 }
 
+const buildQueueDownloadMapStateKey = (app: ArrAppName): string =>
+  `arr_queue_download_map:${app}`;
+
+const normalizeDownloadId = (value: string): string => value.trim().toLowerCase();
+
 const SONARR_MEDIA_TYPE: MediaType = 'sonarr_episode';
 const RADARR_MEDIA_TYPE: MediaType = 'radarr_movie';
 
@@ -157,6 +162,26 @@ const extractQueueMediaKey = (
     readNumberAtPath(queueRecord.payload, ['movie', 'id']);
 
   return movieId ? buildMediaKey('radarr', movieId) : null;
+};
+
+const buildQueueDownloadMap = (
+  app: ArrAppName,
+  queue: ArrQueueRecord[]
+): Record<string, string> => {
+  const entries = queue
+    .map((queueRecord) => {
+      const mediaKey = extractQueueMediaKey(app, queueRecord);
+      const downloadId = queueRecord.downloadId?.trim() ?? null;
+
+      if (!mediaKey || !downloadId) {
+        return null;
+      }
+
+      return [normalizeDownloadId(downloadId), mediaKey] as const;
+    })
+    .filter((entry): entry is readonly [string, string] => entry !== null);
+
+  return Object.fromEntries(entries);
 };
 
 const buildPersistedRecord = (
@@ -505,6 +530,11 @@ const syncAppState = async (input: {
       .map((queueRecord) => extractQueueMediaKey(input.app, queueRecord))
       .filter((mediaKey): mediaKey is string => mediaKey !== null)
   );
+  input.database.repositories.serviceState.set({
+    key: buildQueueDownloadMapStateKey(input.app),
+    value: buildQueueDownloadMap(input.app, queue),
+    updatedAt: input.syncedAt,
+  });
 
   let upsertedCount = 0;
   for (const snapshot of wantedSnapshots.values()) {
