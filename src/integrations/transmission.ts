@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-import { IntegrationError } from './http.js';
-import type { TransmissionSessionProbe, TransmissionTorrentRecord } from './types.js';
+import { IntegrationError } from './http';
+import type { TransmissionSessionProbe, TransmissionTorrentRecord } from './types';
 
 const transmissionResponseSchema = z.object({
   arguments: z.record(z.string(), z.unknown()),

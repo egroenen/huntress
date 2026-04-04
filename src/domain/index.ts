@@ -7,21 +7,22 @@ export {
   type PriorityBucket,
   type ReasonCode,
   type SearchDecision,
-} from './decision-engine.js';
+} from './decision-engine';
 export {
   executeSearchDispatchRun,
+  getSearchCandidatePreview,
   type SearchDispatchClients,
   type SearchDispatchRunInput,
   type SearchDispatchRunSummary,
-} from './search-dispatch.js';
+} from './search-dispatch';
 export {
   syncArrState,
   type AppStateSyncSummary,
   type ArrStateSyncSummary,
   type ArrSyncClients,
-} from './state-sync.js';
+} from './state-sync';
 export {
   runTransmissionGuard,
   type TransmissionGuardReason,
   type TransmissionGuardRunSummary,
-} from './transmission-guard.js';
+} from './transmission-guard';

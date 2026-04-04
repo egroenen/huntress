@@ -12,7 +12,7 @@ import {
   loginUser,
   logoutSession,
   resolveAuthenticatedSession,
-} from './service.js';
+} from './service';
 
 const authConfig = {
   sessionSecret: 'test-secret',

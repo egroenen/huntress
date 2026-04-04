@@ -3,8 +3,8 @@ import { dirname, resolve } from 'node:path';
 
 import BetterSqlite3, { type Database as SqliteDatabase } from 'better-sqlite3';
 
-import { migrations } from './migrations.js';
-import { createRepositories, type DatabaseRepositories } from './repositories.js';
+import { migrations } from './migrations';
+import { createRepositories, type DatabaseRepositories } from './repositories';
 
 export interface AppliedMigration {
   version: string;

@@ -1,12 +1,12 @@
 import { z } from 'zod';
 
-import { joinUrl, requestJson, type HttpRequestOptions } from './http.js';
+import { joinUrl, requestJson, type HttpRequestOptions } from './http';
 import type {
   ArrCommandResponse,
   ArrQueueRecord,
   ArrSystemStatus,
   ArrWantedRecord,
-} from './types.js';
+} from './types';
 
 const arrSystemStatusSchema = z.object({
   appName: z.string(),

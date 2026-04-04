@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 
-import { createSignedValue, verifySignedValue } from './session.js';
+import { createSignedValue, verifySignedValue } from './session';
 
 export const createCsrfToken = (scope: string, secret: string): string => {
   return createSignedValue(scope, secret);

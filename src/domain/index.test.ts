@@ -8,7 +8,7 @@ import test from 'node:test';
 import { initializeDatabase } from '@/src/db';
 import { createRadarrClient, createSonarrClient } from '@/src/integrations';
 
-import { syncArrState } from './state-sync.js';
+import { syncArrState } from './state-sync';
 
 interface TestServerContext {
   url: string;

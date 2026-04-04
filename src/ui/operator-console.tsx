@@ -1,0 +1,335 @@
+import Link from 'next/link';
+import type { ReactNode } from 'react';
+
+import type { SchedulerCoordinatorStatus } from '@/src/scheduler';
+
+type NavPath =
+  | '/'
+  | '/runs'
+  | '/candidates'
+  | '/suppressions'
+  | '/transmission'
+  | '/settings';
+
+export interface ConsoleActionTokens {
+  logout: string;
+  runSync: string;
+  runDry: string;
+  runLive: string;
+}
+
+export interface DependencyHealthCard {
+  name: string;
+  status: 'healthy' | 'degraded' | 'unavailable';
+  summary: string;
+  detail?: string | null;
+}
+
+interface ConsoleShellProps {
+  title: string;
+  subtitle: string;
+  activePath: NavPath;
+  currentUser: string;
+  mode: 'dry-run' | 'live';
+  schedulerStatus: SchedulerCoordinatorStatus;
+  actionTokens: ConsoleActionTokens;
+  children: ReactNode;
+}
+
+interface StatsGridProps {
+  children: ReactNode;
+}
+
+interface StatCardProps {
+  label: string;
+  value: string | number;
+  tone?: 'default' | 'success' | 'warn' | 'danger';
+  detail?: string;
+}
+
+interface SectionCardProps {
+  title: string;
+  subtitle?: string;
+  actions?: ReactNode;
+  children: ReactNode;
+}
+
+interface TableProps {
+  columns: Array<{
+    key: string;
+    label: string;
+    align?: 'left' | 'right';
+  }>;
+  rows: Array<Record<string, ReactNode>>;
+  emptyMessage: string;
+}
+
+const navigationItems: Array<{ href: NavPath; label: string; badge?: string }> = [
+  { href: '/', label: 'Overview' },
+  { href: '/runs', label: 'Runs' },
+  { href: '/candidates', label: 'Candidates' },
+  { href: '/suppressions', label: 'Suppressions' },
+  { href: '/transmission', label: 'Transmission' },
+  { href: '/settings', label: 'Settings' },
+];
+
+const formatTimestamp = (value: string | null): string => {
+  if (!value) {
+    return 'n/a';
+  }
+
+  return new Intl.DateTimeFormat('en-NZ', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value));
+};
+
+export const StatusBadge = ({
+  status,
+  children,
+}: {
+  status: string;
+  children?: ReactNode;
+}) => {
+  const normalizedStatus = [
+    'healthy',
+    'degraded',
+    'unavailable',
+    'running',
+    'success',
+    'partial',
+    'failed',
+  ].includes(status)
+    ? status
+    : 'degraded';
+
+  return (
+    <span className={`status-badge status-badge--${normalizedStatus}`}>
+      {children ?? status.replace('_', ' ')}
+    </span>
+  );
+};
+
+export const ReasonCodeBadge = ({ reasonCode }: { reasonCode: string }) => {
+  return <code className="reason-code">{reasonCode}</code>;
+};
+
+export const ConsoleShell = ({
+  title,
+  subtitle,
+  activePath,
+  currentUser,
+  mode,
+  schedulerStatus,
+  actionTokens,
+  children,
+}: ConsoleShellProps) => {
+  return (
+    <div className="console-shell">
+      <aside className="console-sidebar">
+        <div className="console-brand">
+          <div className="console-brand__mark" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <div>
+            <p className="console-brand__eyebrow">edarr</p>
+            <h1 className="console-brand__title">Operator Console</h1>
+          </div>
+        </div>
+
+        <nav className="console-nav" aria-label="Primary">
+          {navigationItems.map((item) => {
+            const active = item.href === activePath;
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={active ? 'console-nav__link is-active' : 'console-nav__link'}
+              >
+                <span>{item.label}</span>
+                {item.badge ? <small>{item.badge}</small> : null}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="console-sidebar__meta">
+          <div>
+            <span className="console-meta__label">Mode</span>
+            <strong>{mode}</strong>
+          </div>
+          <div>
+            <span className="console-meta__label">Next cycle</span>
+            <strong>{formatTimestamp(schedulerStatus.nextScheduledRunAt)}</strong>
+          </div>
+          <div>
+            <span className="console-meta__label">User</span>
+            <strong>{currentUser}</strong>
+          </div>
+        </div>
+      </aside>
+
+      <main className="console-main">
+        <header className="console-header">
+          <div>
+            <p className="console-header__eyebrow">Deterministic re-search control</p>
+            <h2>{title}</h2>
+            <p>{subtitle}</p>
+          </div>
+
+          <div className="console-header__meta">
+            <div className="header-status-stack">
+              <StatusBadge status={mode === 'live' ? 'success' : 'degraded'}>
+                {mode === 'live' ? 'live dispatch' : 'dry-run mode'}
+              </StatusBadge>
+              {schedulerStatus.startupGraceActive ? (
+                <StatusBadge status="degraded">startup grace active</StatusBadge>
+              ) : null}
+              {schedulerStatus.activeRun ? (
+                <StatusBadge status="running">
+                  {schedulerStatus.activeRun.runType.replace('_', ' ')} running
+                </StatusBadge>
+              ) : null}
+            </div>
+
+            <div className="console-actions">
+              <form action="/api/actions/run-sync" method="post">
+                <input type="hidden" name="csrfToken" value={actionTokens.runSync} />
+                <button type="submit" className="console-button console-button--ghost">
+                  Run sync
+                </button>
+              </form>
+              <form action="/api/actions/run-dry" method="post">
+                <input type="hidden" name="csrfToken" value={actionTokens.runDry} />
+                <button type="submit" className="console-button console-button--ghost">
+                  Dry cycle
+                </button>
+              </form>
+              <form action="/api/actions/run-live" method="post">
+                <input type="hidden" name="csrfToken" value={actionTokens.runLive} />
+                <button type="submit" className="console-button">
+                  Live cycle
+                </button>
+              </form>
+              <form action="/auth/logout" method="post">
+                <input type="hidden" name="csrfToken" value={actionTokens.logout} />
+                <button type="submit" className="console-button console-button--ghost">
+                  Sign out
+                </button>
+              </form>
+            </div>
+          </div>
+        </header>
+
+        <div className="console-content">{children}</div>
+      </main>
+    </div>
+  );
+};
+
+export const StatsGrid = ({ children }: StatsGridProps) => {
+  return <section className="stats-grid">{children}</section>;
+};
+
+export const StatCard = ({ label, value, tone = 'default', detail }: StatCardProps) => {
+  return (
+    <article className={`stat-card stat-card--${tone}`}>
+      <span className="stat-card__label">{label}</span>
+      <strong className="stat-card__value">{value}</strong>
+      {detail ? <p className="stat-card__detail">{detail}</p> : null}
+    </article>
+  );
+};
+
+export const SectionCard = ({ title, subtitle, actions, children }: SectionCardProps) => {
+  return (
+    <section className="section-card">
+      <header className="section-card__header">
+        <div>
+          <h3>{title}</h3>
+          {subtitle ? <p>{subtitle}</p> : null}
+        </div>
+        {actions ? <div className="section-card__actions">{actions}</div> : null}
+      </header>
+      <div className="section-card__body">{children}</div>
+    </section>
+  );
+};
+
+export const DataTable = ({ columns, rows, emptyMessage }: TableProps) => {
+  return (
+    <div className="data-table">
+      <table>
+        <thead>
+          <tr>
+            {columns.map((column) => (
+              <th
+                key={column.key}
+                className={column.align === 'right' ? 'is-right' : undefined}
+              >
+                {column.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length > 0 ? (
+            rows.map((row, index) => (
+              <tr key={`${index}-${String(row[columns[0]?.key ?? index])}`}>
+                {columns.map((column) => (
+                  <td
+                    key={column.key}
+                    className={column.align === 'right' ? 'is-right' : undefined}
+                  >
+                    {row[column.key] ?? null}
+                  </td>
+                ))}
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={columns.length} className="data-table__empty">
+                {emptyMessage}
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+export const DependencyHealthGrid = ({
+  dependencies,
+}: {
+  dependencies: DependencyHealthCard[];
+}) => {
+  return (
+    <section className="dependency-grid">
+      {dependencies.map((dependency) => (
+        <article key={dependency.name} className="dependency-card">
+          <div className="dependency-card__header">
+            <h4>{dependency.name}</h4>
+            <StatusBadge status={dependency.status}>{dependency.status}</StatusBadge>
+          </div>
+          <p>{dependency.summary}</p>
+          {dependency.detail ? (
+            <small className="dependency-card__detail">{dependency.detail}</small>
+          ) : null}
+        </article>
+      ))}
+    </section>
+  );
+};
+
+export const EmptyState = ({ title, body }: { title: string; body: string }) => {
+  return (
+    <div className="empty-state">
+      <h4>{title}</h4>
+      <p>{body}</p>
+    </div>
+  );
+};

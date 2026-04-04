@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import test from 'node:test';
 
-import { IntegrationError } from './http.js';
-import { createProwlarrClient } from './prowlarr.js';
-import { createRadarrClient } from './radarr.js';
-import { createSonarrClient } from './sonarr.js';
-import { createTransmissionClient } from './transmission.js';
+import { IntegrationError } from './http';
+import { createProwlarrClient } from './prowlarr';
+import { createRadarrClient } from './radarr';
+import { createSonarrClient } from './sonarr';
+import { createTransmissionClient } from './transmission';
 
 interface TestServerContext {
   url: string;

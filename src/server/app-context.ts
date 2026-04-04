@@ -3,7 +3,7 @@ import 'server-only';
 import { cookies, headers } from 'next/headers';
 
 import { loadConfig } from '@/src/config';
-import { getDatabaseContext } from '@/src/db/runtime.js';
+import { getDatabaseContext } from '@/src/db/runtime';
 
 export const getAppContext = async () => {
   const [{ config }, database] = await Promise.all([loadConfig(), getDatabaseContext()]);

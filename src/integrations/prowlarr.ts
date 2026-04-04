@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-import { joinUrl, requestJson, type HttpRequestOptions } from './http.js';
-import type { ProwlarrHealthRecord, ProwlarrIndexerStatusRecord } from './types.js';
+import { joinUrl, requestJson, type HttpRequestOptions } from './http';
+import type { ProwlarrHealthRecord, ProwlarrIndexerStatusRecord } from './types';
 
 const prowlarrHealthResponseSchema = z.array(
   z

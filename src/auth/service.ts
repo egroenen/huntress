@@ -1,12 +1,12 @@
 import type { AppUserRecord, DatabaseContext } from '@/src/db';
 
-import { hashPassword, verifyPassword } from './password.js';
+import { hashPassword, verifyPassword } from './password';
 import {
   createSessionCookieOptions,
   createSessionRecord,
   createSignedValue,
   verifySignedValue,
-} from './session.js';
+} from './session';
 
 export interface AuthConfiguration {
   sessionSecret: string;

@@ -3,14 +3,14 @@ import type {
   ArrQueueRecord,
   ArrSystemStatus,
   ArrWantedRecord,
-} from './types.js';
+} from './types';
 import {
   dispatchArrCommand,
   fetchArrQueue,
   fetchArrSystemStatus,
   fetchSonarrWanted,
   type ArrClientOptions,
-} from './arr-shared.js';
+} from './arr-shared';
 
 export type SonarrClient = ArrClientOptions;
 

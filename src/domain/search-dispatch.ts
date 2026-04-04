@@ -11,7 +11,7 @@ import {
   getRetryIntervalMs,
   type CandidateDecision,
   type ReasonCode,
-} from './decision-engine.js';
+} from './decision-engine';
 
 export interface SearchDispatchClients {
   sonarr: SonarrApiClient;
@@ -95,6 +95,14 @@ const buildDecisionSet = (
   });
 
   return [...sonarrDecisions, ...radarrDecisions];
+};
+
+export const getSearchCandidatePreview = (input: {
+  database: DatabaseContext;
+  config: ResolvedConfig;
+  now?: Date;
+}): CandidateDecision[] => {
+  return buildDecisionSet(input.database, input.config, input.now ?? new Date());
 };
 
 const createItemMap = (database: DatabaseContext): Map<string, MediaItemStateRecord> => {

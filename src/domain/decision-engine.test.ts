@@ -4,7 +4,7 @@ import test from 'node:test';
 import type { ResolvedConfig } from '@/src/config';
 import type { MediaItemStateRecord } from '@/src/db';
 
-import { evaluateCandidateDecisions, getRetryIntervalMs } from './decision-engine.js';
+import { evaluateCandidateDecisions, getRetryIntervalMs } from './decision-engine';
 
 const policy: ResolvedConfig['policies']['sonarr'] = {
   maxSearchesPerCycle: 4,

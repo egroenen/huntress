@@ -10,7 +10,7 @@ import {
   type ResolvedConfig,
   rawConfigSchema,
   resolvedConfigSchema,
-} from './schema.js';
+} from './schema';
 
 const DEFAULT_CONFIG_PATHS = ['/config/config.yaml', './config/config.yaml'];
 

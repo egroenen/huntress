@@ -9,7 +9,7 @@ import type { ResolvedConfig } from '@/src/config';
 import { initializeDatabase } from '@/src/db';
 import { createRadarrClient, createSonarrClient } from '@/src/integrations';
 
-import { executeSearchDispatchRun } from './search-dispatch.js';
+import { executeSearchDispatchRun } from './search-dispatch';
 
 interface TestServerContext {
   url: string;

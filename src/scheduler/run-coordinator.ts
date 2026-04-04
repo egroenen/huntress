@@ -30,6 +30,18 @@ export interface RunInvocationResult {
   startupGraceActive: boolean;
 }
 
+export interface SchedulerCoordinatorStatus {
+  startedAt: string;
+  startupGraceActive: boolean;
+  nextScheduledRunAt: string | null;
+  activeRun: {
+    runId: string;
+    runType: CoordinatedRunType;
+    startedAt: string;
+    expiresAt: string;
+  } | null;
+}
+
 export interface SchedulerCoordinatorOptions {
   database: DatabaseContext;
   cadenceMs: number;
@@ -151,6 +163,7 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
     ((handle: unknown) => clearInterval(handle as NodeJS.Timeout));
   const startedAt = now();
   let intervalHandle: unknown = null;
+  let nextScheduledRunAt: Date | null = null;
 
   const isStartupGraceActive = (referenceTime: Date = now()): boolean => {
     return referenceTime.getTime() < startedAt.getTime() + options.startupGracePeriodMs;
@@ -242,7 +255,9 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
         return;
       }
 
+      nextScheduledRunAt = new Date(now().getTime() + options.cadenceMs);
       intervalHandle = createScheduledInterval(() => {
+        nextScheduledRunAt = new Date(now().getTime() + options.cadenceMs);
         void run('scheduled');
       }, options.cadenceMs);
     },
@@ -262,6 +277,28 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
       runType: Exclude<CoordinatedRunType, 'scheduled'>
     ): Promise<RunInvocationResult> {
       return run(runType);
+    },
+    getStatus(): SchedulerCoordinatorStatus {
+      const referenceTime = now();
+      const lockState =
+        options.database.repositories.serviceState.get<SchedulerLockState>(
+          SCHEDULER_LOCK_KEY
+        );
+
+      return {
+        startedAt: startedAt.toISOString(),
+        startupGraceActive: isStartupGraceActive(referenceTime),
+        nextScheduledRunAt: nextScheduledRunAt?.toISOString() ?? null,
+        activeRun:
+          lockState && lockState.value.expiresAt > referenceTime.toISOString()
+            ? {
+                runId: lockState.value.runId,
+                runType: lockState.value.runType,
+                startedAt: lockState.value.startedAt,
+                expiresAt: lockState.value.expiresAt,
+              }
+            : null,
+      };
     },
   };
 };

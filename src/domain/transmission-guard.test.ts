@@ -9,7 +9,7 @@ import type { ResolvedConfig } from '@/src/config';
 import { initializeDatabase } from '@/src/db';
 import { createTransmissionClient } from '@/src/integrations';
 
-import { runTransmissionGuard } from './transmission-guard.js';
+import { runTransmissionGuard } from './transmission-guard';
 
 interface TestServerContext {
   url: string;

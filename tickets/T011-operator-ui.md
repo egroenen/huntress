@@ -1,6 +1,6 @@
 # T011: Operator UI
 
-Status: Backlog
+Status: Done
 
 ## Goal
 

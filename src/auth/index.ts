@@ -1,4 +1,4 @@
-export { assertSameOrigin, createCsrfToken, verifyCsrfToken } from './csrf.js';
+export { assertSameOrigin, createCsrfToken, verifyCsrfToken } from './csrf';
 export {
   bootstrapAdminUser,
   getSessionCookieOptions,
@@ -6,10 +6,6 @@ export {
   loginUser,
   logoutSession,
   resolveAuthenticatedSession,
-} from './service.js';
-export type {
-  AuthConfiguration,
-  AuthenticatedSession,
-  RequestMetadata,
-} from './service.js';
-export { SESSION_COOKIE_NAME } from './session.js';
+} from './service';
+export type { AuthConfiguration, AuthenticatedSession, RequestMetadata } from './service';
+export { SESSION_COOKIE_NAME } from './session';

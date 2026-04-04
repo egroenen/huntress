@@ -1,8 +1,8 @@
-export { IntegrationError } from './http.js';
-export { createProwlarrClient, type ProwlarrApiClient } from './prowlarr.js';
-export { createRadarrClient, type RadarrApiClient } from './radarr.js';
-export { createSonarrClient, type SonarrApiClient } from './sonarr.js';
-export { createTransmissionClient, type TransmissionApiClient } from './transmission.js';
+export { IntegrationError } from './http';
+export { createProwlarrClient, type ProwlarrApiClient } from './prowlarr';
+export { createRadarrClient, type RadarrApiClient } from './radarr';
+export { createSonarrClient, type SonarrApiClient } from './sonarr';
+export { createTransmissionClient, type TransmissionApiClient } from './transmission';
 export type {
   ArrCommandResponse,
   ArrQueueRecord,
@@ -13,4 +13,4 @@ export type {
   ProwlarrIndexerStatusRecord,
   TransmissionSessionProbe,
   TransmissionTorrentRecord,
-} from './types.js';
+} from './types';

@@ -4,7 +4,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { loadConfig } from './load-config.js';
+import { loadConfig } from './load-config';
 
 const baseConfig = `
 server:

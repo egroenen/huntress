@@ -2,7 +2,7 @@ import 'server-only';
 
 import { loadConfig } from '@/src/config';
 
-import { initializeDatabase, type DatabaseContext } from './index.js';
+import { initializeDatabase, type DatabaseContext } from './index';
 
 const AUTH_RESET_STATE_KEY = 'auth_reset_state';
 

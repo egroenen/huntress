@@ -1,5 +1,5 @@
-export { initializeDatabase } from './database.js';
-export type { AppliedMigration, DatabaseContext } from './database.js';
+export { initializeDatabase } from './database';
+export type { AppliedMigration, DatabaseContext } from './database';
 export {
   createRepositories,
   type AppSessionRecord,
@@ -12,4 +12,4 @@ export {
   type SearchAttemptRecord,
   type ServiceStateRecord,
   type TransmissionTorrentStateRecord,
-} from './repositories.js';
+} from './repositories';
