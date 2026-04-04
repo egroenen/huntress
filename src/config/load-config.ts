@@ -155,6 +155,9 @@ const resolveConfig = (
       startupGracePeriodMs: durationToMs(rawConfig.scheduler.startup_grace_period),
       maxRunDurationMs: durationToMs(rawConfig.scheduler.max_run_duration),
     },
+    sync: {
+      wantedPageSize: rawConfig.sync.wanted_page_size,
+    },
     policies: {
       sonarr: resolveSearchPolicy(rawConfig.policies.sonarr),
       radarr: resolveSearchPolicy(rawConfig.policies.radarr),

@@ -38,6 +38,8 @@ scheduler:
   cycle_every: "6h"
   startup_grace_period: "10m"
   max_run_duration: "30m"
+sync:
+  wanted_page_size: 250
 policies:
   sonarr:
     max_searches_per_cycle: 6

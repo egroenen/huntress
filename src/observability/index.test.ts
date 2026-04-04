@@ -63,6 +63,9 @@ const createResolvedConfig = (): ResolvedConfig => {
       startupGracePeriodMs: 10 * 60_000,
       maxRunDurationMs: 30 * 60_000,
     },
+    sync: {
+      wantedPageSize: 250,
+    },
     policies: {
       sonarr: {
         maxSearchesPerCycle: 6,

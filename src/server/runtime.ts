@@ -87,6 +87,7 @@ const createClients = (
       ? createSonarrClient({
           baseUrl: config.instances.sonarr.url,
           apiKey: config.instances.sonarr.apiKey,
+          wantedPageSize: config.sync.wantedPageSize,
           ...(activityTracker ? { activityReporter: writeActivity } : {}),
         })
       : null,
@@ -94,6 +95,7 @@ const createClients = (
       ? createRadarrClient({
           baseUrl: config.instances.radarr.url,
           apiKey: config.instances.radarr.apiKey,
+          wantedPageSize: config.sync.wantedPageSize,
           ...(activityTracker ? { activityReporter: writeActivity } : {}),
         })
       : null,

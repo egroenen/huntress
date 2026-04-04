@@ -46,6 +46,9 @@ export const rawConfigSchema = z.object({
     startup_grace_period: durationStringSchema,
     max_run_duration: durationStringSchema,
   }),
+  sync: z.object({
+    wanted_page_size: z.number().int().positive().default(250),
+  }),
   policies: z.object({
     sonarr: z.object({
       max_searches_per_cycle: z.number().int().positive(),
@@ -143,6 +146,9 @@ export const resolvedConfigSchema = z
       cycleEveryMs: z.number().int().positive(),
       startupGracePeriodMs: z.number().int().nonnegative(),
       maxRunDurationMs: z.number().int().positive(),
+    }),
+    sync: z.object({
+      wantedPageSize: z.number().int().positive(),
     }),
     policies: z.object({
       sonarr: resolvedSearchPolicySchema,

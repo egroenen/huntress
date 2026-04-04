@@ -87,6 +87,7 @@ export interface ArrClientOptions {
   baseUrl: string;
   apiKey: string;
   timeoutMs?: number;
+  wantedPageSize?: number;
   activityReporter?: (event: {
     source: 'sonarr' | 'radarr';
     stage: string;
@@ -98,6 +99,8 @@ export interface ArrClientOptions {
   }) => void;
   serviceName?: 'sonarr' | 'radarr';
 }
+
+const DEFAULT_WANTED_PAGE_SIZE = 250;
 
 export const createArrHeaders = (apiKey: string): Record<string, string> => {
   return {
@@ -125,9 +128,17 @@ const reportActivity = (
   options.activityReporter?.(event);
 };
 
-const buildPagedEndpoint = (baseUrl: string, path: string, page: number): string => {
+const buildPagedEndpoint = (
+  baseUrl: string,
+  path: string,
+  page: number,
+  pageSize?: number
+): string => {
   const endpoint = new URL(joinUrl(baseUrl, path));
   endpoint.searchParams.set('page', String(page));
+  if (pageSize) {
+    endpoint.searchParams.set('pageSize', String(pageSize));
+  }
 
   return endpoint.toString();
 };
@@ -147,17 +158,22 @@ const fetchWantedCollection = async <TItem>(input: {
   stagePrefix: string;
 }): Promise<TItem[]> => {
   const source = input.options.serviceName ?? 'sonarr';
+  const requestedPageSize = input.options.wantedPageSize ?? DEFAULT_WANTED_PAGE_SIZE;
   reportActivity(input.options, {
     source,
     stage: `${input.stagePrefix}_page`,
     message: `Requesting ${source} ${input.path.replace('/api/v3/wanted/', '')} page 1`,
     progressCurrent: 1,
     progressTotal: null,
-    detail: input.path,
+    detail: `${input.path} (pageSize=${requestedPageSize})`,
+    metadata: {
+      path: input.path,
+      requestedPageSize,
+    },
   });
 
   const firstPageRaw = await requestJson(
-    buildPagedEndpoint(input.options.baseUrl, input.path, 1),
+    buildPagedEndpoint(input.options.baseUrl, input.path, 1, requestedPageSize),
     z.unknown(),
     createRequestOptions(input.options)
   );
@@ -184,6 +200,7 @@ const fetchWantedCollection = async <TItem>(input: {
     detail: `${records.length} records accumulated`,
     metadata: {
       path: input.path,
+      requestedPageSize,
       pageSize,
       totalRecords,
     },
@@ -200,10 +217,14 @@ const fetchWantedCollection = async <TItem>(input: {
       message: `Requesting ${source} ${input.path.replace('/api/v3/wanted/', '')} page ${page} of ${totalPages}`,
       progressCurrent: page,
       progressTotal: totalPages,
-      detail: input.path,
+      detail: `${input.path} (pageSize=${requestedPageSize})`,
+      metadata: {
+        path: input.path,
+        requestedPageSize,
+      },
     });
     const nextPage = await requestJson(
-      buildPagedEndpoint(input.options.baseUrl, input.path, page),
+      buildPagedEndpoint(input.options.baseUrl, input.path, page, requestedPageSize),
       input.paginatedSchema,
       createRequestOptions(input.options)
     );
@@ -218,6 +239,7 @@ const fetchWantedCollection = async <TItem>(input: {
       detail: `${records.length} records accumulated`,
       metadata: {
         path: input.path,
+        requestedPageSize,
         pageSize,
         totalRecords,
       },
