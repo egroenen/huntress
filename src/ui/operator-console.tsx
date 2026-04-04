@@ -114,6 +114,51 @@ export const ReasonCodeBadge = ({ reasonCode }: { reasonCode: string }) => {
   return <code className="reason-code">{reasonCode}</code>;
 };
 
+const BrandMark = () => {
+  return (
+    <svg
+      className="console-brand__mark"
+      viewBox="0 0 64 64"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        <linearGradient id="edarr-brand-ring" x1="0%" x2="100%" y1="0%" y2="100%">
+          <stop offset="0%" stopColor="#5ad5ef" />
+          <stop offset="100%" stopColor="#1786b3" />
+        </linearGradient>
+        <linearGradient id="edarr-brand-core" x1="0%" x2="100%" y1="0%" y2="100%">
+          <stop offset="0%" stopColor="#ffd06a" />
+          <stop offset="100%" stopColor="#d98d11" />
+        </linearGradient>
+      </defs>
+
+      <circle
+        cx="32"
+        cy="32"
+        r="22"
+        fill="none"
+        stroke="url(#edarr-brand-ring)"
+        strokeWidth="8"
+      />
+      <path
+        d="M32 10a22 22 0 0 1 19.05 11H38.5a9.5 9.5 0 0 0-6.5-2.55z"
+        fill="url(#edarr-brand-ring)"
+      />
+      <path
+        d="M54 32a22 22 0 0 1-11 19.05V38.5A9.5 9.5 0 0 0 45.55 32z"
+        fill="url(#edarr-brand-ring)"
+      />
+      <path
+        d="M32 54a22 22 0 0 1-19.05-11H25.5A9.5 9.5 0 0 0 32 45.55z"
+        fill="url(#edarr-brand-ring)"
+      />
+      <path d="M26 18h15l-8 10h7L23 46l5-13h-6z" fill="url(#edarr-brand-core)" />
+      <circle cx="32" cy="32" r="3.2" fill="#0f1723" />
+    </svg>
+  );
+};
+
 export const ConsoleShell = ({
   title,
   subtitle,
@@ -128,11 +173,7 @@ export const ConsoleShell = ({
     <div className="console-shell">
       <aside className="console-sidebar">
         <div className="console-brand">
-          <div className="console-brand__mark" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </div>
+          <BrandMark />
           <div>
             <p className="console-brand__eyebrow">edarr</p>
             <h1 className="console-brand__title">Operator Console</h1>

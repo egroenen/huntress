@@ -159,21 +159,10 @@ select {
 }
 
 .console-brand__mark {
-  display: grid;
-  grid-template-columns: repeat(2, 0.95rem);
-  gap: 0.18rem;
-  width: 2.1rem;
-  height: 2.1rem;
-}
-
-.console-brand__mark span {
-  border-radius: 999px;
-  background: linear-gradient(180deg, #43bee5, #1687b3);
-}
-
-.console-brand__mark span:nth-child(1) {
-  grid-column: 1 / span 2;
-  height: 0.78rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.28));
 }
 
 .console-brand__eyebrow,
