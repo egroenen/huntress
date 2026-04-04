@@ -108,3 +108,38 @@ Suggested Podman validation flow:
 - expose `47892/tcp` or remap it to your preferred high port
 - keep `restart: unless-stopped`
 - use the built-in `/api/readyz` health endpoint for container health checks where available
+
+## Pre-live checklist
+
+Before switching from dry-run to live mode:
+
+1. Keep conservative starting budgets in [config/config.yaml](/home/eddyg/projects/edarr/config/config.yaml), especially:
+   - `safety.max_global_dispatch_per_cycle`
+   - `safety.rolling_search_limits.per_15m`
+   - `safety.rolling_search_limits.per_1h`
+   - `safety.rolling_search_limits.per_24h`
+2. Run the service in `dry-run` mode long enough to confirm:
+   - expected Sonarr and Radarr items appear in the candidate view
+   - skipped items have understandable reason codes
+   - queued items are being skipped instead of re-searched
+3. Confirm the operator UI shows search budget visibility on the overview page:
+   - used versus remaining budget
+   - next eligible dispatch time
+   - throttle reason when a budget is exhausted
+4. Confirm the metrics endpoint exposes throttle and rate data:
+   - `edarr_search_rate_used`
+   - `edarr_search_rate_remaining`
+   - `edarr_search_throttles_total`
+5. Exercise throttle-stop behavior in a safe environment:
+   - temporarily lower `rolling_search_limits.per_15m`
+   - confirm dispatch stops when the window fills
+   - confirm dispatch resumes only after the next eligible time
+6. Confirm Transmission guard behavior before trusting it live:
+   - review recent removals in the Transmission page
+   - confirm suppressions appear and expire as expected
+   - verify `delete_local_data` matches your actual preference
+7. Confirm readiness behavior matches your expectation:
+   - `/api/healthz` should be `200` when the process is up
+   - `/api/readyz` should only be `200` when the service can operate against its dependencies
+8. Back up `/data/orchestrator.db` before the first live enablement.
+9. Only then switch `mode` from `dry-run` to `live` and watch the first few cycles closely in the run history and overview pages.

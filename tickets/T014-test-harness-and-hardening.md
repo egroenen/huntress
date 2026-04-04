@@ -1,6 +1,6 @@
 # T014: Test Harness and Hardening
 
-Status: Backlog
+Status: Done
 
 ## Goal
 

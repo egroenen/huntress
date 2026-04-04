@@ -168,3 +168,36 @@ test('scheduled cadence triggers scheduled runs', async () => {
     database.close();
   }
 });
+
+test('failed runs mark run history as failed and release the scheduler lock', async () => {
+  const databasePath = await createDatabasePath();
+  const database = await initializeDatabase(databasePath);
+
+  const coordinator = createSchedulerCoordinator({
+    database,
+    cadenceMs: 60_000,
+    startupGracePeriodMs: 0,
+    lockTtlMs: 60_000,
+    async executeRun() {
+      throw new Error('boom');
+    },
+  });
+
+  try {
+    const result = await coordinator.runManual('sync_only');
+    const runHistory = result.runId
+      ? database.repositories.runHistory.getById(result.runId)
+      : null;
+
+    assert.equal(result.accepted, true);
+    assert.equal(runHistory?.status, 'failed');
+    assert.equal(runHistory?.errorCount, 1);
+    assert.equal(
+      database.repositories.serviceState.get('scheduler_lock'),
+      null,
+      'lock should be released after a failed run'
+    );
+  } finally {
+    database.close();
+  }
+});

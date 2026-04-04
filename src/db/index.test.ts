@@ -148,3 +148,87 @@ test('repositories can write and read core records', async () => {
     database.close();
   }
 });
+
+test('database state persists cleanly across restart boundaries', async () => {
+  const databasePath = await createDatabasePath();
+  const firstDatabase = await initializeDatabase(databasePath);
+
+  try {
+    firstDatabase.repositories.runHistory.create({
+      id: 'run-1',
+      runType: 'manual_live',
+      startedAt: '2026-04-04T12:00:00.000Z',
+      finishedAt: '2026-04-04T12:00:05.000Z',
+      status: 'success',
+      candidateCount: 1,
+      dispatchCount: 1,
+      skipCount: 0,
+      errorCount: 0,
+      summary: {
+        phase: 'persisted-before-restart',
+      },
+    });
+
+    firstDatabase.repositories.mediaItemState.upsert({
+      mediaKey: 'sonarr:episode:123',
+      mediaType: 'sonarr_episode',
+      arrId: 123,
+      parentArrId: 12,
+      title: 'Restart Proof Episode',
+      monitored: true,
+      releaseDate: '2026-04-01T00:00:00.000Z',
+      wantedState: 'missing',
+      inQueue: false,
+      retryCount: 2,
+      lastSearchAt: '2026-04-04T06:00:00.000Z',
+      lastGrabAt: null,
+      nextEligibleAt: '2026-04-05T06:00:00.000Z',
+      suppressedUntil: null,
+      suppressionReason: null,
+      lastSeenAt: '2026-04-04T12:00:00.000Z',
+      stateHash: 'restart-state-hash',
+    });
+
+    firstDatabase.repositories.searchAttempts.insertMany([
+      {
+        runId: 'run-1',
+        mediaKey: 'sonarr:episode:123',
+        app: 'sonarr',
+        wantedState: 'missing',
+        decision: 'dispatch',
+        reasonCode: 'ELIGIBLE_MISSING_RECENT',
+        dryRun: false,
+        arrCommandId: 555,
+        attemptedAt: '2026-04-04T12:00:00.000Z',
+        completedAt: '2026-04-04T12:00:01.000Z',
+        outcome: 'accepted',
+      },
+    ]);
+  } finally {
+    firstDatabase.close();
+  }
+
+  const secondDatabase = await initializeDatabase(databasePath);
+
+  try {
+    const latestRun = secondDatabase.repositories.runHistory.getLatest();
+    const mediaItem =
+      secondDatabase.repositories.mediaItemState.getByMediaKey('sonarr:episode:123');
+    const attempts = secondDatabase.repositories.searchAttempts.listByRunId('run-1');
+
+    assert.equal(latestRun?.id, 'run-1');
+    assert.equal(latestRun?.summary.phase, 'persisted-before-restart');
+    assert.equal(mediaItem?.retryCount, 2);
+    assert.equal(mediaItem?.nextEligibleAt, '2026-04-05T06:00:00.000Z');
+    assert.deepEqual(
+      attempts.map((attempt) => [
+        attempt.mediaKey,
+        attempt.arrCommandId,
+        attempt.outcome,
+      ]),
+      [['sonarr:episode:123', 555, 'accepted']]
+    );
+  } finally {
+    secondDatabase.close();
+  }
+});

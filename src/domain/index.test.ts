@@ -8,7 +8,7 @@ import test from 'node:test';
 import { initializeDatabase } from '@/src/db';
 import { createRadarrClient, createSonarrClient } from '@/src/integrations';
 
-import { syncArrState } from './state-sync';
+import { executeSearchDispatchRun, syncArrState } from './index';
 
 interface TestServerContext {
   url: string;
@@ -344,6 +344,240 @@ test('syncArrState preserves retry history and marks disappeared items as ignore
     assert.equal(disappearedRadarrRecord?.wantedState, 'ignored');
     assert.equal(disappearedRadarrRecord?.lastSeenAt, '2026-04-05T12:00:00.000Z');
     assert.equal(disappearedRadarrRecord?.retryCount, 0);
+  } finally {
+    database.close();
+    await server.close();
+  }
+});
+
+test('sync and dispatch work together in a mocked end-to-end cycle', async () => {
+  const commandBodies: unknown[] = [];
+  const server = await startJsonServer(async (request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+
+    if (request.url === '/sonarr/api/v3/wanted/missing') {
+      response.end(
+        JSON.stringify([
+          {
+            id: 101,
+            seriesId: 55,
+            title: 'Pilot',
+            monitored: true,
+            airDateUtc: '2026-03-30T00:00:00Z',
+            series: { title: 'Example Show' },
+          },
+        ])
+      );
+      return;
+    }
+
+    if (request.url === '/sonarr/api/v3/wanted/cutoff') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    if (request.url === '/sonarr/api/v3/queue/details') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    if (request.url === '/radarr/api/v3/wanted/missing') {
+      response.end(
+        JSON.stringify([
+          {
+            id: 201,
+            title: 'Queued Movie',
+            monitored: true,
+            digitalRelease: '2026-03-20T00:00:00Z',
+          },
+        ])
+      );
+      return;
+    }
+
+    if (request.url === '/radarr/api/v3/wanted/cutoff') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    if (request.url === '/radarr/api/v3/queue/details') {
+      response.end(
+        JSON.stringify([
+          {
+            id: 2,
+            title: 'Queued Movie',
+            movieId: 201,
+          },
+        ])
+      );
+      return;
+    }
+
+    if (request.method === 'POST' && request.url?.endsWith('/api/v3/command')) {
+      const body = await new Promise<string>((resolve) => {
+        let data = '';
+        request.setEncoding('utf8');
+        request.on('data', (chunk) => {
+          data += chunk;
+        });
+        request.on('end', () => resolve(data));
+      });
+
+      commandBodies.push(JSON.parse(body));
+      response.end(JSON.stringify({ id: 401, name: 'search', status: 'queued' }));
+      return;
+    }
+
+    response.statusCode = 404;
+    response.end(JSON.stringify({ error: 'not found' }));
+  });
+
+  const databasePath = await createDatabasePath();
+  const database = await initializeDatabase(databasePath);
+  const now = new Date('2026-04-04T12:00:00.000Z');
+
+  try {
+    const sonarr = createSonarrClient({
+      baseUrl: `${server.url}/sonarr`,
+      apiKey: 'sonarr-key',
+    });
+    const radarr = createRadarrClient({
+      baseUrl: `${server.url}/radarr`,
+      apiKey: 'radarr-key',
+    });
+
+    await syncArrState({
+      database,
+      clients: {
+        sonarr,
+        radarr,
+      },
+      now,
+    });
+
+    database.repositories.runHistory.create({
+      id: 'e2e-run',
+      runType: 'manual_live',
+      startedAt: now.toISOString(),
+      finishedAt: null,
+      status: 'running',
+      candidateCount: 0,
+      dispatchCount: 0,
+      skipCount: 0,
+      errorCount: 0,
+      summary: {},
+    });
+
+    const summary = await executeSearchDispatchRun({
+      database,
+      config: {
+        server: {
+          listenHost: '127.0.0.1',
+          listenPort: 47892,
+        },
+        mode: 'live',
+        storage: {
+          sqlitePath: databasePath,
+        },
+        auth: {
+          enabled: true,
+          sessionSecret: 'secret',
+          sessionSecretEnv: 'APP_SESSION_SECRET',
+          sessionAbsoluteTtlMs: 7 * 86_400_000,
+          sessionIdleTtlMs: 86_400_000,
+        },
+        instances: {
+          sonarr: {
+            url: `${server.url}/sonarr`,
+            apiKey: 'sonarr-key',
+            apiKeyEnv: 'SONARR_API_KEY',
+          },
+          radarr: {
+            url: `${server.url}/radarr`,
+            apiKey: 'radarr-key',
+            apiKeyEnv: 'RADARR_API_KEY',
+          },
+          prowlarr: {
+            url: 'http://prowlarr:9696',
+            apiKey: 'prowlarr-key',
+            apiKeyEnv: 'PROWLARR_API_KEY',
+          },
+          transmission: {
+            url: 'http://transmission:9091/transmission/rpc',
+            username: 'user',
+            usernameEnv: 'TRANSMISSION_RPC_USERNAME',
+            password: 'pass',
+            passwordEnv: 'TRANSMISSION_RPC_PASSWORD',
+          },
+        },
+        scheduler: {
+          cycleEveryMs: 6 * 3_600_000,
+          startupGracePeriodMs: 10 * 60_000,
+        },
+        policies: {
+          sonarr: {
+            maxSearchesPerCycle: 6,
+            missingRetryIntervalsMs: [12, 24, 72, 168].map((hours) => hours * 3_600_000),
+            cutoffRetryIntervalsMs: [48, 168, 336].map((hours) => hours * 3_600_000),
+            recentReleaseWindowDays: 30,
+            excludeUnreleased: true,
+            excludeUnmonitored: true,
+          },
+          radarr: {
+            maxSearchesPerCycle: 3,
+            missingRetryIntervalsMs: [24, 72, 168, 336].map((hours) => hours * 3_600_000),
+            cutoffRetryIntervalsMs: [72, 168, 336].map((hours) => hours * 3_600_000),
+            recentReleaseWindowDays: 30,
+            excludeUnreleased: true,
+            excludeUnmonitored: true,
+          },
+        },
+        transmissionGuard: {
+          enabled: true,
+          stallNoProgressForMs: 12 * 3_600_000,
+          suppressSameReleaseForMs: 7 * 86_400_000,
+          itemCooldownAfterLoopMs: 24 * 3_600_000,
+          deleteLocalData: true,
+        },
+        safety: {
+          panicDisableSearch: false,
+          stopOnProwlarrOutage: true,
+          maxGlobalDispatchPerCycle: 8,
+          minGlobalDispatchSpacingMs: 1,
+          rollingSearchLimits: {
+            per15m: 4,
+            per1h: 10,
+            per24h: 40,
+          },
+        },
+        logging: {
+          level: 'info',
+        },
+        meta: {
+          configPath: '/tmp/config.yaml',
+        },
+      },
+      clients: {
+        sonarr,
+        radarr,
+      },
+      runId: 'e2e-run',
+      live: true,
+      now,
+    });
+
+    const attempts = database.repositories.searchAttempts.listByRunId('e2e-run');
+
+    assert.equal(summary.dispatchCount, 1);
+    assert.equal(summary.skipCount, 1);
+    assert.deepEqual(commandBodies, [{ name: 'EpisodeSearch', episodeIds: [101] }]);
+    assert.deepEqual(
+      attempts.map((attempt) => [attempt.mediaKey, attempt.decision, attempt.outcome]),
+      [
+        ['sonarr:episode:101', 'dispatch', 'accepted'],
+        ['radarr:movie:201', 'skip', 'skipped'],
+      ]
+    );
   } finally {
     database.close();
     await server.close();
