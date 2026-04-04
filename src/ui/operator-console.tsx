@@ -240,6 +240,19 @@ export const ConsoleShell = ({
             </div>
 
             <div className="console-actions">
+              {schedulerStatus.activeRun ? (
+                <form action="/api/actions/recover-run" method="post">
+                  <input type="hidden" name="csrfToken" value={actionTokens.recoverRun} />
+                  <button
+                    type="submit"
+                    className="console-button console-button--ghost"
+                    title="Force clear the currently active run if it is stuck, release the scheduler lock, and mark it as failed."
+                    aria-label="Recover run: force clear the active run, release the scheduler lock, and mark it failed"
+                  >
+                    Recover run
+                  </button>
+                </form>
+              ) : null}
               <form action="/api/actions/run-sync" method="post">
                 <input type="hidden" name="csrfToken" value={actionTokens.runSync} />
                 <button
