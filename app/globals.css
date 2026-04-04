@@ -537,6 +537,51 @@ select {
   justify-content: flex-end;
 }
 
+.candidate-filters {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.candidate-filters__grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.candidate-filters__field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.candidate-filters__field--wide {
+  grid-column: span 2;
+}
+
+.candidate-filters__field span {
+  color: var(--content-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.candidate-filters__field input,
+.candidate-filters__field select {
+  border: 1px solid #d9e3ee;
+  border-radius: 8px;
+  background: #fff;
+  color: #243142;
+  padding: 0.72rem 0.85rem;
+}
+
+.candidate-filters__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .table-app-label {
   display: inline-flex;
   align-items: center;
@@ -717,6 +762,7 @@ select {
   .dependency-grid,
   .latest-run__summary,
   .settings-status-grid,
+  .candidate-filters__grid,
   .settings-status-card__meta {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -749,10 +795,16 @@ select {
   .dependency-grid,
   .latest-run__summary,
   .settings-status-grid,
+  .candidate-filters__grid,
   .settings-status-card__meta {
     grid-template-columns: 1fr;
   }
 
+  .candidate-filters__field--wide {
+    grid-column: span 1;
+  }
+
+  .candidate-filters__actions,
   .settings-form__heading,
   .settings-form__actions {
     align-items: flex-start;
