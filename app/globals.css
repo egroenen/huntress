@@ -390,6 +390,7 @@ select {
   align-items: center;
   gap: 0.35rem;
   border-radius: 999px;
+  border: 1px solid transparent;
   font-size: 0.75rem;
   font-weight: 700;
   line-height: 1;
@@ -405,8 +406,9 @@ select {
 
 .status-badge--degraded,
 .status-badge--partial {
-  background: rgba(226, 171, 55, 0.16);
-  color: #956200;
+  background: #fff0c6;
+  border-color: #d5a33d;
+  color: #5f4300;
 }
 
 .status-badge--unavailable,
