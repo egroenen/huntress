@@ -4,6 +4,7 @@ import {
   getDashboardCandidateSnapshot,
   probeDependencyHealth,
 } from '@/src/server/console-data';
+import { getSearchRateSnapshot } from '@/src/observability';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   ConsoleShell,
@@ -36,6 +37,7 @@ export default async function HomePage() {
     Promise.resolve(runtime.database.repositories.runHistory.getLatest()),
   ]);
   const candidates = getDashboardCandidateSnapshot(runtime);
+  const searchRate = getSearchRateSnapshot(runtime.database, runtime.config);
   const suppressions = runtime.database.repositories.releaseSuppressions.listActive(
     new Date().toISOString()
   );
@@ -73,6 +75,16 @@ export default async function HomePage() {
           label="Active suppressions"
           value={suppressions.length}
           detail="Release- and item-level blocks currently active"
+        />
+        <StatCard
+          label="Search rate"
+          value={`${searchRate.windows[0]?.used ?? 0}/${searchRate.windows[0]?.limit ?? 0}`}
+          tone={searchRate.currentThrottleReason ? 'warn' : 'default'}
+          detail={
+            searchRate.currentThrottleReason
+              ? `${searchRate.currentThrottleReason} until ${formatTimestamp(searchRate.nextEligibleAt)}`
+              : 'Dispatch budget currently available'
+          }
         />
         <StatCard
           label="Last run"
@@ -180,6 +192,29 @@ export default async function HomePage() {
             nextEligibleAt: formatTimestamp(candidate.nextEligibleAt),
           }))}
           emptyMessage="No candidate decisions are available yet."
+        />
+      </SectionCard>
+
+      <SectionCard
+        title="Search budget"
+        subtitle="Rolling-window search usage used to protect indexers and private trackers."
+      >
+        <DataTable
+          columns={[
+            { key: 'window', label: 'Window' },
+            { key: 'used', label: 'Used', align: 'right' },
+            { key: 'limit', label: 'Limit', align: 'right' },
+            { key: 'remaining', label: 'Remaining', align: 'right' },
+            { key: 'nextEligibleAt', label: 'Next eligible' },
+          ]}
+          rows={searchRate.windows.map((window) => ({
+            window: window.key,
+            used: window.used,
+            limit: window.limit,
+            remaining: window.remaining,
+            nextEligibleAt: formatTimestamp(window.nextEligibleAt),
+          }))}
+          emptyMessage="No search-rate windows are available."
         />
       </SectionCard>
 

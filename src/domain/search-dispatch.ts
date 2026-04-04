@@ -5,6 +5,13 @@ import type {
   SearchAttemptRecord,
 } from '@/src/db';
 import type { RadarrApiClient, SonarrApiClient } from '@/src/integrations';
+import {
+  getSearchRateSnapshot,
+  logger,
+  recordCandidateDecision,
+  recordSearchDispatch,
+  updateSearchRateMetrics,
+} from '@/src/observability';
 
 import {
   evaluateCandidateDecisions,
@@ -218,7 +225,23 @@ export const executeSearchDispatchRun = async (
   let throttleReason: ReasonCode | null = null;
 
   for (const decision of decisions) {
+    recordCandidateDecision({
+      app: decision.app,
+      decision: decision.decision,
+      reasonCode: decision.reasonCode,
+    });
+
     if (decision.decision === 'skip') {
+      logger.info({
+        event: 'candidate_evaluated',
+        runId: input.runId,
+        app: decision.app,
+        mediaKey: decision.mediaKey,
+        title: decision.title,
+        decision: decision.decision,
+        reasonCode: decision.reasonCode,
+        wantedState: decision.wantedState,
+      });
       attempts.push(
         createAttempt({
           runId: input.runId,
@@ -239,6 +262,17 @@ export const executeSearchDispatchRun = async (
     }
 
     if (!input.live) {
+      logger.info({
+        event: 'candidate_evaluated',
+        runId: input.runId,
+        app: decision.app,
+        mediaKey: decision.mediaKey,
+        title: decision.title,
+        decision: 'dispatch',
+        reasonCode: decision.reasonCode,
+        wantedState: decision.wantedState,
+        live: false,
+      });
       attempts.push(
         createAttempt({
           runId: input.runId,
@@ -276,6 +310,14 @@ export const executeSearchDispatchRun = async (
 
     if (activeThrottleReason) {
       throttleReason = activeThrottleReason;
+      logger.warn({
+        event: 'search_throttled',
+        runId: input.runId,
+        app: decision.app,
+        mediaKey: decision.mediaKey,
+        title: decision.title,
+        reasonCode: activeThrottleReason,
+      });
 
       attempts.push(
         createAttempt({
@@ -298,6 +340,12 @@ export const executeSearchDispatchRun = async (
 
     const item = itemMap.get(decision.mediaKey);
     if (!item) {
+      logger.warn({
+        event: 'candidate_missing_state',
+        runId: input.runId,
+        app: decision.app,
+        mediaKey: decision.mediaKey,
+      });
       attempts.push(
         createAttempt({
           runId: input.runId,
@@ -319,6 +367,20 @@ export const executeSearchDispatchRun = async (
 
     try {
       const command = await dispatchCandidate(input.clients, item);
+      logger.info({
+        event: 'search_dispatched',
+        runId: input.runId,
+        app: decision.app,
+        mediaKey: decision.mediaKey,
+        title: decision.title,
+        wantedState: decision.wantedState,
+        reasonCode: decision.reasonCode,
+        arrCommandId: command.id,
+      });
+      recordSearchDispatch({
+        app: decision.app,
+        outcome: 'accepted',
+      });
 
       attempts.push(
         createAttempt({
@@ -340,6 +402,27 @@ export const executeSearchDispatchRun = async (
       updateThrottleStateAfterDispatch(throttleState, attemptAtIso);
       dispatchCount += 1;
     } catch (error) {
+      logger.error({
+        event: 'search_dispatch_failed',
+        runId: input.runId,
+        app: decision.app,
+        mediaKey: decision.mediaKey,
+        title: decision.title,
+        reasonCode: decision.reasonCode,
+        error:
+          error instanceof Error
+            ? {
+                name: error.name,
+                message: error.message,
+              }
+            : {
+                message: 'Unknown dispatch error',
+              },
+      });
+      recordSearchDispatch({
+        app: decision.app,
+        outcome: 'failed',
+      });
       attempts.push(
         createAttempt({
           runId: input.runId,
@@ -363,6 +446,9 @@ export const executeSearchDispatchRun = async (
   }
 
   input.database.repositories.searchAttempts.insertMany(attempts);
+  updateSearchRateMetrics(
+    getSearchRateSnapshot(input.database, input.config, new Date(currentAttemptTimeMs))
+  );
 
   return {
     candidateCount: decisions.length,

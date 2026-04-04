@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { loadConfig } from '@/src/config';
+import { logger } from '@/src/observability';
 
 import { initializeDatabase, type DatabaseContext } from './index';
 
@@ -33,6 +34,10 @@ const maybeApplyAuthReset = async (database: DatabaseContext): Promise<void> => 
       completedAt: now,
     },
     updatedAt: now,
+  });
+  logger.warn({
+    event: 'auth_reset_performed',
+    completedAt: now,
   });
 };
 

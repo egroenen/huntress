@@ -8,6 +8,11 @@ import type {
   TransmissionApiClient,
   TransmissionTorrentRecord,
 } from '@/src/integrations';
+import {
+  logger,
+  recordTransmissionRemoval,
+  updateActiveSuppressionsMetric,
+} from '@/src/observability';
 
 export type TransmissionGuardReason =
   | 'TX_ERROR_REMOVE'
@@ -257,11 +262,24 @@ export const runTransmissionGuard = async (input: {
       now,
       reason,
     });
+    logger.warn({
+      event: 'transmission_removed',
+      hashString: torrent.hashString,
+      name: torrent.name,
+      linkedMediaKey: torrentState.linkedMediaKey,
+      reasonCode: reason,
+      deleteLocalData: input.config.transmissionGuard.deleteLocalData,
+    });
+    recordTransmissionRemoval(reason);
     removedCount += 1;
     if (result.suppressionCreated) {
       suppressionCount += 1;
     }
   }
+
+  updateActiveSuppressionsMetric(
+    input.database.repositories.releaseSuppressions.listActive(nowIso).length
+  );
 
   return {
     observedCount: torrents.length,

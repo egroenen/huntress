@@ -24,14 +24,17 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "tsx --test src/**/*.test.ts"
+    "test": "LOG_LEVEL=silent tsx --test src/**/*.test.ts"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
     "better-sqlite3": "^12.8.0",
     "next": "^15.0.0",
+    "pino": "^10.3.1",
+    "prom-client": "^15.1.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "server-only": "^0.0.1",
     "yaml": "^2.6.1",
     "zod": "^3.24.1"
   },

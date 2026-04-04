@@ -1,6 +1,6 @@
 # T012: Observability and Health
 
-Status: Backlog
+Status: Done
 
 ## Goal
 

@@ -1,4 +1,5 @@
 import type { AppUserRecord, DatabaseContext } from '@/src/db';
+import { logger } from '@/src/observability';
 
 import { hashPassword, verifyPassword } from './password';
 import {
@@ -90,6 +91,11 @@ export const bootstrapAdminUser = async (
   );
 
   database.repositories.appSessions.create(session);
+  logger.info({
+    event: 'auth_bootstrap_completed',
+    username: user.username,
+    ipAddress: input.requestMetadata.ipAddress,
+  });
 
   return createSessionResponse(user, session.id, authConfig);
 };
@@ -133,6 +139,11 @@ export const loginUser = async (
   });
 
   if (!user || user.disabled || !passwordValid) {
+    logger.warn({
+      event: 'auth_login_failed',
+      username,
+      ipAddress: input.requestMetadata.ipAddress,
+    });
     throw new Error('Invalid username or password');
   }
 
@@ -146,6 +157,11 @@ export const loginUser = async (
   );
 
   database.repositories.appSessions.create(session);
+  logger.info({
+    event: 'auth_login_succeeded',
+    username: user.username,
+    ipAddress: input.requestMetadata.ipAddress,
+  });
 
   return createSessionResponse(user, session.id, authConfig);
 };
@@ -211,6 +227,10 @@ export const logoutSession = (
   }
 
   database.repositories.appSessions.deleteById(sessionId);
+  logger.info({
+    event: 'auth_logout',
+    sessionId,
+  });
 };
 
 export const getSessionCookieOptions = (authConfig: AuthConfiguration) => {

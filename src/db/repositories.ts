@@ -750,6 +750,22 @@ export const createRepositories = (database: SqliteDatabase) => {
 
       return row?.attempted_at ?? null;
     },
+    listLiveDispatchAttemptTimesSince(sinceIso: string): string[] {
+      const rows = database
+        .prepare<[string], { attempted_at: string }>(
+          `
+            SELECT attempted_at
+            FROM search_attempt
+            WHERE decision = 'dispatch'
+              AND dry_run = 0
+              AND attempted_at >= ?
+            ORDER BY attempted_at ASC, id ASC
+          `
+        )
+        .all(sinceIso);
+
+      return rows.map((row) => row.attempted_at);
+    },
   };
 
   const releaseSuppressions = {

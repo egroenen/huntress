@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { DatabaseContext, RunHistoryRecord } from '@/src/db';
+import { logger, recordRunCompletion } from '@/src/observability';
 
 export type CoordinatedRunType = 'scheduled' | 'sync_only' | 'manual_dry' | 'manual_live';
 
@@ -177,6 +178,12 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
     const startupGraceActive = isStartupGraceActive(runStart);
 
     if (!acquireSchedulerLock(options.database, lockState, runStartedAtIso)) {
+      logger.warn({
+        event: 'run_rejected',
+        runId,
+        runType,
+        reason: 'run_in_progress',
+      });
       return {
         accepted: false,
         runId: null,
@@ -188,6 +195,12 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
     options.database.repositories.runHistory.create(
       createRunningRunHistoryRecord(runId, runType, runStartedAtIso)
     );
+    logger.info({
+      event: 'cycle_started',
+      runId,
+      runType,
+      startupGraceActive,
+    });
 
     try {
       const executionResult = await options.executeRun({
@@ -202,11 +215,12 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
       });
 
       const counts = getCounts(executionResult);
+      const finishedAtIso = now().toISOString();
       options.database.repositories.runHistory.update({
         id: runId,
         runType,
         startedAt: runStartedAtIso,
-        finishedAt: now().toISOString(),
+        finishedAt: finishedAtIso,
         status: executionResult.status,
         candidateCount: counts.candidateCount,
         dispatchCount: counts.dispatchCount,
@@ -214,12 +228,25 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
         errorCount: counts.errorCount,
         summary: executionResult.summary ?? {},
       });
+      recordRunCompletion({
+        runType,
+        status: executionResult.status,
+        durationMs: new Date(finishedAtIso).getTime() - runStart.getTime(),
+      });
+      logger.info({
+        event: 'cycle_finished',
+        runId,
+        runType,
+        status: executionResult.status,
+        ...counts,
+      });
     } catch (error) {
+      const finishedAtIso = now().toISOString();
       options.database.repositories.runHistory.update({
         id: runId,
         runType,
         startedAt: runStartedAtIso,
-        finishedAt: now().toISOString(),
+        finishedAt: finishedAtIso,
         status: 'failed',
         candidateCount: 0,
         dispatchCount: 0,
@@ -236,6 +263,25 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
                   message: 'Unknown scheduler error',
                 },
         },
+      });
+      recordRunCompletion({
+        runType,
+        status: 'failed',
+        durationMs: new Date(finishedAtIso).getTime() - runStart.getTime(),
+      });
+      logger.error({
+        event: 'cycle_failed',
+        runId,
+        runType,
+        error:
+          error instanceof Error
+            ? {
+                name: error.name,
+                message: error.message,
+              }
+            : {
+                message: 'Unknown scheduler error',
+              },
       });
     } finally {
       releaseSchedulerLock(options.database, runId, now().toISOString());

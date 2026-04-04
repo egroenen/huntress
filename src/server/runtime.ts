@@ -11,6 +11,7 @@ import {
   createSonarrClient,
   createTransmissionClient,
 } from '@/src/integrations';
+import { configureLogger, logger } from '@/src/observability';
 import { createSchedulerCoordinator, type CoordinatedRunType } from '@/src/scheduler';
 
 export interface RuntimeContext {
@@ -31,6 +32,7 @@ declare global {
 
 const buildRuntimeContext = async (): Promise<RuntimeContext> => {
   const [{ config }, database] = await Promise.all([loadConfig(), getDatabaseContext()]);
+  configureLogger(config.logging.level);
 
   const clients = {
     sonarr: createSonarrClient({
@@ -111,6 +113,13 @@ const buildRuntimeContext = async (): Promise<RuntimeContext> => {
   });
 
   scheduler.start();
+  logger.info({
+    event: 'startup_complete',
+    mode: config.mode,
+    configPath: config.meta.configPath,
+    sqlitePath: config.storage.sqlitePath,
+    cycleEveryMs: config.scheduler.cycleEveryMs,
+  });
 
   return {
     config,
