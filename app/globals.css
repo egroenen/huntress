@@ -525,6 +525,18 @@ select {
   gap: 0.2rem;
 }
 
+.table-pagination,
+.table-pagination__links {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.table-pagination {
+  justify-content: flex-end;
+}
+
 .table-app-label {
   display: inline-flex;
   align-items: center;
