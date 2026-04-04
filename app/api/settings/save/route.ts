@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
 
-import { savePersistedConnectionSettings } from '@/src/server/runtime-config';
-import { parseConnectionSettingsForm } from '@/src/server/settings-form';
+import {
+  savePersistedConnectionSettings,
+  savePersistedSearchSafetyOverrides,
+} from '@/src/server/runtime-config';
+import {
+  parseConnectionSettingsForm,
+  parseSearchSafetyOverridesForm,
+} from '@/src/server/settings-form';
 import { authenticateConsoleAction } from '@/src/server/require-action';
 
 export const dynamic = 'force-dynamic';
@@ -26,8 +32,10 @@ export async function POST(request: Request) {
       'save-settings'
     );
     const nextSettings = parseConnectionSettingsForm(formData);
+    const nextOverrides = parseSearchSafetyOverridesForm(formData);
 
     savePersistedConnectionSettings(runtime.database, nextSettings);
+    savePersistedSearchSafetyOverrides(runtime.database, nextOverrides);
 
     return buildRedirect(request, {
       notice: 'saved',

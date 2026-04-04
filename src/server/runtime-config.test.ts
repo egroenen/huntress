@@ -7,7 +7,11 @@ import test from 'node:test';
 import { loadConfig } from '@/src/config';
 import { initializeDatabase } from '@/src/db';
 
-import { resolveRuntimeConfig, savePersistedConnectionSettings } from './runtime-config';
+import {
+  resolveRuntimeConfig,
+  savePersistedConnectionSettings,
+  savePersistedSearchSafetyOverrides,
+} from './runtime-config';
 
 const baseConfig = `
 server:
@@ -193,6 +197,35 @@ test('resolveRuntimeConfig treats a URL-only transmission setup as configured', 
       resolved.connectionStatus.transmission.summary,
       'Ready to connect without credentials.'
     );
+  } finally {
+    database.close();
+  }
+});
+
+test('resolveRuntimeConfig applies persisted rolling search limit overrides', async () => {
+  const configPath = await createConfigFile(baseConfig);
+  const databasePath = await createDatabasePath();
+  const database = await initializeDatabase(databasePath);
+
+  try {
+    const loadedConfig = await loadConfig({
+      argv: ['--config', configPath],
+      env: {},
+    });
+
+    savePersistedSearchSafetyOverrides(database, {
+      rollingSearchLimits: {
+        per15m: 2,
+        per1h: 6,
+        per24h: 18,
+      },
+    });
+
+    const resolved = resolveRuntimeConfig(loadedConfig, database);
+
+    assert.equal(resolved.config.safety.rollingSearchLimits.per15m, 2);
+    assert.equal(resolved.config.safety.rollingSearchLimits.per1h, 6);
+    assert.equal(resolved.config.safety.rollingSearchLimits.per24h, 18);
   } finally {
     database.close();
   }

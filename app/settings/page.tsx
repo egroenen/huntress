@@ -1,6 +1,9 @@
 import { getRedactedConfig } from '@/src/server/console-data';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
-import { buildConnectionSettingsFromConfig } from '@/src/server/runtime-config';
+import {
+  buildConnectionSettingsFromConfig,
+  buildSearchSafetyOverridesFromConfig,
+} from '@/src/server/runtime-config';
 import { ConsoleShell, SectionCard, StatusBadge } from '@/src/ui';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +21,10 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
   const noticeStatus =
     typeof searchParams.status === 'string' ? searchParams.status : undefined;
   const connectionSettings = buildConnectionSettingsFromConfig(runtime.config);
+  const searchSafetyOverrides = buildSearchSafetyOverridesFromConfig(
+    runtime.config,
+    runtime.database
+  );
 
   return (
     <ConsoleShell
@@ -205,6 +212,46 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
                 name="transmissionPassword"
                 defaultValue={connectionSettings.transmission.password ?? ''}
                 placeholder="Optional"
+              />
+            </label>
+          </section>
+
+          <section className="settings-form__section">
+            <div className="settings-form__heading">
+              <h4>Search safety budgets</h4>
+            </div>
+            <p className="settings-form__hint">
+              Override the rolling live-search budgets used to protect trackers.
+              Leave a field blank to fall back to the config file default.
+            </p>
+            <label>
+              <span>15 minute limit</span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                name="rollingLimit15m"
+                defaultValue={searchSafetyOverrides.rollingSearchLimits.per15m ?? ''}
+              />
+            </label>
+            <label>
+              <span>1 hour limit</span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                name="rollingLimit1h"
+                defaultValue={searchSafetyOverrides.rollingSearchLimits.per1h ?? ''}
+              />
+            </label>
+            <label>
+              <span>24 hour limit</span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                name="rollingLimit24h"
+                defaultValue={searchSafetyOverrides.rollingSearchLimits.per24h ?? ''}
               />
             </label>
           </section>

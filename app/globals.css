@@ -794,6 +794,13 @@ select {
   padding: 1rem;
 }
 
+.settings-form__hint {
+  margin: -0.2rem 0 0.1rem;
+  color: var(--content-muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
 .settings-form__section label {
   display: grid;
   gap: 0.35rem;

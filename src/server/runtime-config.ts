@@ -23,6 +23,14 @@ export interface PersistedConnectionSettings {
   transmission: PersistedTransmissionConnectionSettings;
 }
 
+export interface PersistedSearchSafetyOverrides {
+  rollingSearchLimits: {
+    per15m: number | null;
+    per1h: number | null;
+    per24h: number | null;
+  };
+}
+
 type SecretSource = 'env' | 'persisted' | 'generated' | 'missing' | 'none';
 type UrlSource = 'persisted' | 'config';
 
@@ -43,6 +51,7 @@ export interface ResolvedRuntimeConfig {
 
 const GENERATED_SESSION_SECRET_KEY = 'generated_session_secret';
 const PERSISTED_CONNECTION_SETTINGS_KEY = 'connection_settings';
+const PERSISTED_SEARCH_SAFETY_OVERRIDES_KEY = 'search_safety_overrides';
 
 const trimToNull = (value: string | null | undefined): string | null => {
   const normalized = value?.trim();
@@ -52,12 +61,30 @@ const trimToNull = (value: string | null | undefined): string | null => {
 const redact = (value: string | null): '[redacted]' | null =>
   value ? '[redacted]' : null;
 
+const positiveIntOrNull = (value: number | null | undefined): number | null => {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    return null;
+  }
+
+  return value;
+};
+
 const getPersistedConnectionSettings = (
   database: DatabaseContext
 ): PersistedConnectionSettings | null => {
   return (
     database.repositories.serviceState.get<PersistedConnectionSettings>(
       PERSISTED_CONNECTION_SETTINGS_KEY
+    )?.value ?? null
+  );
+};
+
+const getPersistedSearchSafetyOverrides = (
+  database: DatabaseContext
+): PersistedSearchSafetyOverrides | null => {
+  return (
+    database.repositories.serviceState.get<PersistedSearchSafetyOverrides>(
+      PERSISTED_SEARCH_SAFETY_OVERRIDES_KEY
     )?.value ?? null
   );
 };
@@ -127,6 +154,47 @@ const ensurePersistedConnectionSettings = (
       key: PERSISTED_CONNECTION_SETTINGS_KEY,
       value: normalized,
       updatedAt: now,
+    });
+  }
+
+  return normalized;
+};
+
+const createDefaultSearchSafetyOverrides = (): PersistedSearchSafetyOverrides => {
+  return {
+    rollingSearchLimits: {
+      per15m: null,
+      per1h: null,
+      per24h: null,
+    },
+  };
+};
+
+const normalizePersistedSearchSafetyOverrides = (
+  overrides: PersistedSearchSafetyOverrides | null
+): PersistedSearchSafetyOverrides => {
+  return {
+    rollingSearchLimits: {
+      per15m: positiveIntOrNull(overrides?.rollingSearchLimits.per15m),
+      per1h: positiveIntOrNull(overrides?.rollingSearchLimits.per1h),
+      per24h: positiveIntOrNull(overrides?.rollingSearchLimits.per24h),
+    },
+  };
+};
+
+const ensurePersistedSearchSafetyOverrides = (
+  database: DatabaseContext
+): PersistedSearchSafetyOverrides => {
+  const existing = getPersistedSearchSafetyOverrides(database);
+  const normalized = normalizePersistedSearchSafetyOverrides(
+    existing ?? createDefaultSearchSafetyOverrides()
+  );
+
+  if (!existing) {
+    database.repositories.serviceState.set({
+      key: PERSISTED_SEARCH_SAFETY_OVERRIDES_KEY,
+      value: normalized,
+      updatedAt: new Date().toISOString(),
     });
   }
 
@@ -204,6 +272,21 @@ export const savePersistedConnectionSettings = (
   return normalized;
 };
 
+export const savePersistedSearchSafetyOverrides = (
+  database: DatabaseContext,
+  overrides: PersistedSearchSafetyOverrides
+): PersistedSearchSafetyOverrides => {
+  const normalized = normalizePersistedSearchSafetyOverrides(overrides);
+
+  database.repositories.serviceState.set({
+    key: PERSISTED_SEARCH_SAFETY_OVERRIDES_KEY,
+    value: normalized,
+    updatedAt: new Date().toISOString(),
+  });
+
+  return normalized;
+};
+
 export const resolveRuntimeConfig = (
   loadedConfig: LoadedConfig,
   database: DatabaseContext
@@ -212,6 +295,8 @@ export const resolveRuntimeConfig = (
     database,
     loadedConfig.config
   );
+  const persistedSearchSafetyOverrides =
+    ensurePersistedSearchSafetyOverrides(database);
   const sessionSecret =
     trimToNull(loadedConfig.config.auth.sessionSecret) ??
     getOrCreateGeneratedSessionSecret(database);
@@ -262,6 +347,20 @@ export const resolveRuntimeConfig = (
           loadedConfig.config.instances.transmission.url,
         username: transmissionUsername,
         password: transmissionPassword,
+      },
+    },
+    safety: {
+      ...loadedConfig.config.safety,
+      rollingSearchLimits: {
+        per15m:
+          persistedSearchSafetyOverrides.rollingSearchLimits.per15m ??
+          loadedConfig.config.safety.rollingSearchLimits.per15m,
+        per1h:
+          persistedSearchSafetyOverrides.rollingSearchLimits.per1h ??
+          loadedConfig.config.safety.rollingSearchLimits.per1h,
+        per24h:
+          persistedSearchSafetyOverrides.rollingSearchLimits.per24h ??
+          loadedConfig.config.safety.rollingSearchLimits.per24h,
       },
     },
   };
@@ -380,6 +479,27 @@ export const buildConnectionSettingsFromConfig = (
       url: config.instances.transmission.url,
       username: config.instances.transmission.username,
       password: config.instances.transmission.password,
+    },
+  };
+};
+
+export const buildSearchSafetyOverridesFromConfig = (
+  config: ResolvedConfig,
+  database: DatabaseContext
+): PersistedSearchSafetyOverrides => {
+  const persistedOverrides = ensurePersistedSearchSafetyOverrides(database);
+
+  return {
+    rollingSearchLimits: {
+      per15m:
+        persistedOverrides.rollingSearchLimits.per15m ??
+        config.safety.rollingSearchLimits.per15m,
+      per1h:
+        persistedOverrides.rollingSearchLimits.per1h ??
+        config.safety.rollingSearchLimits.per1h,
+      per24h:
+        persistedOverrides.rollingSearchLimits.per24h ??
+        config.safety.rollingSearchLimits.per24h,
     },
   };
 };
