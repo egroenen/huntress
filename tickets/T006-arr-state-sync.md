@@ -1,6 +1,6 @@
 # T006: Arr State Sync
 
-Status: Backlog
+Status: Done
 
 ## Goal
 

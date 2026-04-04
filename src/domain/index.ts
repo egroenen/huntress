@@ -1,7 +1,6 @@
-export interface DomainModulePlaceholder {
-  readonly name: 'domain';
-}
-
-export const domainModulePlaceholder: DomainModulePlaceholder = {
-  name: 'domain',
-};
+export {
+  syncArrState,
+  type AppStateSyncSummary,
+  type ArrStateSyncSummary,
+  type ArrSyncClients,
+} from './state-sync.js';

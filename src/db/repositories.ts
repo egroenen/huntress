@@ -106,10 +106,52 @@ export interface TransmissionTorrentStateRecord {
   noProgressSince: string | null;
 }
 
+interface MediaItemStateRow {
+  media_key: string;
+  media_type: string;
+  arr_id: number;
+  parent_arr_id: number | null;
+  title: string;
+  monitored: number;
+  release_date: string | null;
+  wanted_state: string;
+  in_queue: number;
+  retry_count: number;
+  last_search_at: string | null;
+  last_grab_at: string | null;
+  next_eligible_at: string | null;
+  suppressed_until: string | null;
+  suppression_reason: string | null;
+  last_seen_at: string;
+  state_hash: string;
+}
+
 const encodeJson = (value: unknown): string => JSON.stringify(value);
 const decodeJson = <T>(value: string): T => JSON.parse(value) as T;
 const toBoolean = (value: number): boolean => value === 1;
 const fromBoolean = (value: boolean): number => (value ? 1 : 0);
+
+const toMediaItemStateRecord = (row: MediaItemStateRow): MediaItemStateRecord => {
+  return {
+    mediaKey: row.media_key,
+    mediaType: row.media_type,
+    arrId: row.arr_id,
+    parentArrId: row.parent_arr_id,
+    title: row.title,
+    monitored: toBoolean(row.monitored),
+    releaseDate: row.release_date,
+    wantedState: row.wanted_state,
+    inQueue: toBoolean(row.in_queue),
+    retryCount: row.retry_count,
+    lastSearchAt: row.last_search_at,
+    lastGrabAt: row.last_grab_at,
+    nextEligibleAt: row.next_eligible_at,
+    suppressedUntil: row.suppressed_until,
+    suppressionReason: row.suppression_reason,
+    lastSeenAt: row.last_seen_at,
+    stateHash: row.state_hash,
+  };
+};
 
 export const createRepositories = (database: SqliteDatabase) => {
   const serviceState = {
@@ -439,26 +481,7 @@ export const createRepositories = (database: SqliteDatabase) => {
       const row = database
         .prepare<
           [string],
-          | {
-              media_key: string;
-              media_type: string;
-              arr_id: number;
-              parent_arr_id: number | null;
-              title: string;
-              monitored: number;
-              release_date: string | null;
-              wanted_state: string;
-              in_queue: number;
-              retry_count: number;
-              last_search_at: string | null;
-              last_grab_at: string | null;
-              next_eligible_at: string | null;
-              suppressed_until: string | null;
-              suppression_reason: string | null;
-              last_seen_at: string;
-              state_hash: string;
-            }
-          | undefined
+          MediaItemStateRow | undefined
         >('SELECT * FROM media_item_state WHERE media_key = ?')
         .get(mediaKey);
 
@@ -466,25 +489,17 @@ export const createRepositories = (database: SqliteDatabase) => {
         return null;
       }
 
-      return {
-        mediaKey: row.media_key,
-        mediaType: row.media_type,
-        arrId: row.arr_id,
-        parentArrId: row.parent_arr_id,
-        title: row.title,
-        monitored: toBoolean(row.monitored),
-        releaseDate: row.release_date,
-        wantedState: row.wanted_state,
-        inQueue: toBoolean(row.in_queue),
-        retryCount: row.retry_count,
-        lastSearchAt: row.last_search_at,
-        lastGrabAt: row.last_grab_at,
-        nextEligibleAt: row.next_eligible_at,
-        suppressedUntil: row.suppressed_until,
-        suppressionReason: row.suppression_reason,
-        lastSeenAt: row.last_seen_at,
-        stateHash: row.state_hash,
-      };
+      return toMediaItemStateRecord(row);
+    },
+    listByMediaType(mediaType: string): MediaItemStateRecord[] {
+      const rows = database
+        .prepare<
+          [string],
+          MediaItemStateRow
+        >('SELECT * FROM media_item_state WHERE media_type = ? ORDER BY media_key ASC')
+        .all(mediaType);
+
+      return rows.map((row) => toMediaItemStateRecord(row));
     },
     count(): number {
       const row = database
