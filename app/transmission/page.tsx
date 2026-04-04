@@ -253,6 +253,23 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
       <SectionCard
         title="Transmission controls"
         subtitle="Sort the cached observation view and clear the cache when old linkage data needs to be rebuilt from fresh Arr queue state."
+        actions={
+          <form action="/api/actions/reset-transmission-cache" method="post">
+            <input
+              type="hidden"
+              name="csrfToken"
+              value={runtime.csrfTokens.resetTransmissionCache}
+            />
+            <button
+              type="submit"
+              className="transmission-reset-button"
+              title="Delete cached Transmission observation rows so linked media can be rebuilt from fresh queue and torrent data."
+              aria-label="Clear cached Transmission observations"
+            >
+              Clear cache
+            </button>
+          </form>
+        }
       >
         <div className="candidate-filters transmission-controls">
           {state === 'cache-reset' ? (
@@ -296,23 +313,9 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
                 {sortedTorrents.length === 1 ? '' : 's'}
               </span>
             </div>
-            <div className="transmission-controls__actions">
-              <form action="/api/actions/reset-transmission-cache" method="post">
-                <input
-                  type="hidden"
-                  name="csrfToken"
-                  value={runtime.csrfTokens.resetTransmissionCache}
-                />
-                <button
-                  type="submit"
-                  className="transmission-reset-button"
-                  title="Delete cached Transmission observation rows so linked media can be rebuilt from fresh queue and torrent data."
-                  aria-label="Clear cached Transmission observations"
-                >
-                  Clear cache
-                </button>
-              </form>
-            </div>
+            <span className="console-muted">
+              Use Clear cache above if old linkage data needs a full rebuild.
+            </span>
           </div>
         </div>
       </SectionCard>
