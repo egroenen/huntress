@@ -33,7 +33,7 @@ test('bootstrap creates the first admin user and session', async () => {
 
     const result = await bootstrapAdminUser(database, authConfig, {
       username: 'admin',
-      password: 'very-strong-password',
+      password: 'admin',
       requestMetadata: {
         ipAddress: '127.0.0.1',
         userAgent: 'test-runner',
@@ -54,7 +54,7 @@ test('login returns a valid authenticated session for correct credentials', asyn
   try {
     await bootstrapAdminUser(database, authConfig, {
       username: 'admin',
-      password: 'very-strong-password',
+      password: 'admin',
       requestMetadata: {
         ipAddress: '127.0.0.1',
         userAgent: 'bootstrap',
@@ -63,7 +63,7 @@ test('login returns a valid authenticated session for correct credentials', asyn
 
     const loginResult = await loginUser(database, authConfig, {
       username: 'admin',
-      password: 'very-strong-password',
+      password: 'admin',
       requestMetadata: {
         ipAddress: '127.0.0.1',
         userAgent: 'test-runner',
@@ -88,7 +88,7 @@ test('login rejects invalid credentials and records a failed login attempt', asy
   try {
     await bootstrapAdminUser(database, authConfig, {
       username: 'admin',
-      password: 'very-strong-password',
+      password: 'admin',
       requestMetadata: {
         ipAddress: '127.0.0.1',
         userAgent: 'bootstrap',
@@ -125,7 +125,7 @@ test('logout invalidates the session', async () => {
   try {
     const bootstrap = await bootstrapAdminUser(database, authConfig, {
       username: 'admin',
-      password: 'very-strong-password',
+      password: 'admin',
       requestMetadata: {
         ipAddress: '127.0.0.1',
         userAgent: 'bootstrap',
@@ -141,6 +141,27 @@ test('logout invalidates the session', async () => {
     );
 
     assert.equal(resolved, null);
+  } finally {
+    database.close();
+  }
+});
+
+test('bootstrap rejects an empty password', async () => {
+  const database = await initializeDatabase(await createDatabasePath());
+
+  try {
+    await assert.rejects(
+      async () =>
+        bootstrapAdminUser(database, authConfig, {
+          username: 'admin',
+          password: '',
+          requestMetadata: {
+            ipAddress: '127.0.0.1',
+            userAgent: 'test-runner',
+          },
+        }),
+      /Password cannot be empty/
+    );
   } finally {
     database.close();
   }

@@ -38,7 +38,6 @@ export default async function SetupPage() {
               type="password"
               name="password"
               autoComplete="new-password"
-              minLength={12}
               required
             />
           </label>
@@ -49,7 +48,6 @@ export default async function SetupPage() {
               type="password"
               name="confirmPassword"
               autoComplete="new-password"
-              minLength={12}
               required
             />
           </label>

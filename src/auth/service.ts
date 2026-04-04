@@ -30,8 +30,8 @@ const LOGIN_FAILURE_WINDOW_MS = 15 * 60 * 1_000;
 const MAX_LOGIN_FAILURES = 5;
 
 const validatePasswordStrength = (password: string): void => {
-  if (password.length < 12) {
-    throw new Error('Password must be at least 12 characters long');
+  if (password.length < 1) {
+    throw new Error('Password cannot be empty');
   }
 };
 
