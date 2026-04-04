@@ -242,25 +242,45 @@ export const ConsoleShell = ({
             <div className="console-actions">
               <form action="/api/actions/run-sync" method="post">
                 <input type="hidden" name="csrfToken" value={actionTokens.runSync} />
-                <button type="submit" className="console-button console-button--ghost">
+                <button
+                  type="submit"
+                  className="console-button console-button--ghost"
+                  title="Refresh Sonarr, Radarr, and Transmission state without dispatching any searches."
+                  aria-label="Run sync: refresh Sonarr, Radarr, and Transmission state without dispatching searches"
+                >
                   Run sync
                 </button>
               </form>
               <form action="/api/actions/run-dry" method="post">
                 <input type="hidden" name="csrfToken" value={actionTokens.runDry} />
-                <button type="submit" className="console-button console-button--ghost">
+                <button
+                  type="submit"
+                  className="console-button console-button--ghost"
+                  title="Evaluate what would be searched right now and record the decisions, but do not send any searches to Sonarr or Radarr."
+                  aria-label="Dry cycle: preview and record search decisions without sending searches"
+                >
                   Dry cycle
                 </button>
               </form>
               <form action="/api/actions/run-live" method="post">
                 <input type="hidden" name="csrfToken" value={actionTokens.runLive} />
-                <button type="submit" className="console-button">
+                <button
+                  type="submit"
+                  className="console-button"
+                  title="Run a full cycle and allow live search dispatches, subject to cooldowns, budgets, and safety checks."
+                  aria-label="Live cycle: run a full cycle and allow live search dispatches"
+                >
                   Live cycle
                 </button>
               </form>
               <form action="/auth/logout" method="post">
                 <input type="hidden" name="csrfToken" value={actionTokens.logout} />
-                <button type="submit" className="console-button console-button--ghost">
+                <button
+                  type="submit"
+                  className="console-button console-button--ghost"
+                  title="Sign out of the operator console."
+                  aria-label="Sign out of the operator console"
+                >
                   Sign out
                 </button>
               </form>
