@@ -280,29 +280,36 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
             </div>
 
             <div className="candidate-filters__actions">
-              <a href="/transmission" className="console-link">
-                Reset view
-              </a>
-              <button type="submit" className="console-button">
-                Apply sort
-              </button>
+              <div className="transmission-controls__links">
+                <a href="/transmission" className="console-link">
+                  Reset view
+                </a>
+                <span className="console-muted">
+                  {sortedTorrents.length} cached observation
+                  {sortedTorrents.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              <div className="transmission-controls__actions">
+                <form action="/api/actions/reset-transmission-cache" method="post">
+                  <input
+                    type="hidden"
+                    name="csrfToken"
+                    value={runtime.csrfTokens.resetTransmissionCache}
+                  />
+                  <button
+                    type="submit"
+                    className="transmission-reset-button"
+                    title="Delete cached Transmission observation rows so linked media can be rebuilt from fresh queue and torrent data."
+                    aria-label="Clear cached Transmission observations"
+                  >
+                    Clear cache
+                  </button>
+                </form>
+                <button type="submit" className="console-button">
+                  Apply sort
+                </button>
+              </div>
             </div>
-          </form>
-
-          <form action="/api/actions/reset-transmission-cache" method="post">
-            <input
-              type="hidden"
-              name="csrfToken"
-              value={runtime.csrfTokens.resetTransmissionCache}
-            />
-            <button
-              type="submit"
-              className="console-button console-button--ghost"
-              title="Delete cached Transmission observation rows so linked media can be rebuilt from fresh queue and torrent data."
-              aria-label="Reset cached Transmission observations"
-            >
-              Clear cached observations
-            </button>
           </form>
         </div>
       </SectionCard>
