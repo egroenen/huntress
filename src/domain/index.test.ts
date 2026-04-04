@@ -55,8 +55,9 @@ const startJsonServer = async (
 test('syncArrState persists wanted state and queue status for Sonarr and Radarr', async () => {
   const server = await startJsonServer((request, response) => {
     response.setHeader('Content-Type', 'application/json');
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
 
-    if (request.url === '/sonarr/api/v3/wanted/missing') {
+    if (url.pathname === '/sonarr/api/v3/wanted/missing') {
       response.end(
         JSON.stringify([
           {
@@ -72,7 +73,7 @@ test('syncArrState persists wanted state and queue status for Sonarr and Radarr'
       return;
     }
 
-    if (request.url === '/sonarr/api/v3/wanted/cutoff') {
+    if (url.pathname === '/sonarr/api/v3/wanted/cutoff') {
       response.end(
         JSON.stringify([
           {
@@ -88,7 +89,7 @@ test('syncArrState persists wanted state and queue status for Sonarr and Radarr'
       return;
     }
 
-    if (request.url === '/sonarr/api/v3/queue/details') {
+    if (url.pathname === '/sonarr/api/v3/queue/details') {
       response.end(
         JSON.stringify([
           {
@@ -101,7 +102,7 @@ test('syncArrState persists wanted state and queue status for Sonarr and Radarr'
       return;
     }
 
-    if (request.url === '/radarr/api/v3/wanted/missing') {
+    if (url.pathname === '/radarr/api/v3/wanted/missing') {
       response.end(
         JSON.stringify([
           {
@@ -115,7 +116,7 @@ test('syncArrState persists wanted state and queue status for Sonarr and Radarr'
       return;
     }
 
-    if (request.url === '/radarr/api/v3/wanted/cutoff') {
+    if (url.pathname === '/radarr/api/v3/wanted/cutoff') {
       response.end(
         JSON.stringify([
           {
@@ -130,7 +131,7 @@ test('syncArrState persists wanted state and queue status for Sonarr and Radarr'
       return;
     }
 
-    if (request.url === '/radarr/api/v3/queue/details') {
+    if (url.pathname === '/radarr/api/v3/queue/details') {
       response.end(
         JSON.stringify([
           {
@@ -199,8 +200,9 @@ test('syncArrState preserves retry history and marks disappeared items as ignore
   let cycle = 1;
   const server = await startJsonServer((request, response) => {
     response.setHeader('Content-Type', 'application/json');
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
 
-    if (request.url === '/sonarr/api/v3/wanted/missing') {
+    if (url.pathname === '/sonarr/api/v3/wanted/missing') {
       if (cycle === 1) {
         response.end(
           JSON.stringify([
@@ -232,22 +234,22 @@ test('syncArrState preserves retry history and marks disappeared items as ignore
       return;
     }
 
-    if (request.url === '/sonarr/api/v3/wanted/cutoff') {
+    if (url.pathname === '/sonarr/api/v3/wanted/cutoff') {
       response.end(JSON.stringify([]));
       return;
     }
 
-    if (request.url === '/sonarr/api/v3/queue/details') {
+    if (url.pathname === '/sonarr/api/v3/queue/details') {
       response.end(JSON.stringify([]));
       return;
     }
 
-    if (request.url === '/radarr/api/v3/wanted/missing') {
+    if (url.pathname === '/radarr/api/v3/wanted/missing') {
       response.end(JSON.stringify([]));
       return;
     }
 
-    if (request.url === '/radarr/api/v3/wanted/cutoff') {
+    if (url.pathname === '/radarr/api/v3/wanted/cutoff') {
       if (cycle === 1) {
         response.end(
           JSON.stringify([
@@ -267,7 +269,7 @@ test('syncArrState preserves retry history and marks disappeared items as ignore
       return;
     }
 
-    if (request.url === '/radarr/api/v3/queue/details') {
+    if (url.pathname === '/radarr/api/v3/queue/details') {
       response.end(JSON.stringify([]));
       return;
     }
@@ -354,8 +356,9 @@ test('sync and dispatch work together in a mocked end-to-end cycle', async () =>
   const commandBodies: unknown[] = [];
   const server = await startJsonServer(async (request, response) => {
     response.setHeader('Content-Type', 'application/json');
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
 
-    if (request.url === '/sonarr/api/v3/wanted/missing') {
+    if (url.pathname === '/sonarr/api/v3/wanted/missing') {
       response.end(
         JSON.stringify([
           {
@@ -371,17 +374,17 @@ test('sync and dispatch work together in a mocked end-to-end cycle', async () =>
       return;
     }
 
-    if (request.url === '/sonarr/api/v3/wanted/cutoff') {
+    if (url.pathname === '/sonarr/api/v3/wanted/cutoff') {
       response.end(JSON.stringify([]));
       return;
     }
 
-    if (request.url === '/sonarr/api/v3/queue/details') {
+    if (url.pathname === '/sonarr/api/v3/queue/details') {
       response.end(JSON.stringify([]));
       return;
     }
 
-    if (request.url === '/radarr/api/v3/wanted/missing') {
+    if (url.pathname === '/radarr/api/v3/wanted/missing') {
       response.end(
         JSON.stringify([
           {
@@ -395,12 +398,12 @@ test('sync and dispatch work together in a mocked end-to-end cycle', async () =>
       return;
     }
 
-    if (request.url === '/radarr/api/v3/wanted/cutoff') {
+    if (url.pathname === '/radarr/api/v3/wanted/cutoff') {
       response.end(JSON.stringify([]));
       return;
     }
 
-    if (request.url === '/radarr/api/v3/queue/details') {
+    if (url.pathname === '/radarr/api/v3/queue/details') {
       response.end(
         JSON.stringify([
           {
@@ -413,7 +416,7 @@ test('sync and dispatch work together in a mocked end-to-end cycle', async () =>
       return;
     }
 
-    if (request.method === 'POST' && request.url?.endsWith('/api/v3/command')) {
+    if (request.method === 'POST' && url.pathname.endsWith('/api/v3/command')) {
       const body = await new Promise<string>((resolve) => {
         let data = '';
         request.setEncoding('utf8');

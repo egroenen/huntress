@@ -48,8 +48,9 @@ const startJsonServer = async (
 test('Sonarr client probes system status and normalizes wanted/queue responses', async () => {
   const server = await startJsonServer((request, response) => {
     response.setHeader('Content-Type', 'application/json');
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
 
-    if (request.url === '/api/v3/system/status') {
+    if (url.pathname === '/api/v3/system/status') {
       response.end(
         JSON.stringify({
           appName: 'Sonarr',
@@ -64,40 +65,71 @@ test('Sonarr client probes system status and normalizes wanted/queue responses',
       return;
     }
 
-    if (request.url === '/api/v3/wanted/missing') {
+    if (url.pathname === '/api/v3/wanted/missing') {
+      const page = Number(url.searchParams.get('page') ?? '1');
       response.end(
         JSON.stringify([
-          {
-            id: 101,
-            seriesId: 8,
-            title: 'Pilot',
-            monitored: true,
-            hasFile: false,
-            airDateUtc: '2024-01-01T00:00:00Z',
-            series: { title: 'Example Series' },
-          },
+          ...(page === 1
+            ? [
+                {
+                  id: 101,
+                  seriesId: 8,
+                  title: 'Pilot',
+                  monitored: true,
+                  hasFile: false,
+                  airDateUtc: '2024-01-01T00:00:00Z',
+                  series: { title: 'Example Series' },
+                },
+              ]
+            : []),
         ])
       );
       return;
     }
 
-    if (request.url === '/api/v3/wanted/cutoff') {
+    if (url.pathname === '/api/v3/wanted/cutoff' && url.searchParams.get('page') === '2') {
       response.end(
-        JSON.stringify([
-          {
-            id: 102,
-            seriesId: 8,
-            title: 'Second Episode',
-            monitored: true,
-            hasFile: true,
-            airDateUtc: '2024-01-02T00:00:00Z',
-          },
-        ])
+        JSON.stringify({
+          page: 2,
+          pageSize: 1,
+          totalRecords: 2,
+          records: [
+            {
+              id: 103,
+              seriesId: 8,
+              title: 'Third Episode',
+              monitored: true,
+              hasFile: true,
+              airDateUtc: '2024-01-03T00:00:00Z',
+            },
+          ],
+        })
       );
       return;
     }
 
-    if (request.url === '/api/v3/queue/details') {
+    if (url.pathname === '/api/v3/wanted/cutoff') {
+      response.end(
+        JSON.stringify({
+          page: 1,
+          pageSize: 1,
+          totalRecords: 2,
+          records: [
+            {
+              id: 102,
+              seriesId: 8,
+              title: 'Second Episode',
+              monitored: true,
+              hasFile: true,
+              airDateUtc: '2024-01-02T00:00:00Z',
+            },
+          ],
+        })
+      );
+      return;
+    }
+
+    if (url.pathname === '/api/v3/queue/details') {
       response.end(
         JSON.stringify([
           {
@@ -134,6 +166,7 @@ test('Sonarr client probes system status and normalizes wanted/queue responses',
 
     assert.equal(status.appName, 'Sonarr');
     assert.equal(missing[0]?.title, 'Example Series - Pilot');
+    assert.equal(cutoff.length, 2);
     assert.equal(cutoff[0]?.qualityCutoffNotMet, true);
     assert.equal(queue[0]?.downloadId, 'dl-1');
   } finally {
@@ -144,8 +177,9 @@ test('Sonarr client probes system status and normalizes wanted/queue responses',
 test('Radarr client normalizes wanted movie responses', async () => {
   const server = await startJsonServer((request, response) => {
     response.setHeader('Content-Type', 'application/json');
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
 
-    if (request.url === '/api/v3/system/status') {
+    if (url.pathname === '/api/v3/system/status') {
       response.end(
         JSON.stringify({
           appName: 'Radarr',
@@ -155,22 +189,47 @@ test('Radarr client normalizes wanted movie responses', async () => {
       return;
     }
 
-    if (request.url === '/api/v3/wanted/missing') {
+    if (url.pathname === '/api/v3/wanted/missing' && url.searchParams.get('page') === '2') {
       response.end(
-        JSON.stringify([
-          {
-            id: 77,
-            title: 'Movie One',
-            monitored: true,
-            hasFile: false,
-            digitalRelease: '2024-02-03T00:00:00Z',
-          },
-        ])
+        JSON.stringify({
+          page: 2,
+          pageSize: 1,
+          totalRecords: 2,
+          records: [
+            {
+              id: 79,
+              title: 'Movie Three',
+              monitored: true,
+              hasFile: false,
+              digitalRelease: '2024-02-05T00:00:00Z',
+            },
+          ],
+        })
       );
       return;
     }
 
-    if (request.url === '/api/v3/wanted/cutoff') {
+    if (url.pathname === '/api/v3/wanted/missing') {
+      response.end(
+        JSON.stringify({
+          page: 1,
+          pageSize: 1,
+          totalRecords: 2,
+          records: [
+            {
+              id: 77,
+              title: 'Movie One',
+              monitored: true,
+              hasFile: false,
+              digitalRelease: '2024-02-03T00:00:00Z',
+            },
+          ],
+        })
+      );
+      return;
+    }
+
+    if (url.pathname === '/api/v3/wanted/cutoff') {
       response.end(
         JSON.stringify([
           {
@@ -185,7 +244,7 @@ test('Radarr client normalizes wanted movie responses', async () => {
       return;
     }
 
-    if (request.url === '/api/v3/queue/details') {
+    if (url.pathname === '/api/v3/queue/details') {
       response.end(JSON.stringify([]));
       return;
     }
@@ -203,6 +262,7 @@ test('Radarr client normalizes wanted movie responses', async () => {
     const missing = await client.getWantedMissing();
     const cutoff = await client.getWantedCutoff();
 
+    assert.equal(missing.length, 2);
     assert.equal(missing[0]?.itemType, 'movie');
     assert.equal(missing[0]?.releaseDate, '2024-02-03T00:00:00Z');
     assert.equal(cutoff[0]?.qualityCutoffNotMet, false);
