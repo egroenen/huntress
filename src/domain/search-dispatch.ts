@@ -10,6 +10,7 @@ import {
   logger,
   recordCandidateDecision,
   recordSearchDispatch,
+  type ActivityTracker,
   updateSearchRateMetrics,
 } from '@/src/observability';
 
@@ -31,6 +32,7 @@ export interface SearchDispatchRunInput {
   clients: SearchDispatchClients;
   runId: string;
   live: boolean;
+  activityTracker?: ActivityTracker;
   now?: Date;
   sleep?: (durationMs: number) => Promise<void>;
 }
@@ -232,12 +234,24 @@ export const executeSearchDispatchRun = async (
   const itemMap = createItemMap(input.database);
   const attempts: SearchAttemptRecord[] = [];
   const throttleState = getThrottleState(input.database, nowIso);
+  const dispatchableCount = decisions.filter(
+    (decision) => decision.decision === 'dispatch'
+  ).length;
 
   let dispatchCount = 0;
   let skipCount = 0;
   let errorCount = 0;
   let dryRunDispatchPreviewCount = 0;
   let throttleReason: ReasonCode | null = null;
+
+  input.activityTracker?.info({
+    source: 'dispatch',
+    stage: 'decision_preview_complete',
+    message: `Evaluated ${decisions.length} candidates`,
+    detail: `${dispatchableCount} dispatchable, ${decisions.length - dispatchableCount} skipped`,
+    progressCurrent: 0,
+    progressTotal: dispatchableCount,
+  });
 
   for (const decision of decisions) {
     recordCandidateDecision({
@@ -325,6 +339,14 @@ export const executeSearchDispatchRun = async (
 
     if (activeThrottleReason) {
       throttleReason = activeThrottleReason;
+      input.activityTracker?.warn({
+        source: 'dispatch',
+        stage: 'throttled',
+        message: 'Dispatch paused by rolling search budget',
+        detail: activeThrottleReason,
+        progressCurrent: dispatchCount,
+        progressTotal: dispatchableCount,
+      });
       logger.warn({
         event: 'search_throttled',
         runId: input.runId,
@@ -381,6 +403,14 @@ export const executeSearchDispatchRun = async (
     }
 
     try {
+      input.activityTracker?.info({
+        source: decision.app,
+        stage: 'dispatch_request',
+        message: `Dispatching ${decision.app} search for ${decision.title}`,
+        detail: `${dispatchCount + 1} of ${dispatchableCount}`,
+        progressCurrent: dispatchCount + 1,
+        progressTotal: dispatchableCount,
+      });
       const command = await dispatchCandidate(input.clients, item);
       logger.info({
         event: 'search_dispatched',
@@ -416,7 +446,23 @@ export const executeSearchDispatchRun = async (
       updateMediaItemAfterDispatch(input.database, input.config, item, attemptAtIso);
       updateThrottleStateAfterDispatch(throttleState, attemptAtIso);
       dispatchCount += 1;
+      input.activityTracker?.info({
+        source: decision.app,
+        stage: 'dispatch_complete',
+        message: `Queued ${decision.app} search for ${decision.title}`,
+        detail: command.id ? `Command ${command.id}` : null,
+        progressCurrent: dispatchCount,
+        progressTotal: dispatchableCount,
+      });
     } catch (error) {
+      input.activityTracker?.error({
+        source: decision.app,
+        stage: 'dispatch_failed',
+        message: `Failed to queue ${decision.app} search for ${decision.title}`,
+        detail: error instanceof Error ? error.message : 'Unknown error',
+        progressCurrent: dispatchCount,
+        progressTotal: dispatchableCount,
+      });
       logger.error({
         event: 'search_dispatch_failed',
         runId: input.runId,

@@ -7,6 +7,7 @@ import type {
   RadarrApiClient,
   SonarrApiClient,
 } from '@/src/integrations';
+import type { ActivityTracker } from '@/src/observability';
 
 type ArrAppName = 'sonarr' | 'radarr';
 type MediaType = 'sonarr_episode' | 'radarr_movie';
@@ -204,8 +205,14 @@ const syncAppState = async (input: {
   getWantedCutoff?: () => Promise<ArrWantedRecord[]>;
   getQueueDetails?: () => Promise<ArrQueueRecord[]>;
   syncedAt: string;
+  activityTracker?: ActivityTracker;
 }): Promise<AppStateSyncSummary> => {
   if (!input.getWantedMissing || !input.getWantedCutoff || !input.getQueueDetails) {
+    input.activityTracker?.info({
+      source: input.app,
+      stage: 'not_configured',
+      message: `${input.app} is not configured for state sync`,
+    });
     return {
       app: input.app,
       status: 'not_configured',
@@ -217,6 +224,12 @@ const syncAppState = async (input: {
       ignoredCount: 0,
     };
   }
+
+  input.activityTracker?.info({
+    source: input.app,
+    stage: 'sync_fetch_start',
+    message: `Fetching ${input.app} wanted and queue state`,
+  });
 
   const [missing, cutoff, queue] = await Promise.all([
     input.getWantedMissing(),
@@ -268,6 +281,15 @@ const syncAppState = async (input: {
     ignoredCount += 1;
   }
 
+  input.activityTracker?.info({
+    source: input.app,
+    stage: 'sync_persist_complete',
+    message: `Updated ${input.app} state`,
+    detail: `${missing.length} missing, ${cutoff.length} cutoff, ${queue.length} queue entries`,
+    progressCurrent: upsertedCount,
+    progressTotal: upsertedCount + ignoredCount,
+  });
+
   return {
     app: input.app,
     status: 'synced',
@@ -284,10 +306,17 @@ export const syncArrState = async (input: {
   database: DatabaseContext;
   clients: ArrSyncClients;
   now?: Date;
+  activityTracker?: ActivityTracker;
 }): Promise<ArrStateSyncSummary> => {
   const syncedAt = (input.now ?? new Date()).toISOString();
   const sonarrClient = input.clients.sonarr;
   const radarrClient = input.clients.radarr;
+
+  input.activityTracker?.info({
+    source: 'scheduler',
+    stage: 'sync_state_start',
+    message: 'Starting Sonarr and Radarr state sync',
+  });
 
   const [sonarr, radarr] = await Promise.all([
     syncAppState({
@@ -302,6 +331,7 @@ export const syncArrState = async (input: {
           }
         : {}),
       syncedAt,
+      ...(input.activityTracker ? { activityTracker: input.activityTracker } : {}),
     }),
     syncAppState({
       app: 'radarr',
@@ -315,8 +345,16 @@ export const syncArrState = async (input: {
           }
         : {}),
       syncedAt,
+      ...(input.activityTracker ? { activityTracker: input.activityTracker } : {}),
     }),
   ]);
+
+  input.activityTracker?.info({
+    source: 'scheduler',
+    stage: 'sync_state_complete',
+    message: 'Completed Sonarr and Radarr state sync',
+    detail: `${sonarr.upsertedCount + radarr.upsertedCount} items updated`,
+  });
 
   return {
     syncedAt,

@@ -468,6 +468,63 @@ select {
   padding: 0.28rem 0.5rem;
 }
 
+.activity-panel {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.activity-panel__header,
+.activity-panel__meta,
+.activity-stage {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.activity-panel h4 {
+  margin: 0;
+  color: #213045;
+  font-size: 1.15rem;
+}
+
+.activity-panel__detail,
+.activity-message small {
+  color: var(--content-muted);
+}
+
+.activity-panel__detail,
+.activity-message strong,
+.activity-message small {
+  display: block;
+}
+
+.activity-panel__meta {
+  color: var(--content-muted);
+  font-size: 0.88rem;
+}
+
+.activity-progress {
+  overflow: hidden;
+  border: 1px solid #d7e3ef;
+  border-radius: 999px;
+  height: 0.8rem;
+  background: #e9f1f8;
+}
+
+.activity-progress__bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #25a9d6, #1786b3);
+  transition: width 160ms ease;
+}
+
+.activity-message {
+  display: grid;
+  gap: 0.2rem;
+}
+
 .table-app-label {
   display: inline-flex;
   align-items: center;

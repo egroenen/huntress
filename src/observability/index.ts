@@ -1,3 +1,10 @@
+export {
+  createActivityTracker,
+  getActivityFeedState,
+  type ActivityFeedState,
+  type ActivitySnapshot,
+  type ActivityTracker,
+} from './activity';
 export { configureLogger, logger } from './logger';
 export {
   getMetricsText,

@@ -15,21 +15,26 @@ import {
 export type SonarrClient = ArrClientOptions;
 
 export const createSonarrClient = (options: SonarrClient) => {
+  const clientOptions: SonarrClient = {
+    ...options,
+    serviceName: 'sonarr',
+  };
+
   return {
     probeSystemStatus(): Promise<ArrSystemStatus> {
-      return fetchArrSystemStatus(options);
+      return fetchArrSystemStatus(clientOptions);
     },
     getWantedMissing(): Promise<ArrWantedRecord[]> {
-      return fetchSonarrWanted(options, 'missing');
+      return fetchSonarrWanted(clientOptions, 'missing');
     },
     getWantedCutoff(): Promise<ArrWantedRecord[]> {
-      return fetchSonarrWanted(options, 'cutoff');
+      return fetchSonarrWanted(clientOptions, 'cutoff');
     },
     getQueueDetails(): Promise<ArrQueueRecord[]> {
-      return fetchArrQueue(options);
+      return fetchArrQueue(clientOptions);
     },
     searchEpisode(episodeId: number): Promise<ArrCommandResponse> {
-      return dispatchArrCommand(options, {
+      return dispatchArrCommand(clientOptions, {
         name: 'EpisodeSearch',
         episodeIds: [episodeId],
       });

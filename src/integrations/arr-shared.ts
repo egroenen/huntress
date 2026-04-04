@@ -87,6 +87,16 @@ export interface ArrClientOptions {
   baseUrl: string;
   apiKey: string;
   timeoutMs?: number;
+  activityReporter?: (event: {
+    source: 'sonarr' | 'radarr';
+    stage: string;
+    message: string;
+    detail?: string | null;
+    progressCurrent?: number | null;
+    progressTotal?: number | null;
+    metadata?: Record<string, unknown>;
+  }) => void;
+  serviceName?: 'sonarr' | 'radarr';
 }
 
 export const createArrHeaders = (apiKey: string): Record<string, string> => {
@@ -108,6 +118,13 @@ const createRequestOptions = (options: ArrClientOptions): HttpRequestOptions => 
   return requestOptions;
 };
 
+const reportActivity = (
+  options: ArrClientOptions,
+  event: Parameters<NonNullable<ArrClientOptions['activityReporter']>>[0]
+): void => {
+  options.activityReporter?.(event);
+};
+
 const buildPagedEndpoint = (baseUrl: string, path: string, page: number): string => {
   const endpoint = new URL(joinUrl(baseUrl, path));
   endpoint.searchParams.set('page', String(page));
@@ -127,7 +144,18 @@ const fetchWantedCollection = async <TItem>(input: {
   path: string;
   arraySchema: z.ZodType<TItem[]>;
   paginatedSchema: z.ZodType<ArrPaginatedResponse<TItem>>;
+  stagePrefix: string;
 }): Promise<TItem[]> => {
+  const source = input.options.serviceName ?? 'sonarr';
+  reportActivity(input.options, {
+    source,
+    stage: `${input.stagePrefix}_page`,
+    message: `Requesting ${source} ${input.path.replace('/api/v3/wanted/', '')} page 1`,
+    progressCurrent: 1,
+    progressTotal: null,
+    detail: input.path,
+  });
+
   const firstPageRaw = await requestJson(
     buildPagedEndpoint(input.options.baseUrl, input.path, 1),
     z.unknown(),
@@ -144,14 +172,36 @@ const fetchWantedCollection = async <TItem>(input: {
   const records = [...paginatedResult.records];
   const pageSize = paginatedResult.pageSize ?? paginatedResult.records.length;
   const totalRecords = paginatedResult.totalRecords ?? paginatedResult.records.length;
+  const totalPages =
+    pageSize > 0 ? Math.max(Math.ceil(totalRecords / pageSize), 1) : 1;
+
+  reportActivity(input.options, {
+    source,
+    stage: `${input.stagePrefix}_page`,
+    message: `Loaded ${source} ${input.path.replace('/api/v3/wanted/', '')} page 1 of ${totalPages}`,
+    progressCurrent: 1,
+    progressTotal: totalPages,
+    detail: `${records.length} records accumulated`,
+    metadata: {
+      path: input.path,
+      pageSize,
+      totalRecords,
+    },
+  });
 
   if (pageSize <= 0 || totalRecords <= records.length) {
     return records;
   }
 
-  const totalPages = Math.max(Math.ceil(totalRecords / pageSize), 1);
-
   for (let page = 2; page <= totalPages; page += 1) {
+    reportActivity(input.options, {
+      source,
+      stage: `${input.stagePrefix}_page`,
+      message: `Requesting ${source} ${input.path.replace('/api/v3/wanted/', '')} page ${page} of ${totalPages}`,
+      progressCurrent: page,
+      progressTotal: totalPages,
+      detail: input.path,
+    });
     const nextPage = await requestJson(
       buildPagedEndpoint(input.options.baseUrl, input.path, page),
       input.paginatedSchema,
@@ -159,6 +209,19 @@ const fetchWantedCollection = async <TItem>(input: {
     );
 
     records.push(...nextPage.records);
+    reportActivity(input.options, {
+      source,
+      stage: `${input.stagePrefix}_page`,
+      message: `Loaded ${source} ${input.path.replace('/api/v3/wanted/', '')} page ${page} of ${totalPages}`,
+      progressCurrent: page,
+      progressTotal: totalPages,
+      detail: `${records.length} records accumulated`,
+      metadata: {
+        path: input.path,
+        pageSize,
+        totalRecords,
+      },
+    });
   }
 
   return records;
@@ -167,6 +230,14 @@ const fetchWantedCollection = async <TItem>(input: {
 export const fetchArrSystemStatus = async (
   options: ArrClientOptions
 ): Promise<ArrSystemStatus> => {
+  if (options.serviceName) {
+    reportActivity(options, {
+      source: options.serviceName,
+      stage: 'system_status',
+      message: `Requesting ${options.serviceName} system status`,
+      detail: '/api/v3/system/status',
+    });
+  }
   const result = await requestJson(
     joinUrl(options.baseUrl, '/api/v3/system/status'),
     arrSystemStatusSchema,
@@ -187,6 +258,14 @@ export const fetchArrSystemStatus = async (
 export const fetchArrQueue = async (
   options: ArrClientOptions
 ): Promise<ArrQueueRecord[]> => {
+  if (options.serviceName) {
+    reportActivity(options, {
+      source: options.serviceName,
+      stage: 'queue_details',
+      message: `Requesting ${options.serviceName} queue details`,
+      detail: '/api/v3/queue/details',
+    });
+  }
   const result = await requestJson(
     joinUrl(options.baseUrl, '/api/v3/queue/details'),
     arrQueueResponseSchema,
@@ -215,6 +294,7 @@ export const fetchSonarrWanted = async (
     path: `/api/v3/wanted/${kind}`,
     arraySchema: sonarrWantedResponseSchema,
     paginatedSchema: paginatedSonarrWantedResponseSchema,
+    stagePrefix: `wanted_${kind}`,
   });
 
   return result.map((entry) => ({
@@ -239,6 +319,7 @@ export const fetchRadarrWanted = async (
     path: `/api/v3/wanted/${kind}`,
     arraySchema: radarrWantedResponseSchema,
     paginatedSchema: paginatedRadarrWantedResponseSchema,
+    stagePrefix: `wanted_${kind}`,
   });
 
   return result.map((entry) => ({

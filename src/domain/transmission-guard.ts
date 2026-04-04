@@ -11,6 +11,7 @@ import type {
 import {
   logger,
   recordTransmissionRemoval,
+  type ActivityTracker,
   updateActiveSuppressionsMetric,
 } from '@/src/observability';
 
@@ -197,11 +198,17 @@ export const runTransmissionGuard = async (input: {
   database: DatabaseContext;
   config: ResolvedConfig;
   client: TransmissionApiClient | null;
+  activityTracker?: ActivityTracker;
   now?: Date;
 }): Promise<TransmissionGuardRunSummary> => {
   const now = input.now ?? new Date();
   const nowIso = now.toISOString();
   if (!input.client) {
+    input.activityTracker?.info({
+      source: 'transmission',
+      stage: 'not_configured',
+      message: 'Transmission guard skipped because Transmission is not configured',
+    });
     updateActiveSuppressionsMetric(
       input.database.repositories.releaseSuppressions.listActive(nowIso).length
     );
@@ -213,6 +220,11 @@ export const runTransmissionGuard = async (input: {
       linkedCount: 0,
     };
   }
+  input.activityTracker?.info({
+    source: 'transmission',
+    stage: 'torrent_scan_start',
+    message: 'Fetching Transmission torrent list',
+  });
   const torrents = await input.client.getTorrents();
   const mediaItems = listMediaItems(input.database);
 
@@ -220,7 +232,15 @@ export const runTransmissionGuard = async (input: {
   let suppressionCount = 0;
   let linkedCount = 0;
 
-  for (const torrent of torrents) {
+  input.activityTracker?.info({
+    source: 'transmission',
+    stage: 'torrent_scan_progress',
+    message: `Inspecting ${torrents.length} Transmission torrents`,
+    progressCurrent: 0,
+    progressTotal: torrents.length,
+  });
+
+  for (const [index, torrent] of torrents.entries()) {
     const previous = input.database.repositories.transmissionTorrentState.getByHash(
       torrent.hashString
     );
@@ -262,9 +282,25 @@ export const runTransmissionGuard = async (input: {
     }
 
     if (!reason) {
+      input.activityTracker?.info({
+        source: 'transmission',
+        stage: 'torrent_scan_progress',
+        message: `Inspected torrent ${index + 1} of ${torrents.length}`,
+        detail: torrent.name,
+        progressCurrent: index + 1,
+        progressTotal: torrents.length,
+      });
       continue;
     }
 
+    input.activityTracker?.warn({
+      source: 'transmission',
+      stage: 'torrent_remove',
+      message: `Removing torrent ${index + 1} of ${torrents.length}`,
+      detail: `${torrent.name} (${reason})`,
+      progressCurrent: index + 1,
+      progressTotal: torrents.length,
+    });
     const result = await removeTorrentAndSuppress({
       database: input.database,
       client: input.client,
@@ -288,6 +324,15 @@ export const runTransmissionGuard = async (input: {
       suppressionCount += 1;
     }
   }
+
+  input.activityTracker?.info({
+    source: 'transmission',
+    stage: 'torrent_scan_complete',
+    message: 'Transmission guard pass completed',
+    detail: `${removedCount} removed, ${suppressionCount} suppressions, ${linkedCount} linked`,
+    progressCurrent: torrents.length,
+    progressTotal: torrents.length,
+  });
 
   updateActiveSuppressionsMetric(
     input.database.repositories.releaseSuppressions.listActive(nowIso).length

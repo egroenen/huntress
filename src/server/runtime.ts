@@ -11,7 +11,11 @@ import {
   createSonarrClient,
   createTransmissionClient,
 } from '@/src/integrations';
-import { configureLogger, logger } from '@/src/observability';
+import {
+  configureLogger,
+  logger,
+  type ActivityTracker,
+} from '@/src/observability';
 import { createSchedulerCoordinator, type CoordinatedRunType } from '@/src/scheduler';
 import {
   resolveRuntimeConfig,
@@ -48,18 +52,49 @@ declare global {
     | undefined;
 }
 
-const createClients = (config: RuntimeContext['config']): RuntimeContext['clients'] => {
+const createClients = (
+  config: RuntimeContext['config'],
+  activityTracker?: ActivityTracker
+): RuntimeContext['clients'] => {
+  const writeActivity = (
+    event: {
+      source: 'sonarr' | 'radarr' | 'transmission';
+      stage: string;
+      message: string;
+      detail?: string | null;
+      progressCurrent?: number | null;
+      progressTotal?: number | null;
+      metadata?: Record<string, unknown>;
+    }
+  ) => {
+    if (!activityTracker) {
+      return;
+    }
+
+    activityTracker.info({
+      source: event.source,
+      stage: event.stage,
+      message: event.message,
+      detail: event.detail ?? null,
+      progressCurrent: event.progressCurrent ?? null,
+      progressTotal: event.progressTotal ?? null,
+      ...(event.metadata ? { metadata: event.metadata } : {}),
+    });
+  };
+
   return {
     sonarr: config.instances.sonarr.apiKey
       ? createSonarrClient({
           baseUrl: config.instances.sonarr.url,
           apiKey: config.instances.sonarr.apiKey,
+          ...(activityTracker ? { activityReporter: writeActivity } : {}),
         })
       : null,
     radarr: config.instances.radarr.apiKey
       ? createRadarrClient({
           baseUrl: config.instances.radarr.url,
           apiKey: config.instances.radarr.apiKey,
+          ...(activityTracker ? { activityReporter: writeActivity } : {}),
         })
       : null,
     prowlarr: config.instances.prowlarr.apiKey
@@ -73,6 +108,21 @@ const createClients = (config: RuntimeContext['config']): RuntimeContext['client
           baseUrl: config.instances.transmission.url,
           username: config.instances.transmission.username,
           password: config.instances.transmission.password,
+          ...(activityTracker
+            ? {
+                activityReporter: (event: {
+                  source: 'transmission';
+                  stage: string;
+                  message: string;
+                  detail?: string | null;
+                  progressCurrent?: number | null;
+                  progressTotal?: number | null;
+                  metadata?: Record<string, unknown>;
+                }) => {
+                  writeActivity(event);
+                },
+              }
+            : {}),
         })
       : null,
   };
@@ -104,22 +154,48 @@ const buildRuntimeCore = async () => {
     startupGracePeriodMs: resolved.config.scheduler.startupGracePeriodMs,
     lockTtlMs: Math.max(resolved.config.scheduler.cycleEveryMs, 15 * 60_000),
     async executeRun(context) {
-      const runtimeState = createRuntimeState();
+      const activityTracker = context.activity;
+      const baseRuntimeState = createRuntimeState();
+      const runtimeState = {
+        ...baseRuntimeState,
+        clients: createClients(baseRuntimeState.config, activityTracker),
+      };
+
+      activityTracker.info({
+        source: 'scheduler',
+        stage: 'sync_start',
+        message: `Starting ${context.runType.replace('_', ' ')} run`,
+        detail: context.startupGraceActive ? 'Startup grace is active.' : null,
+      });
+
       const syncSummary = await syncArrState({
         database,
         clients: {
           sonarr: runtimeState.clients.sonarr,
           radarr: runtimeState.clients.radarr,
         },
+        activityTracker,
       });
 
+      activityTracker.info({
+        source: 'transmission',
+        stage: 'transmission_guard_start',
+        message: 'Starting Transmission guard pass',
+      });
       const transmissionSummary = await runTransmissionGuard({
         database,
         config: runtimeState.config,
         client: runtimeState.clients.transmission,
+        activityTracker,
       });
 
       if (context.runType === 'sync_only') {
+        activityTracker.complete({
+          source: 'scheduler',
+          stage: 'complete',
+          message: 'Sync-only run completed',
+          detail: `Synced Sonarr and Radarr, observed ${transmissionSummary.observedCount} torrents.`,
+        });
         return {
           status: 'success',
           summary: {
@@ -129,6 +205,11 @@ const buildRuntimeCore = async () => {
         };
       }
 
+      activityTracker.info({
+        source: 'dispatch',
+        stage: 'dispatch_start',
+        message: 'Starting search dispatch stage',
+      });
       const dispatchSummary = await executeSearchDispatchRun({
         database,
         config: runtimeState.config,
@@ -138,6 +219,14 @@ const buildRuntimeCore = async () => {
         },
         runId: context.runId,
         live: context.liveDispatchAllowed,
+        activityTracker,
+      });
+
+      activityTracker.complete({
+        source: 'scheduler',
+        stage: 'complete',
+        message: `${context.runType.replace('_', ' ')} run completed`,
+        detail: `${dispatchSummary.dispatchCount} dispatches, ${dispatchSummary.skipCount} skips, ${dispatchSummary.errorCount} errors.`,
       });
 
       return {

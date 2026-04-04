@@ -15,21 +15,26 @@ import {
 export type RadarrClient = ArrClientOptions;
 
 export const createRadarrClient = (options: RadarrClient) => {
+  const clientOptions: RadarrClient = {
+    ...options,
+    serviceName: 'radarr',
+  };
+
   return {
     probeSystemStatus(): Promise<ArrSystemStatus> {
-      return fetchArrSystemStatus(options);
+      return fetchArrSystemStatus(clientOptions);
     },
     getWantedMissing(): Promise<ArrWantedRecord[]> {
-      return fetchRadarrWanted(options, 'missing');
+      return fetchRadarrWanted(clientOptions, 'missing');
     },
     getWantedCutoff(): Promise<ArrWantedRecord[]> {
-      return fetchRadarrWanted(options, 'cutoff');
+      return fetchRadarrWanted(clientOptions, 'cutoff');
     },
     getQueueDetails(): Promise<ArrQueueRecord[]> {
-      return fetchArrQueue(options);
+      return fetchArrQueue(clientOptions);
     },
     searchMovie(movieId: number): Promise<ArrCommandResponse> {
-      return dispatchArrCommand(options, {
+      return dispatchArrCommand(clientOptions, {
         name: 'MoviesSearch',
         movieIds: [movieId],
       });

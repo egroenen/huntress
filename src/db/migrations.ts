@@ -151,4 +151,27 @@ export const migrations: MigrationDefinition[] = [
       ON login_attempt(username, attempted_at);
     `,
   },
+  {
+    version: '0002_activity_log',
+    description: 'Add activity log storage for live status reporting',
+    sql: `
+      CREATE TABLE activity_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        occurred_at TEXT NOT NULL,
+        level TEXT NOT NULL,
+        source TEXT NOT NULL,
+        stage TEXT NOT NULL,
+        message TEXT NOT NULL,
+        detail TEXT,
+        run_id TEXT,
+        run_type TEXT,
+        progress_current INTEGER,
+        progress_total INTEGER,
+        metadata_json TEXT NOT NULL DEFAULT '{}'
+      );
+
+      CREATE INDEX idx_activity_log_occurred_at ON activity_log(occurred_at DESC, id DESC);
+      CREATE INDEX idx_activity_log_run_id ON activity_log(run_id, occurred_at DESC);
+    `,
+  },
 ];

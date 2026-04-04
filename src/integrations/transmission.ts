@@ -45,6 +45,15 @@ export interface TransmissionClientOptions {
   username?: string | null;
   password?: string | null;
   timeoutMs?: number;
+  activityReporter?: (event: {
+    source: 'transmission';
+    stage: string;
+    message: string;
+    detail?: string | null;
+    progressCurrent?: number | null;
+    progressTotal?: number | null;
+    metadata?: Record<string, unknown>;
+  }) => void;
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -56,10 +65,22 @@ const createBasicAuth = (username: string, password: string): string => {
 export const createTransmissionClient = (options: TransmissionClientOptions) => {
   let sessionId: string | null = null;
 
+  const reportActivity = (
+    event: Parameters<NonNullable<TransmissionClientOptions['activityReporter']>>[0]
+  ) => {
+    options.activityReporter?.(event);
+  };
+
   const doRpcRequest = async <T>(
     payload: TransmissionRpcEnvelope,
     schema: { parse: (input: unknown) => T }
   ): Promise<T> => {
+    reportActivity({
+      source: 'transmission',
+      stage: payload.method,
+      message: `Transmission RPC ${payload.method}`,
+      detail: options.baseUrl,
+    });
     const controller = new AbortController();
     const timeout = setTimeout(
       () => controller.abort(),
@@ -197,6 +218,15 @@ export const createTransmissionClient = (options: TransmissionClientOptions) => 
         transmissionTorrentListSchema
       );
 
+      reportActivity({
+        source: 'transmission',
+        stage: 'torrent_get_complete',
+        message: `Loaded ${result.torrents.length} Transmission torrents`,
+        detail: null,
+        progressCurrent: result.torrents.length,
+        progressTotal: result.torrents.length,
+      });
+
       return result.torrents.map((torrent) => ({
         id: torrent.id,
         hashString: torrent.hashString,
@@ -214,6 +244,12 @@ export const createTransmissionClient = (options: TransmissionClientOptions) => 
       }));
     },
     async removeTorrent(hashString: string, deleteLocalData: boolean): Promise<void> {
+      reportActivity({
+        source: 'transmission',
+        stage: 'torrent_remove',
+        message: `Removing Transmission torrent ${hashString}`,
+        detail: deleteLocalData ? 'Deleting local data' : 'Keeping local data',
+      });
       await doRpcRequest(
         {
           method: 'torrent-remove',

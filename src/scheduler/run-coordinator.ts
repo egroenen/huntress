@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
 import type { DatabaseContext, RunHistoryRecord } from '@/src/db';
-import { logger, recordRunCompletion } from '@/src/observability';
+import {
+  createActivityTracker,
+  logger,
+  recordRunCompletion,
+  type ActivityTracker,
+} from '@/src/observability';
 
 export type CoordinatedRunType = 'scheduled' | 'sync_only' | 'manual_dry' | 'manual_live';
 
@@ -13,6 +18,7 @@ export interface RunExecutionContext {
   startedAt: string;
   startupGraceActive: boolean;
   liveDispatchAllowed: boolean;
+  activity: ActivityTracker;
 }
 
 export interface RunExecutionResult {
@@ -195,6 +201,16 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
     options.database.repositories.runHistory.create(
       createRunningRunHistoryRecord(runId, runType, runStartedAtIso)
     );
+    const activityTracker = createActivityTracker(options.database, {
+      runId,
+      runType,
+    });
+    activityTracker.info({
+      source: 'scheduler',
+      stage: 'cycle_started',
+      message: `${runType.replace('_', ' ')} run started`,
+      detail: startupGraceActive ? 'Startup grace active' : null,
+    });
     logger.info({
       event: 'cycle_started',
       runId,
@@ -212,6 +228,7 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
           runType === 'manual_live' || runType === 'scheduled'
             ? !startupGraceActive
             : false,
+        activity: activityTracker,
       });
 
       const counts = getCounts(executionResult);
@@ -280,8 +297,14 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
                 message: error.message,
               }
             : {
-                message: 'Unknown scheduler error',
-              },
+              message: 'Unknown scheduler error',
+            },
+      });
+      activityTracker.error({
+        source: 'scheduler',
+        stage: 'cycle_failed',
+        message: `${runType.replace('_', ' ')} run failed`,
+        detail: error instanceof Error ? error.message : 'Unknown scheduler error',
       });
     } finally {
       releaseSchedulerLock(options.database, runId, now().toISOString());

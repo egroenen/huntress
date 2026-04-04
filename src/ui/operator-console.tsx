@@ -5,6 +5,7 @@ import type { SchedulerCoordinatorStatus } from '@/src/scheduler';
 
 type NavPath =
   | '/'
+  | '/status'
   | '/runs'
   | '/candidates'
   | '/suppressions'
@@ -66,6 +67,7 @@ interface TableProps {
 
 const navigationItems: Array<{ href: NavPath; label: string; badge?: string }> = [
   { href: '/', label: 'Overview' },
+  { href: '/status', label: 'Status' },
   { href: '/runs', label: 'Runs' },
   { href: '/candidates', label: 'Candidates' },
   { href: '/suppressions', label: 'Suppressions' },

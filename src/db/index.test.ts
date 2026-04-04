@@ -31,6 +31,7 @@ test('initializeDatabase creates the schema on an empty database', async () => {
     assert.deepEqual(
       tables.filter((table) =>
         [
+          'activity_log',
           'app_session',
           'app_user',
           'login_attempt',
@@ -45,6 +46,7 @@ test('initializeDatabase creates the schema on an empty database', async () => {
         ].includes(table)
       ),
       [
+        'activity_log',
         'app_session',
         'app_user',
         'login_attempt',
@@ -59,7 +61,7 @@ test('initializeDatabase creates the schema on an empty database', async () => {
       ]
     );
 
-    assert.equal(database.appliedMigrations.length, 1);
+    assert.equal(database.appliedMigrations.length, 2);
   } finally {
     database.close();
   }
@@ -70,7 +72,7 @@ test('initializeDatabase does not reapply migrations on a second startup', async
   const firstDatabase = await initializeDatabase(databasePath);
 
   try {
-    assert.equal(firstDatabase.appliedMigrations.length, 1);
+    assert.equal(firstDatabase.appliedMigrations.length, 2);
   } finally {
     firstDatabase.close();
   }
@@ -86,7 +88,7 @@ test('initializeDatabase does not reapply migrations on a second startup', async
       .get();
 
     assert.equal(secondDatabase.appliedMigrations.length, 0);
-    assert.equal(row?.total, 1);
+    assert.equal(row?.total, 2);
   } finally {
     secondDatabase.close();
   }
@@ -138,12 +140,27 @@ test('repositories can write and read core records', async () => {
     const user = database.repositories.appUsers.findByUsername('admin');
     const mediaItem =
       database.repositories.mediaItemState.getByMediaKey('radarr:movie:1');
+    database.repositories.activityLog.insert({
+      occurredAt: '2026-04-04T00:01:00.000Z',
+      level: 'info',
+      source: 'scheduler',
+      stage: 'sync_start',
+      message: 'Starting sync',
+      detail: null,
+      runId: 'run-1',
+      runType: 'sync_only',
+      progressCurrent: 1,
+      progressTotal: 10,
+      metadata: { sample: true },
+    });
+    const activity = database.repositories.activityLog.listRecent(1);
 
     assert.deepEqual(serviceState?.value, { completed: false });
     assert.equal(database.repositories.appUsers.count(), 1);
     assert.equal(user?.username, 'admin');
     assert.equal(mediaItem?.title, 'Example Movie');
     assert.equal(database.repositories.mediaItemState.count(), 1);
+    assert.equal(activity[0]?.message, 'Starting sync');
   } finally {
     database.close();
   }

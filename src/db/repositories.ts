@@ -66,6 +66,21 @@ export interface RunHistoryRecord {
   summary: Record<string, unknown>;
 }
 
+export interface ActivityLogRecord {
+  id?: number;
+  occurredAt: string;
+  level: 'info' | 'warn' | 'error';
+  source: string;
+  stage: string;
+  message: string;
+  detail: string | null;
+  runId: string | null;
+  runType: string | null;
+  progressCurrent: number | null;
+  progressTotal: number | null;
+  metadata: Record<string, unknown>;
+}
+
 interface RunHistoryRow {
   id: string;
   run_type: string;
@@ -91,6 +106,21 @@ export interface SearchAttemptRecord {
   attemptedAt: string;
   completedAt: string | null;
   outcome: string | null;
+}
+
+interface ActivityLogRow {
+  id: number;
+  occurred_at: string;
+  level: 'info' | 'warn' | 'error';
+  source: string;
+  stage: string;
+  message: string;
+  detail: string | null;
+  run_id: string | null;
+  run_type: string | null;
+  progress_current: number | null;
+  progress_total: number | null;
+  metadata_json: string;
 }
 
 interface SearchAttemptRow {
@@ -208,6 +238,23 @@ const toSearchAttemptRecord = (row: SearchAttemptRow): SearchAttemptRecord => {
     attemptedAt: row.attempted_at,
     completedAt: row.completed_at,
     outcome: row.outcome,
+  };
+};
+
+const toActivityLogRecord = (row: ActivityLogRow): ActivityLogRecord => {
+  return {
+    id: row.id,
+    occurredAt: row.occurred_at,
+    level: row.level,
+    source: row.source,
+    stage: row.stage,
+    message: row.message,
+    detail: row.detail,
+    runId: row.run_id,
+    runType: row.run_type,
+    progressCurrent: row.progress_current,
+    progressTotal: row.progress_total,
+    metadata: decodeJson<Record<string, unknown>>(row.metadata_json),
   };
 };
 
@@ -669,6 +716,71 @@ export const createRepositories = (database: SqliteDatabase) => {
     },
   };
 
+  const activityLog = {
+    insert(record: ActivityLogRecord): number {
+      const result = database
+        .prepare(
+          `
+            INSERT INTO activity_log (
+              occurred_at, level, source, stage, message, detail, run_id, run_type,
+              progress_current, progress_total, metadata_json
+            )
+            VALUES (
+              @occurred_at, @level, @source, @stage, @message, @detail, @run_id, @run_type,
+              @progress_current, @progress_total, @metadata_json
+            )
+          `
+        )
+        .run({
+          occurred_at: record.occurredAt,
+          level: record.level,
+          source: record.source,
+          stage: record.stage,
+          message: record.message,
+          detail: record.detail,
+          run_id: record.runId,
+          run_type: record.runType,
+          progress_current: record.progressCurrent,
+          progress_total: record.progressTotal,
+          metadata_json: encodeJson(record.metadata),
+        });
+
+      return Number(result.lastInsertRowid);
+    },
+    listRecent(limit: number): ActivityLogRecord[] {
+      const rows = database
+        .prepare<[number], ActivityLogRow>(
+          `
+            SELECT id, occurred_at, level, source, stage, message, detail, run_id, run_type,
+                   progress_current, progress_total, metadata_json
+            FROM activity_log
+            ORDER BY occurred_at DESC, id DESC
+            LIMIT ?
+          `
+        )
+        .all(limit);
+
+      return rows.map((row) => toActivityLogRecord(row));
+    },
+    pruneToLimit(limit: number): number {
+      const result = database
+        .prepare(
+          `
+            DELETE FROM activity_log
+            WHERE id NOT IN (
+              SELECT id
+              FROM activity_log
+              ORDER BY occurred_at DESC, id DESC
+              LIMIT ?
+            )
+          `
+        )
+        .run(limit);
+
+      return result.changes;
+    },
+  };
+
   const searchAttempts = {
     insertMany(records: SearchAttemptRecord[]): void {
       const insert = database.prepare(
@@ -967,6 +1079,7 @@ export const createRepositories = (database: SqliteDatabase) => {
     loginAttempts,
     mediaItemState,
     runHistory,
+    activityLog,
     searchAttempts,
     releaseSuppressions,
     transmissionTorrentState,

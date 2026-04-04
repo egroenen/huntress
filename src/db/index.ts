@@ -2,6 +2,7 @@ export { initializeDatabase } from './database';
 export type { AppliedMigration, DatabaseContext } from './database';
 export {
   createRepositories,
+  type ActivityLogRecord,
   type AppSessionRecord,
   type AppUserRecord,
   type DatabaseRepositories,
