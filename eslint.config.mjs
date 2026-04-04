@@ -1,17 +1,10 @@
-import { FlatCompat } from '@eslint/eslintrc';
+import nextCoreWebVitals from 'eslint-config-next/core-web-vitals';
+import nextTypescript from 'eslint-config-next/typescript';
 import { defineConfig, globalIgnores } from 'eslint/config';
-import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const currentDirectory = dirname(fileURLToPath(import.meta.url));
-const compat = new FlatCompat({
-  baseDirectory: currentDirectory,
-});
 
 export default defineConfig([
-  ...compat.config({
-    extends: ['next/core-web-vitals', 'next/typescript'],
-  }),
+  ...nextCoreWebVitals,
+  ...nextTypescript,
   globalIgnores([
     '.codex',
     '.sfdx/**',
