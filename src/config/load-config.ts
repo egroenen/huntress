@@ -184,6 +184,11 @@ const resolveConfig = (
       minGlobalDispatchSpacingMs: durationToMs(
         rawConfig.safety.min_global_dispatch_spacing
       ),
+      rollingSearchLimits: {
+        per15m: rawConfig.safety.rolling_search_limits.per_15m,
+        per1h: rawConfig.safety.rolling_search_limits.per_1h,
+        per24h: rawConfig.safety.rolling_search_limits.per_24h,
+      },
     },
     logging: {
       level: rawConfig.logging.level,

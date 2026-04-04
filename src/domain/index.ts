@@ -9,6 +9,12 @@ export {
   type SearchDecision,
 } from './decision-engine.js';
 export {
+  executeSearchDispatchRun,
+  type SearchDispatchClients,
+  type SearchDispatchRunInput,
+  type SearchDispatchRunSummary,
+} from './search-dispatch.js';
+export {
   syncArrState,
   type AppStateSyncSummary,
   type ArrStateSyncSummary,

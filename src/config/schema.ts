@@ -75,6 +75,11 @@ export const rawConfigSchema = z.object({
     stop_on_prowlarr_outage: z.boolean(),
     max_global_dispatch_per_cycle: z.number().int().positive(),
     min_global_dispatch_spacing: durationStringSchema,
+    rolling_search_limits: z.object({
+      per_15m: z.number().int().positive(),
+      per_1h: z.number().int().positive(),
+      per_24h: z.number().int().positive(),
+    }),
   }),
   logging: z.object({
     level: loggingLevelSchema,
@@ -153,6 +158,11 @@ export const resolvedConfigSchema = z
       stopOnProwlarrOutage: z.boolean(),
       maxGlobalDispatchPerCycle: z.number().int().positive(),
       minGlobalDispatchSpacingMs: z.number().int().positive(),
+      rollingSearchLimits: z.object({
+        per15m: z.number().int().positive(),
+        per1h: z.number().int().positive(),
+        per24h: z.number().int().positive(),
+      }),
     }),
     logging: z.object({
       level: loggingLevelSchema,

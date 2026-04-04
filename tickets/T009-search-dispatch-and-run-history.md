@@ -1,6 +1,6 @@
 # T009: Search Dispatch and Run History
 
-Status: Backlog
+Status: Done
 
 ## Goal
 

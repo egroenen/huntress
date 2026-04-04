@@ -1,7 +1,12 @@
 import { z } from 'zod';
 
 import { joinUrl, requestJson, type HttpRequestOptions } from './http.js';
-import type { ArrQueueRecord, ArrSystemStatus, ArrWantedRecord } from './types.js';
+import type {
+  ArrCommandResponse,
+  ArrQueueRecord,
+  ArrSystemStatus,
+  ArrWantedRecord,
+} from './types.js';
 
 const arrSystemStatusSchema = z.object({
   appName: z.string(),
@@ -25,6 +30,13 @@ const arrQueueEntrySchema = z.object({
 });
 
 const arrQueueResponseSchema = z.array(arrQueueEntrySchema.passthrough());
+const arrCommandResponseSchema = z
+  .object({
+    id: z.number().nullable().optional(),
+    name: z.string().nullable().optional(),
+    status: z.string().nullable().optional(),
+  })
+  .passthrough();
 
 const sonarrWantedItemSchema = z
   .object({
@@ -170,4 +182,29 @@ export const fetchRadarrWanted = async (
     releaseDate: entry.digitalRelease ?? entry.physicalRelease ?? entry.inCinemas ?? null,
     payload: entry,
   }));
+};
+
+export const dispatchArrCommand = async (
+  options: ArrClientOptions,
+  payload: Record<string, unknown>
+): Promise<ArrCommandResponse> => {
+  const result = await requestJson(
+    joinUrl(options.baseUrl, '/api/v3/command'),
+    arrCommandResponseSchema,
+    {
+      ...createRequestOptions(options),
+      method: 'POST',
+      body: JSON.stringify(payload),
+      headers: {
+        ...createArrHeaders(options.apiKey),
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  return {
+    id: result.id ?? null,
+    name: result.name ?? null,
+    status: result.status ?? null,
+  };
 };

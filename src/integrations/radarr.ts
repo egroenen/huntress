@@ -1,5 +1,11 @@
-import type { ArrQueueRecord, ArrSystemStatus, ArrWantedRecord } from './types.js';
+import type {
+  ArrCommandResponse,
+  ArrQueueRecord,
+  ArrSystemStatus,
+  ArrWantedRecord,
+} from './types.js';
 import {
+  dispatchArrCommand,
   fetchArrQueue,
   fetchArrSystemStatus,
   fetchRadarrWanted,
@@ -21,6 +27,12 @@ export const createRadarrClient = (options: RadarrClient) => {
     },
     getQueueDetails(): Promise<ArrQueueRecord[]> {
       return fetchArrQueue(options);
+    },
+    searchMovie(movieId: number): Promise<ArrCommandResponse> {
+      return dispatchArrCommand(options, {
+        name: 'MoviesSearch',
+        movieIds: [movieId],
+      });
     },
   };
 };

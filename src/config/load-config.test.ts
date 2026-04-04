@@ -60,6 +60,10 @@ safety:
   stop_on_prowlarr_outage: true
   max_global_dispatch_per_cycle: 8
   min_global_dispatch_spacing: "45s"
+  rolling_search_limits:
+    per_15m: 4
+    per_1h: 10
+    per_24h: 40
 logging:
   level: "info"
 `;
@@ -92,6 +96,7 @@ test('loadConfig resolves a valid config file and redacts secrets', async () => 
   assert.equal(config.auth.sessionAbsoluteTtlMs, 604_800_000);
   assert.equal(config.auth.sessionIdleTtlMs, 86_400_000);
   assert.equal(config.instances.sonarr.apiKey, 'sonarr-key');
+  assert.equal(config.safety.rollingSearchLimits.per15m, 4);
   assert.equal(redactedConfig.instances.sonarr.apiKey, '[redacted]');
   assert.equal(redactedConfig.auth.sessionSecret, '[redacted]');
 });

@@ -59,6 +59,10 @@ safety:
   stop_on_prowlarr_outage: true
   max_global_dispatch_per_cycle: 8
   min_global_dispatch_spacing: '45s'
+  rolling_search_limits:
+    per_15m: 4
+    per_1h: 10
+    per_24h: 40
 
 logging:
   level: 'info'

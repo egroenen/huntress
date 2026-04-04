@@ -22,6 +22,12 @@ export interface ArrWantedRecord {
   payload: unknown;
 }
 
+export interface ArrCommandResponse {
+  id: number | null;
+  name: string | null;
+  status: string | null;
+}
+
 export interface ArrQueueRecord {
   id: number;
   title: string;

@@ -1,5 +1,11 @@
-import type { ArrQueueRecord, ArrSystemStatus, ArrWantedRecord } from './types.js';
+import type {
+  ArrCommandResponse,
+  ArrQueueRecord,
+  ArrSystemStatus,
+  ArrWantedRecord,
+} from './types.js';
 import {
+  dispatchArrCommand,
   fetchArrQueue,
   fetchArrSystemStatus,
   fetchSonarrWanted,
@@ -21,6 +27,12 @@ export const createSonarrClient = (options: SonarrClient) => {
     },
     getQueueDetails(): Promise<ArrQueueRecord[]> {
       return fetchArrQueue(options);
+    },
+    searchEpisode(episodeId: number): Promise<ArrCommandResponse> {
+      return dispatchArrCommand(options, {
+        name: 'EpisodeSearch',
+        episodeIds: [episodeId],
+      });
     },
   };
 };

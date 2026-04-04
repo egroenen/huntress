@@ -93,6 +93,20 @@ export interface SearchAttemptRecord {
   outcome: string | null;
 }
 
+interface SearchAttemptRow {
+  run_id: string;
+  media_key: string;
+  app: string;
+  wanted_state: string;
+  decision: string;
+  reason_code: string;
+  dry_run: number;
+  arr_command_id: number | null;
+  attempted_at: string;
+  completed_at: string | null;
+  outcome: string | null;
+}
+
 export interface ReleaseSuppressionRecord {
   id?: number;
   mediaKey: string;
@@ -178,6 +192,22 @@ const toRunHistoryRecord = (row: RunHistoryRow): RunHistoryRecord => {
     skipCount: row.skip_count,
     errorCount: row.error_count,
     summary: decodeJson<Record<string, unknown>>(row.summary_json),
+  };
+};
+
+const toSearchAttemptRecord = (row: SearchAttemptRow): SearchAttemptRecord => {
+  return {
+    runId: row.run_id,
+    mediaKey: row.media_key,
+    app: row.app,
+    wantedState: row.wanted_state,
+    decision: row.decision,
+    reasonCode: row.reason_code,
+    dryRun: toBoolean(row.dry_run),
+    arrCommandId: row.arr_command_id,
+    attemptedAt: row.attempted_at,
+    completedAt: row.completed_at,
+    outcome: row.outcome,
   };
 };
 
@@ -666,22 +696,7 @@ export const createRepositories = (database: SqliteDatabase) => {
     },
     listByRunId(runId: string): SearchAttemptRecord[] {
       const rows = database
-        .prepare<
-          [string],
-          {
-            run_id: string;
-            media_key: string;
-            app: string;
-            wanted_state: string;
-            decision: string;
-            reason_code: string;
-            dry_run: number;
-            arr_command_id: number | null;
-            attempted_at: string;
-            completed_at: string | null;
-            outcome: string | null;
-          }
-        >(
+        .prepare<[string], SearchAttemptRow>(
           `
             SELECT run_id, media_key, app, wanted_state, decision, reason_code, dry_run,
                    arr_command_id, attempted_at, completed_at, outcome
@@ -692,19 +707,38 @@ export const createRepositories = (database: SqliteDatabase) => {
         )
         .all(runId);
 
-      return rows.map((row) => ({
-        runId: row.run_id,
-        mediaKey: row.media_key,
-        app: row.app,
-        wantedState: row.wanted_state,
-        decision: row.decision,
-        reasonCode: row.reason_code,
-        dryRun: toBoolean(row.dry_run),
-        arrCommandId: row.arr_command_id,
-        attemptedAt: row.attempted_at,
-        completedAt: row.completed_at,
-        outcome: row.outcome,
-      }));
+      return rows.map((row) => toSearchAttemptRecord(row));
+    },
+    countLiveDispatchesSince(sinceIso: string): number {
+      const row = database
+        .prepare<[string], { total: number } | undefined>(
+          `
+            SELECT COUNT(*) AS total
+            FROM search_attempt
+            WHERE decision = 'dispatch'
+              AND dry_run = 0
+              AND attempted_at >= ?
+          `
+        )
+        .get(sinceIso);
+
+      return row?.total ?? 0;
+    },
+    getLatestLiveDispatchAttemptAt(): string | null {
+      const row = database
+        .prepare<[], { attempted_at: string } | undefined>(
+          `
+            SELECT attempted_at
+            FROM search_attempt
+            WHERE decision = 'dispatch'
+              AND dry_run = 0
+            ORDER BY attempted_at DESC, id DESC
+            LIMIT 1
+          `
+        )
+        .get();
+
+      return row?.attempted_at ?? null;
     },
   };
 
