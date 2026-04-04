@@ -19,6 +19,49 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+interface AppSyncSummary {
+  app: 'sonarr' | 'radarr';
+  status: 'synced' | 'not_configured';
+  syncedAt: string;
+  missingCount: number;
+  missingPagesFetched: number;
+  missingTotalPages: number;
+  cutoffCount: number;
+  cutoffPagesFetched: number;
+  cutoffTotalPages: number;
+  queueCount: number;
+  upsertedCount: number;
+  ignoredCount: number;
+}
+
+interface ArrStateSyncSummary {
+  syncedAt: string;
+  sonarr: AppSyncSummary;
+  radarr: AppSyncSummary;
+}
+
+interface TransmissionSummary {
+  observedCount: number;
+  removedCount: number;
+  suppressionCount: number;
+  linkedCount: number;
+}
+
+interface DispatchSummary {
+  dryRun: boolean;
+  dryRunDispatchPreviewCount: number;
+  throttleReason: string | null;
+  attemptsPersisted: number;
+}
+
+interface RunSummaryShape {
+  syncSummary?: ArrStateSyncSummary;
+  transmissionSummary?: TransmissionSummary;
+  dispatchSummary?: DispatchSummary;
+  requestedRunType?: string;
+  liveDispatchAllowed?: boolean;
+}
+
 const formatTimestamp = (value: string | null): string => {
   if (!value) {
     return 'n/a';
@@ -29,6 +72,49 @@ const formatTimestamp = (value: string | null): string => {
     timeStyle: 'short',
   }).format(new Date(value));
 };
+
+const formatDuration = (startedAt: string, finishedAt: string | null): string => {
+  const started = new Date(startedAt).getTime();
+  const finished = finishedAt ? new Date(finishedAt).getTime() : null;
+
+  if (!Number.isFinite(started)) {
+    return 'n/a';
+  }
+
+  if (finished === null || !Number.isFinite(finished)) {
+    return 'In progress';
+  }
+
+  const durationMs = Math.max(finished - started, 0);
+  const totalSeconds = Math.round(durationMs / 1000);
+
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes < 60) {
+    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const toRunSummaryShape = (
+  summary: Record<string, unknown> | undefined
+): RunSummaryShape => {
+  return isRecord(summary) ? (summary as RunSummaryShape) : {};
+};
+
+const formatRunType = (value: string): string => value.replaceAll('_', ' ');
 
 export default async function HomePage() {
   const runtime = await requireAuthenticatedConsoleContext();
@@ -48,6 +134,10 @@ export default async function HomePage() {
     (candidate) => candidate.decision === 'dispatch'
   ).length;
   const skippedCount = candidates.all.length - dispatchableCount;
+  const latestRunSummary = latestRun ? toRunSummaryShape(latestRun.summary) : {};
+  const latestRunSyncRows = latestRunSummary.syncSummary
+    ? [latestRunSummary.syncSummary.sonarr, latestRunSummary.syncSummary.radarr]
+    : [];
 
   return (
     <ConsoleShell
@@ -117,17 +207,54 @@ export default async function HomePage() {
         title="Latest run"
         subtitle="Most recent scheduler or manual cycle recorded in the database."
         actions={
-          <Link href="/runs" className="console-link">
-            View all runs
-          </Link>
+          <div className="section-card__actions">
+            {latestRun ? (
+              <Link href={`/runs/${latestRun.id}`} className="console-link">
+                Open run detail
+              </Link>
+            ) : null}
+            <Link href="/runs" className="console-link">
+              View all runs
+            </Link>
+          </div>
         }
       >
         {latestRun ? (
           <div className="latest-run">
+            <StatsGrid>
+              <StatCard label="Run type" value={formatRunType(latestRun.runType)} />
+              <StatCard
+                label="Status"
+                value={latestRun.status}
+                tone={
+                  latestRun.status === 'success'
+                    ? 'success'
+                    : latestRun.status === 'failed'
+                      ? 'danger'
+                      : 'warn'
+                }
+              />
+              <StatCard
+                label="Duration"
+                value={formatDuration(latestRun.startedAt, latestRun.finishedAt)}
+              />
+              <StatCard
+                label="Dispatch mode"
+                value={
+                  latestRunSummary.liveDispatchAllowed === undefined
+                    ? latestRun.runType === 'manual_dry'
+                      ? 'Dry only'
+                      : 'Live allowed'
+                    : latestRunSummary.liveDispatchAllowed
+                      ? 'Live allowed'
+                      : 'Dry only'
+                }
+              />
+            </StatsGrid>
             <div className="latest-run__summary">
               <div>
                 <span className="console-meta__label">Run type</span>
-                <strong>{latestRun.runType.replace('_', ' ')}</strong>
+                <strong>{formatRunType(latestRun.runType)}</strong>
               </div>
               <div>
                 <span className="console-meta__label">Status</span>
@@ -141,6 +268,14 @@ export default async function HomePage() {
                 <span className="console-meta__label">Finished</span>
                 <strong>{formatTimestamp(latestRun.finishedAt)}</strong>
               </div>
+              <div>
+                <span className="console-meta__label">Requested run type</span>
+                <strong>
+                  {latestRunSummary.requestedRunType
+                    ? formatRunType(latestRunSummary.requestedRunType)
+                    : formatRunType(latestRun.runType)}
+                </strong>
+              </div>
             </div>
             <div className="latest-run__counts">
               <span>{latestRun.candidateCount} candidates</span>
@@ -148,6 +283,99 @@ export default async function HomePage() {
               <span>{latestRun.skipCount} skips</span>
               <span>{latestRun.errorCount} errors</span>
             </div>
+            {latestRunSyncRows.length > 0 ? (
+              <div className="latest-run__details-grid">
+                {latestRunSyncRows.map((row) => (
+                  <article key={row.app} className="latest-run__detail-card">
+                    <div className="latest-run__detail-card-header">
+                      <strong>{row.app}</strong>
+                      <StatusBadge
+                        status={row.status === 'synced' ? 'success' : 'degraded'}
+                      >
+                        {row.status}
+                      </StatusBadge>
+                    </div>
+                    <p>
+                      {row.missingCount} missing, {row.cutoffCount} cutoff unmet,{' '}
+                      {row.queueCount} queued
+                    </p>
+                    <p>
+                      fetched {row.missingPagesFetched}/{row.missingTotalPages} missing
+                      pages, {row.cutoffPagesFetched}/{row.cutoffTotalPages} cutoff pages
+                    </p>
+                  </article>
+                ))}
+                {latestRunSummary.transmissionSummary ? (
+                  <article className="latest-run__detail-card">
+                    <div className="latest-run__detail-card-header">
+                      <strong>Transmission</strong>
+                    </div>
+                    <p>
+                      {latestRunSummary.transmissionSummary.observedCount} observed,{' '}
+                      {latestRunSummary.transmissionSummary.linkedCount} linked
+                    </p>
+                    <p>
+                      {latestRunSummary.transmissionSummary.removedCount} removed,{' '}
+                      {latestRunSummary.transmissionSummary.suppressionCount} suppressions
+                    </p>
+                  </article>
+                ) : null}
+                {latestRunSummary.dispatchSummary ? (
+                  <article className="latest-run__detail-card">
+                    <div className="latest-run__detail-card-header">
+                      <strong>Dispatch</strong>
+                    </div>
+                    <p>
+                      {latestRunSummary.dispatchSummary.attemptsPersisted} attempts
+                      persisted
+                    </p>
+                    <p>
+                      {latestRunSummary.dispatchSummary.dryRun
+                        ? `${latestRunSummary.dispatchSummary.dryRunDispatchPreviewCount} dispatch previews in dry-run`
+                        : latestRunSummary.dispatchSummary.throttleReason
+                          ? `Throttled: ${latestRunSummary.dispatchSummary.throttleReason}`
+                          : 'No throttle active'}
+                    </p>
+                  </article>
+                ) : null}
+              </div>
+            ) : latestRunSummary.transmissionSummary || latestRunSummary.dispatchSummary ? (
+              <div className="latest-run__details-grid">
+                {latestRunSummary.transmissionSummary ? (
+                  <article className="latest-run__detail-card">
+                    <div className="latest-run__detail-card-header">
+                      <strong>Transmission</strong>
+                    </div>
+                    <p>
+                      {latestRunSummary.transmissionSummary.observedCount} observed,{' '}
+                      {latestRunSummary.transmissionSummary.linkedCount} linked
+                    </p>
+                    <p>
+                      {latestRunSummary.transmissionSummary.removedCount} removed,{' '}
+                      {latestRunSummary.transmissionSummary.suppressionCount} suppressions
+                    </p>
+                  </article>
+                ) : null}
+                {latestRunSummary.dispatchSummary ? (
+                  <article className="latest-run__detail-card">
+                    <div className="latest-run__detail-card-header">
+                      <strong>Dispatch</strong>
+                    </div>
+                    <p>
+                      {latestRunSummary.dispatchSummary.attemptsPersisted} attempts
+                      persisted
+                    </p>
+                    <p>
+                      {latestRunSummary.dispatchSummary.dryRun
+                        ? `${latestRunSummary.dispatchSummary.dryRunDispatchPreviewCount} dispatch previews in dry-run`
+                        : latestRunSummary.dispatchSummary.throttleReason
+                          ? `Throttled: ${latestRunSummary.dispatchSummary.throttleReason}`
+                          : 'No throttle active'}
+                    </p>
+                  </article>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : (
           <p className="console-muted">

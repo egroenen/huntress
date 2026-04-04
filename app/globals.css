@@ -326,6 +326,13 @@ select {
   border-bottom: 1px solid #dde6f0;
 }
 
+.section-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
 .section-card__header h3,
 .dependency-card h4,
 .empty-state h4 {
@@ -669,6 +676,34 @@ select {
   font-weight: 600;
 }
 
+.latest-run__details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.latest-run__detail-card {
+  border: 1px solid #d9e3ee;
+  border-radius: 10px;
+  background: #f9fbfe;
+  padding: 1rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.latest-run__detail-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.latest-run__detail-card p {
+  margin: 0;
+  color: #33485f;
+  line-height: 1.5;
+}
+
 .table-inline-form {
   display: inline;
 }
@@ -847,6 +882,7 @@ select {
   .stats-grid,
   .dependency-grid,
   .latest-run__summary,
+  .latest-run__details-grid,
   .settings-status-grid,
   .candidate-filters__grid,
   .settings-status-card__meta {
@@ -880,6 +916,7 @@ select {
   .stats-grid,
   .dependency-grid,
   .latest-run__summary,
+  .latest-run__details-grid,
   .settings-status-grid,
   .candidate-filters__grid,
   .settings-status-card__meta {
