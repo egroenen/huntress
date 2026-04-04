@@ -29,6 +29,7 @@ test('manual runs create run history and reject overlaps', async () => {
     database,
     cadenceMs: 60_000,
     startupGracePeriodMs: 60_000,
+    maxRunDurationMs: 5 * 60_000,
     lockTtlMs: 60_000,
     async executeRun(context) {
       callCount += 1;
@@ -95,6 +96,7 @@ test('stale scheduler locks are reclaimed before a new run starts', async () => 
     database,
     cadenceMs: 60_000,
     startupGracePeriodMs: 0,
+    maxRunDurationMs: 5 * 60_000,
     lockTtlMs: 60_000,
     now: () => now,
     async executeRun() {
@@ -133,6 +135,7 @@ test('scheduled cadence triggers scheduled runs', async () => {
     database,
     cadenceMs: 5_000,
     startupGracePeriodMs: 0,
+    maxRunDurationMs: 5 * 60_000,
     lockTtlMs: 60_000,
     createInterval(callback: () => void, intervalMs: number) {
       scheduledCallback = callback;
@@ -177,6 +180,7 @@ test('failed runs mark run history as failed and release the scheduler lock', as
     database,
     cadenceMs: 60_000,
     startupGracePeriodMs: 0,
+    maxRunDurationMs: 5 * 60_000,
     lockTtlMs: 60_000,
     async executeRun() {
       throw new Error('boom');

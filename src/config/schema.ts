@@ -44,6 +44,7 @@ export const rawConfigSchema = z.object({
   scheduler: z.object({
     cycle_every: durationStringSchema,
     startup_grace_period: durationStringSchema,
+    max_run_duration: durationStringSchema,
   }),
   policies: z.object({
     sonarr: z.object({
@@ -141,6 +142,7 @@ export const resolvedConfigSchema = z
     scheduler: z.object({
       cycleEveryMs: z.number().int().positive(),
       startupGracePeriodMs: z.number().int().nonnegative(),
+      maxRunDurationMs: z.number().int().positive(),
     }),
     policies: z.object({
       sonarr: resolvedSearchPolicySchema,

@@ -17,6 +17,7 @@ export interface ConsoleActionTokens {
   runSync: string;
   runDry: string;
   runLive: string;
+  recoverRun: string;
 }
 
 export interface DependencyHealthCard {

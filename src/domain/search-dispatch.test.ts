@@ -97,6 +97,7 @@ const createResolvedConfig = (): ResolvedConfig => {
     scheduler: {
       cycleEveryMs: 6 * 3_600_000,
       startupGracePeriodMs: 10 * 60_000,
+      maxRunDurationMs: 30 * 60_000,
     },
     policies: {
       sonarr: {

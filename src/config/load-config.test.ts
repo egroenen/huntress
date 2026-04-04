@@ -34,6 +34,7 @@ instances:
 scheduler:
   cycle_every: "6h"
   startup_grace_period: "10m"
+  max_run_duration: "30m"
 policies:
   sonarr:
     max_searches_per_cycle: 6
@@ -95,6 +96,7 @@ test('loadConfig resolves a valid config file and redacts secrets', async () => 
   assert.equal(config.server.listenPort, 47892);
   assert.equal(config.auth.sessionAbsoluteTtlMs, 604_800_000);
   assert.equal(config.auth.sessionIdleTtlMs, 86_400_000);
+  assert.equal(config.scheduler.maxRunDurationMs, 1_800_000);
   assert.equal(config.instances.sonarr.apiKey, 'sonarr-key');
   assert.equal(config.safety.rollingSearchLimits.per15m, 4);
   assert.equal(redactedConfig.instances.sonarr.apiKey, '[redacted]');

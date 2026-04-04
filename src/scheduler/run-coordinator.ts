@@ -41,11 +41,14 @@ export interface SchedulerCoordinatorStatus {
   startedAt: string;
   startupGraceActive: boolean;
   nextScheduledRunAt: string | null;
+  maxRunDurationMs: number;
   activeRun: {
     runId: string;
     runType: CoordinatedRunType;
     startedAt: string;
     expiresAt: string;
+    durationMs: number;
+    overrun: boolean;
   } | null;
 }
 
@@ -53,6 +56,7 @@ export interface SchedulerCoordinatorOptions {
   database: DatabaseContext;
   cadenceMs: number;
   startupGracePeriodMs: number;
+  maxRunDurationMs: number;
   lockTtlMs: number;
   executeRun: (context: RunExecutionContext) => Promise<RunExecutionResult>;
   now?: () => Date;
@@ -68,6 +72,7 @@ interface SchedulerLockState {
 }
 
 const SCHEDULER_LOCK_KEY = 'scheduler_lock';
+const ABANDONED_RUN_PREFIX = 'abandoned_run:';
 
 const createRunId = (runType: CoordinatedRunType): string => {
   return `${runType}_${randomUUID()}`;
@@ -160,6 +165,41 @@ const getCounts = (result: RunExecutionResult) => {
   };
 };
 
+const getAbandonedRunKey = (runId: string) => `${ABANDONED_RUN_PREFIX}${runId}`;
+
+const markRunAbandoned = (
+  database: DatabaseContext,
+  input: {
+    runId: string;
+    runType: CoordinatedRunType;
+    reason: string;
+    nowIso: string;
+  }
+): void => {
+  database.repositories.serviceState.set({
+    key: getAbandonedRunKey(input.runId),
+    value: {
+      runId: input.runId,
+      runType: input.runType,
+      reason: input.reason,
+      markedAt: input.nowIso,
+    },
+    updatedAt: input.nowIso,
+  });
+};
+
+const isRunAbandoned = (database: DatabaseContext, runId: string): boolean => {
+  return database.repositories.serviceState.get(getAbandonedRunKey(runId)) !== null;
+};
+
+const createRunTimeoutError = (runType: CoordinatedRunType, timeoutMs: number): Error => {
+  const error = new Error(
+    `${runType.replace('_', ' ')} run exceeded max duration of ${timeoutMs}ms`
+  );
+  error.name = 'RunTimeoutError';
+  return error;
+};
+
 export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions) => {
   const now = options.now ?? (() => new Date());
   const createScheduledInterval =
@@ -219,7 +259,15 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
     });
 
     try {
-      const executionResult = await options.executeRun({
+      const timeoutPromise = new Promise<RunExecutionResult>((_, reject) => {
+        const timeoutHandle = setTimeout(() => {
+          reject(createRunTimeoutError(runType, options.maxRunDurationMs));
+        }, options.maxRunDurationMs);
+        if (typeof timeoutHandle === 'object' && timeoutHandle !== null && 'unref' in timeoutHandle) {
+          (timeoutHandle as NodeJS.Timeout).unref();
+        }
+      });
+      const executionPromise = options.executeRun({
         runId,
         runType,
         startedAt: runStartedAtIso,
@@ -230,6 +278,22 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
             : false,
         activity: activityTracker,
       });
+      const executionResult = await Promise.race([executionPromise, timeoutPromise]);
+
+      if (isRunAbandoned(options.database, runId)) {
+        activityTracker.warn({
+          source: 'scheduler',
+          stage: 'cycle_abandoned',
+          message: `${runType.replace('_', ' ')} run was abandoned before completion`,
+          detail: 'Ignoring late completion from the abandoned run.',
+        });
+        return {
+          accepted: true,
+          runId,
+          reason: 'started',
+          startupGraceActive,
+        };
+      }
 
       const counts = getCounts(executionResult);
       const finishedAtIso = now().toISOString();
@@ -259,6 +323,40 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
       });
     } catch (error) {
       const finishedAtIso = now().toISOString();
+      if (error instanceof Error && error.name === 'RunTimeoutError') {
+        markRunAbandoned(options.database, {
+          runId,
+          runType,
+          reason: error.message,
+          nowIso: finishedAtIso,
+        });
+      }
+
+      if (isRunAbandoned(options.database, runId)) {
+        options.database.repositories.runHistory.update({
+          id: runId,
+          runType,
+          startedAt: runStartedAtIso,
+          finishedAt: finishedAtIso,
+          status: 'failed',
+          candidateCount: 0,
+          dispatchCount: 0,
+          skipCount: 0,
+          errorCount: 1,
+          summary: {
+            error:
+              error instanceof Error
+                ? {
+                    name: error.name,
+                    message: error.message,
+                  }
+                : {
+                    message: 'Unknown scheduler error',
+                  },
+            recovered: true,
+          },
+        });
+      } else {
       options.database.repositories.runHistory.update({
         id: runId,
         runType,
@@ -278,9 +376,10 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
                 }
               : {
                   message: 'Unknown scheduler error',
-                },
+            },
         },
       });
+      }
       recordRunCompletion({
         runType,
         status: 'failed',
@@ -358,6 +457,7 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
         startedAt: startedAt.toISOString(),
         startupGraceActive: isStartupGraceActive(referenceTime),
         nextScheduledRunAt: nextScheduledRunAt?.toISOString() ?? null,
+        maxRunDurationMs: options.maxRunDurationMs,
         activeRun:
           lockState && lockState.value.expiresAt > referenceTime.toISOString()
             ? {
@@ -365,8 +465,73 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
                 runType: lockState.value.runType,
                 startedAt: lockState.value.startedAt,
                 expiresAt: lockState.value.expiresAt,
+                durationMs:
+                  referenceTime.getTime() -
+                  new Date(lockState.value.startedAt).getTime(),
+                overrun:
+                  referenceTime.getTime() -
+                    new Date(lockState.value.startedAt).getTime() >
+                  options.maxRunDurationMs,
               }
             : null,
+      };
+    },
+    recoverActiveRun(reason = 'Operator recovery requested'): {
+      recovered: boolean;
+      runId: string | null;
+    } {
+      const referenceTime = now();
+      const lockState =
+        options.database.repositories.serviceState.get<SchedulerLockState>(
+          SCHEDULER_LOCK_KEY
+        );
+
+      if (!lockState || lockState.value.expiresAt <= referenceTime.toISOString()) {
+        return {
+          recovered: false,
+          runId: null,
+        };
+      }
+
+      const finishedAtIso = referenceTime.toISOString();
+      markRunAbandoned(options.database, {
+        runId: lockState.value.runId,
+        runType: lockState.value.runType,
+        reason,
+        nowIso: finishedAtIso,
+      });
+      options.database.repositories.runHistory.update({
+        id: lockState.value.runId,
+        runType: lockState.value.runType,
+        startedAt: lockState.value.startedAt,
+        finishedAt: finishedAtIso,
+        status: 'failed',
+        candidateCount: 0,
+        dispatchCount: 0,
+        skipCount: 0,
+        errorCount: 1,
+        summary: {
+          error: {
+            name: 'RunRecoveredError',
+            message: reason,
+          },
+          recovered: true,
+        },
+      });
+      createActivityTracker(options.database, {
+        runId: lockState.value.runId,
+        runType: lockState.value.runType,
+      }).warn({
+        source: 'scheduler',
+        stage: 'manual_recovery',
+        message: `${lockState.value.runType.replace('_', ' ')} run was manually recovered`,
+        detail: reason,
+      });
+      releaseSchedulerLock(options.database, lockState.value.runId, finishedAtIso);
+
+      return {
+        recovered: true,
+        runId: lockState.value.runId,
       };
     },
   };

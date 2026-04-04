@@ -516,6 +516,7 @@ test('sync and dispatch work together in a mocked end-to-end cycle', async () =>
         scheduler: {
           cycleEveryMs: 6 * 3_600_000,
           startupGracePeriodMs: 10 * 60_000,
+          maxRunDurationMs: 30 * 60_000,
         },
         policies: {
           sonarr: {

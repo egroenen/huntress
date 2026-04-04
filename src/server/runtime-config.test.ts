@@ -37,6 +37,7 @@ instances:
 scheduler:
   cycle_every: "6h"
   startup_grace_period: "10m"
+  max_run_duration: "30m"
 policies:
   sonarr:
     max_searches_per_cycle: 6

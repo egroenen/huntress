@@ -153,6 +153,7 @@ const resolveConfig = (
     scheduler: {
       cycleEveryMs: durationToMs(rawConfig.scheduler.cycle_every),
       startupGracePeriodMs: durationToMs(rawConfig.scheduler.startup_grace_period),
+      maxRunDurationMs: durationToMs(rawConfig.scheduler.max_run_duration),
     },
     policies: {
       sonarr: resolveSearchPolicy(rawConfig.policies.sonarr),

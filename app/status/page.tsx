@@ -50,6 +50,8 @@ export default async function StatusPage() {
   const runtime = await requireAuthenticatedConsoleContext();
   const activity = getActivityFeedState(runtime.database);
   const current = activity.current;
+  const schedulerStatus = runtime.scheduler.getStatus();
+  const activeRun = schedulerStatus.activeRun;
 
   return (
     <ConsoleShell
@@ -58,7 +60,7 @@ export default async function StatusPage() {
       activePath="/status"
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
-      schedulerStatus={runtime.scheduler.getStatus()}
+      schedulerStatus={schedulerStatus}
       actionTokens={runtime.csrfTokens}
     >
       <AutoRefresh intervalMs={3000} />
@@ -66,11 +68,11 @@ export default async function StatusPage() {
       <StatsGrid>
         <StatCard
           label="Active run"
-          value={runtime.scheduler.getStatus().activeRun?.runType.replace('_', ' ') ?? 'idle'}
-          tone={runtime.scheduler.getStatus().activeRun ? 'success' : 'default'}
+          value={activeRun?.runType.replace('_', ' ') ?? 'idle'}
+          tone={activeRun ? (activeRun.overrun ? 'danger' : 'success') : 'default'}
           detail={
-            runtime.scheduler.getStatus().activeRun
-              ? formatTimestamp(runtime.scheduler.getStatus().activeRun?.startedAt ?? null)
+            activeRun
+              ? `${formatTimestamp(activeRun.startedAt)} · ${Math.round(activeRun.durationMs / 1000)}s elapsed`
               : 'No scheduler lock currently active'
           }
         />
@@ -107,6 +109,16 @@ export default async function StatusPage() {
       <SectionCard
         title="Current activity"
         subtitle="The most recent active stage reported by the running job."
+        actions={
+          activeRun ? (
+            <form action="/api/actions/recover-run" method="post">
+              <input type="hidden" name="csrfToken" value={runtime.csrfTokens.recoverRun} />
+              <button type="submit" className="table-inline-button">
+                Recover run
+              </button>
+            </form>
+          ) : null
+        }
       >
         <div className="activity-panel">
           <div className="activity-panel__header">
@@ -146,7 +158,15 @@ export default async function StatusPage() {
           <div className="activity-panel__meta">
             <span>Updated {formatTimestamp(current?.occurredAt ?? null)}</span>
             <span>Run {current?.runId ?? 'n/a'}</span>
-            <span>Progress {formatProgress(current?.progressCurrent ?? null, current?.progressTotal ?? null)}</span>
+            <span>
+              Progress {formatProgress(current?.progressCurrent ?? null, current?.progressTotal ?? null)}
+            </span>
+            {activeRun ? (
+              <span>
+                Max duration {Math.round(schedulerStatus.maxRunDurationMs / 60_000)}m
+                {activeRun.overrun ? ' · overrun' : ''}
+              </span>
+            ) : null}
           </div>
         </div>
       </SectionCard>

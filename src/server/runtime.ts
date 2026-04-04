@@ -152,7 +152,12 @@ const buildRuntimeCore = async () => {
     database,
     cadenceMs: resolved.config.scheduler.cycleEveryMs,
     startupGracePeriodMs: resolved.config.scheduler.startupGracePeriodMs,
-    lockTtlMs: Math.max(resolved.config.scheduler.cycleEveryMs, 15 * 60_000),
+    maxRunDurationMs: resolved.config.scheduler.maxRunDurationMs,
+    lockTtlMs: Math.max(
+      resolved.config.scheduler.maxRunDurationMs,
+      resolved.config.scheduler.cycleEveryMs,
+      15 * 60_000
+    ),
     async executeRun(context) {
       const activityTracker = context.activity;
       const baseRuntimeState = createRuntimeState();
@@ -286,4 +291,9 @@ export const runManualCycle = async (
 ) => {
   const runtime = await getRuntimeContext();
   return runtime.scheduler.runManual(runType);
+};
+
+export const recoverActiveRun = async (reason?: string) => {
+  const runtime = await getRuntimeContext();
+  return runtime.scheduler.recoverActiveRun(reason);
 };

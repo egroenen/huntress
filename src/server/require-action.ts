@@ -14,6 +14,7 @@ type ActionName =
   | 'run-sync'
   | 'run-dry'
   | 'run-live'
+  | 'recover-run'
   | 'save-settings'
   | `clear-suppression:${number}`
   | `test-connection:${'sonarr' | 'radarr' | 'prowlarr' | 'transmission'}`;
