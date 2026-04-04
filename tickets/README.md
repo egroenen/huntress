@@ -23,6 +23,7 @@ The tickets are written as plain Markdown so they can be worked through in order
 15. `T015-release-selection-and-upgrade-escalation.md`
 16. `T016-search-rate-controls-and-budget-visibility.md`
 17. `T017-in-app-configuration-bootstrap.md`
+18. `T018-incremental-arr-page-coverage.md`
 
 ## Notes
 
@@ -35,3 +36,4 @@ The tickets are written as plain Markdown so they can be worked through in order
 - `T015` is intentionally post-MVP. It expands the orchestrator from “decide what to search” into “participate in which release to accept.”
 - `T016` is high-value even if it lands late. Search-rate protection and visibility are essential for private-tracker-safe operation.
 - `T017` makes the app bootable and operable before external services are fully configured, replacing env-var-only startup with persisted in-app connection settings.
+- `T018` changes large-library sync from full pagination walks to incremental page coverage with persisted history so we can avoid re-reading thousands of pages every cycle.
