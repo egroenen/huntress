@@ -407,8 +407,9 @@ select {
 }
 
 .status-badge--running {
-  background: rgba(37, 169, 214, 0.15);
-  color: #126a87;
+  background: #d5f2fb;
+  border-color: #39a6cd;
+  color: #0f4f67;
 }
 
 .data-table {
