@@ -1,6 +1,6 @@
 # T005: External Client Foundations
 
-Status: Backlog
+Status: Done
 
 ## Goal
 
