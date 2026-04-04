@@ -39,11 +39,7 @@ export const isServiceConfigured = (
   settings: PersistedConnectionSettings
 ): boolean => {
   if (service === 'transmission') {
-    return Boolean(
-      settings.transmission.url &&
-      settings.transmission.username &&
-      settings.transmission.password
-    );
+    return Boolean(settings.transmission.url);
   }
 
   return Boolean(settings[service].url && settings[service].apiKey);

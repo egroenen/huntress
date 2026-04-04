@@ -148,3 +148,47 @@ test('resolveRuntimeConfig prefers persisted connection settings when env secret
     database.close();
   }
 });
+
+test('resolveRuntimeConfig treats a URL-only transmission setup as configured', async () => {
+  const configPath = await createConfigFile(baseConfig);
+  const databasePath = await createDatabasePath();
+  const database = await initializeDatabase(databasePath);
+
+  try {
+    const loadedConfig = await loadConfig({
+      argv: ['--config', configPath],
+      env: {},
+    });
+
+    savePersistedConnectionSettings(database, {
+      sonarr: {
+        url: 'http://nas.lan:8989',
+        apiKey: 'persisted-sonarr-key',
+      },
+      radarr: {
+        url: 'http://nas.lan:7878',
+        apiKey: 'persisted-radarr-key',
+      },
+      prowlarr: {
+        url: 'http://nas.lan:9696',
+        apiKey: 'persisted-prowlarr-key',
+      },
+      transmission: {
+        url: 'http://nas.lan:9091/transmission/rpc',
+        username: null,
+        password: null,
+      },
+    });
+
+    const resolved = resolveRuntimeConfig(loadedConfig, database);
+
+    assert.equal(resolved.connectionStatus.transmission.configured, true);
+    assert.equal(resolved.connectionStatus.transmission.secretSource, 'none');
+    assert.equal(
+      resolved.connectionStatus.transmission.summary,
+      'Ready to connect without credentials.'
+    );
+  } finally {
+    database.close();
+  }
+});

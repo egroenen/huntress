@@ -42,8 +42,8 @@ interface TransmissionRpcEnvelope {
 
 export interface TransmissionClientOptions {
   baseUrl: string;
-  username: string;
-  password: string;
+  username?: string | null;
+  password?: string | null;
   timeoutMs?: number;
 }
 
@@ -69,8 +69,11 @@ export const createTransmissionClient = (options: TransmissionClientOptions) => 
     const send = async (): Promise<Response> => {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        Authorization: `Basic ${createBasicAuth(options.username, options.password)}`,
       };
+
+      if (options.username && options.password) {
+        headers.Authorization = `Basic ${createBasicAuth(options.username, options.password)}`;
+      }
 
       if (sessionId) {
         headers['X-Transmission-Session-Id'] = sessionId;

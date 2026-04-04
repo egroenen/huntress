@@ -195,6 +195,7 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
                 type="text"
                 name="transmissionUsername"
                 defaultValue={connectionSettings.transmission.username ?? ''}
+                placeholder="Optional"
               />
             </label>
             <label>
@@ -203,6 +204,7 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
                 type="password"
                 name="transmissionPassword"
                 defaultValue={connectionSettings.transmission.password ?? ''}
+                placeholder="Optional"
               />
             </label>
           </section>

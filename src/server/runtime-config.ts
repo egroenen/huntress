@@ -23,7 +23,7 @@ export interface PersistedConnectionSettings {
   transmission: PersistedTransmissionConnectionSettings;
 }
 
-type SecretSource = 'env' | 'persisted' | 'generated' | 'missing';
+type SecretSource = 'env' | 'persisted' | 'generated' | 'missing' | 'none';
 type UrlSource = 'persisted' | 'config';
 
 export interface RuntimeConnectionStatus {
@@ -37,7 +37,7 @@ export interface RuntimeConnectionStatus {
 export interface ResolvedRuntimeConfig {
   config: ResolvedConfig;
   redactedConfig: RedactedResolvedConfig;
-  sessionSecretSource: Exclude<SecretSource, 'missing'>;
+  sessionSecretSource: 'env' | 'generated';
   connectionStatus: Record<ConfigurableServiceName, RuntimeConnectionStatus>;
 }
 
@@ -342,11 +342,7 @@ export const resolveRuntimeConfig = (
       },
       transmission: {
         service: 'transmission',
-        configured: Boolean(
-          config.instances.transmission.url &&
-          config.instances.transmission.username &&
-          config.instances.transmission.password
-        ),
+        configured: Boolean(config.instances.transmission.url),
         urlSource: persistedConnections.transmission.url ? 'persisted' : 'config',
         secretSource:
           loadedConfig.config.instances.transmission.username ||
@@ -355,11 +351,10 @@ export const resolveRuntimeConfig = (
             : persistedConnections.transmission.username ||
                 persistedConnections.transmission.password
               ? 'persisted'
-              : 'missing',
-        summary:
-          config.instances.transmission.username && config.instances.transmission.password
-            ? 'Ready to connect.'
-            : 'URL is set, but Transmission credentials still need to be configured.',
+              : 'none',
+        summary: config.instances.transmission.username && config.instances.transmission.password
+          ? 'Ready to connect using configured credentials.'
+          : 'Ready to connect without credentials.',
       },
     },
   };

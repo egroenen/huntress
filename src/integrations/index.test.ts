@@ -365,6 +365,49 @@ test('Transmission probe returns session metadata', async () => {
   }
 });
 
+test('Transmission probe works without basic auth when the RPC endpoint is open', async () => {
+  let authorizationHeader: string | undefined;
+
+  const server = await startJsonServer((request, response) => {
+    authorizationHeader =
+      typeof request.headers.authorization === 'string'
+        ? request.headers.authorization
+        : undefined;
+
+    if (request.headers['x-transmission-session-id'] !== 'session-open') {
+      response.statusCode = 409;
+      response.setHeader('X-Transmission-Session-Id', 'session-open');
+      response.end();
+      return;
+    }
+
+    response.setHeader('Content-Type', 'application/json');
+    response.end(
+      JSON.stringify({
+        arguments: {
+          'rpc-version': 17,
+          'rpc-version-minimum': 15,
+          version: '4.0.6',
+        },
+        result: 'success',
+      })
+    );
+  });
+
+  try {
+    const client = createTransmissionClient({
+      baseUrl: server.url,
+    });
+
+    const session = await client.probeSession();
+
+    assert.equal(session.rpcVersion, 17);
+    assert.equal(authorizationHeader, undefined);
+  } finally {
+    await server.close();
+  }
+});
+
 test('request timeouts surface as IntegrationError', async () => {
   const server = await startJsonServer((_request, response) => {
     setTimeout(() => {

@@ -68,14 +68,13 @@ const createClients = (config: RuntimeContext['config']): RuntimeContext['client
           apiKey: config.instances.prowlarr.apiKey,
         })
       : null,
-    transmission:
-      config.instances.transmission.username && config.instances.transmission.password
-        ? createTransmissionClient({
-            baseUrl: config.instances.transmission.url,
-            username: config.instances.transmission.username,
-            password: config.instances.transmission.password,
-          })
-        : null,
+    transmission: config.instances.transmission.url
+      ? createTransmissionClient({
+          baseUrl: config.instances.transmission.url,
+          username: config.instances.transmission.username,
+          password: config.instances.transmission.password,
+        })
+      : null,
   };
 };
 
