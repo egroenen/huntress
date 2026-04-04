@@ -101,7 +101,7 @@ export interface ArrClientOptions {
   serviceName?: 'sonarr' | 'radarr';
 }
 
-const DEFAULT_WANTED_PAGE_SIZE = 250;
+const DEFAULT_WANTED_PAGE_SIZE = 50;
 
 export const createArrHeaders = (apiKey: string): Record<string, string> => {
   return {

@@ -119,7 +119,7 @@ const createResolvedConfig = (): ResolvedConfig => {
       maxRunDurationMs: 30 * 60_000,
     },
     sync: {
-      wantedPageSize: 250,
+      wantedPageSize: 50,
       fullScanPageThreshold: 20,
       maxWantedPagesPerCollection: 4,
     },

@@ -66,7 +66,7 @@ test('Sonarr client probes system status and normalizes wanted/queue responses',
     }
 
     if (url.pathname === '/api/v3/wanted/missing') {
-      assert.equal(url.searchParams.get('pageSize'), '250');
+      assert.equal(url.searchParams.get('pageSize'), '50');
       const page = Number(url.searchParams.get('page') ?? '1');
       response.end(
         JSON.stringify([
@@ -89,7 +89,7 @@ test('Sonarr client probes system status and normalizes wanted/queue responses',
     }
 
     if (url.pathname === '/api/v3/wanted/cutoff' && url.searchParams.get('page') === '2') {
-      assert.equal(url.searchParams.get('pageSize'), '250');
+      assert.equal(url.searchParams.get('pageSize'), '50');
       response.end(
         JSON.stringify({
           page: 2,
@@ -111,7 +111,7 @@ test('Sonarr client probes system status and normalizes wanted/queue responses',
     }
 
     if (url.pathname === '/api/v3/wanted/cutoff') {
-      assert.equal(url.searchParams.get('pageSize'), '250');
+      assert.equal(url.searchParams.get('pageSize'), '50');
       response.end(
         JSON.stringify({
           page: 1,
@@ -158,7 +158,7 @@ test('Sonarr client probes system status and normalizes wanted/queue responses',
     const client = createSonarrClient({
       baseUrl: server.url,
       apiKey: 'sonarr-key',
-      wantedPageSize: 250,
+      wantedPageSize: 50,
     });
 
     const [status, missing, cutoff, queue] = await Promise.all([
@@ -194,7 +194,7 @@ test('Radarr client normalizes wanted movie responses', async () => {
     }
 
     if (url.pathname === '/api/v3/wanted/missing' && url.searchParams.get('page') === '2') {
-      assert.equal(url.searchParams.get('pageSize'), '250');
+      assert.equal(url.searchParams.get('pageSize'), '50');
       response.end(
         JSON.stringify({
           page: 2,
@@ -215,7 +215,7 @@ test('Radarr client normalizes wanted movie responses', async () => {
     }
 
     if (url.pathname === '/api/v3/wanted/missing') {
-      assert.equal(url.searchParams.get('pageSize'), '250');
+      assert.equal(url.searchParams.get('pageSize'), '50');
       response.end(
         JSON.stringify({
           page: 1,
@@ -236,7 +236,7 @@ test('Radarr client normalizes wanted movie responses', async () => {
     }
 
     if (url.pathname === '/api/v3/wanted/cutoff') {
-      assert.equal(url.searchParams.get('pageSize'), '250');
+      assert.equal(url.searchParams.get('pageSize'), '50');
       response.end(
         JSON.stringify([
           {
@@ -264,7 +264,7 @@ test('Radarr client normalizes wanted movie responses', async () => {
     const client = createRadarrClient({
       baseUrl: server.url,
       apiKey: 'radarr-key',
-      wantedPageSize: 250,
+      wantedPageSize: 50,
     });
 
     const missing = await client.getWantedMissing();

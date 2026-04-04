@@ -39,7 +39,7 @@ scheduler:
   startup_grace_period: "10m"
   max_run_duration: "30m"
 sync:
-  wanted_page_size: 250
+  wanted_page_size: 50
   full_scan_page_threshold: 20
   max_wanted_pages_per_collection: 4
 policies:

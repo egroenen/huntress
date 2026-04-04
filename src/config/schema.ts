@@ -47,7 +47,7 @@ export const rawConfigSchema = z.object({
     max_run_duration: durationStringSchema,
   }),
   sync: z.object({
-    wanted_page_size: z.number().int().positive().default(250),
+    wanted_page_size: z.number().int().positive().default(50),
     full_scan_page_threshold: z.number().int().positive().default(20),
     max_wanted_pages_per_collection: z.number().int().positive().default(4),
   }),

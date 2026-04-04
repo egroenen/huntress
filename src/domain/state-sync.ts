@@ -240,7 +240,7 @@ const buildIgnoredRecord = (
 };
 
 const DEFAULT_SYNC_COVERAGE_CONFIG: SyncCoverageConfig = {
-  wantedPageSize: 250,
+  wantedPageSize: 50,
   fullScanPageThreshold: 20,
   maxWantedPagesPerCollection: 4,
 };

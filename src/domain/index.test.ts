@@ -416,7 +416,7 @@ test('syncArrState incrementally expands wanted page coverage for large collecti
 
   try {
     const syncConfig = {
-      wantedPageSize: 250,
+      wantedPageSize: 50,
       fullScanPageThreshold: 2,
       maxWantedPagesPerCollection: 3,
     };
@@ -427,12 +427,12 @@ test('syncArrState incrementally expands wanted page coverage for large collecti
         sonarr: createSonarrClient({
           baseUrl: `${server.url}/sonarr`,
           apiKey: 'sonarr-key',
-          wantedPageSize: 250,
+          wantedPageSize: 50,
         }),
         radarr: createRadarrClient({
           baseUrl: `${server.url}/radarr`,
           apiKey: 'radarr-key',
-          wantedPageSize: 250,
+          wantedPageSize: 50,
         }),
       },
       syncConfig,
@@ -459,12 +459,12 @@ test('syncArrState incrementally expands wanted page coverage for large collecti
         sonarr: createSonarrClient({
           baseUrl: `${server.url}/sonarr`,
           apiKey: 'sonarr-key',
-          wantedPageSize: 250,
+          wantedPageSize: 50,
         }),
         radarr: createRadarrClient({
           baseUrl: `${server.url}/radarr`,
           apiKey: 'radarr-key',
-          wantedPageSize: 250,
+          wantedPageSize: 50,
         }),
       },
       syncConfig,
@@ -655,7 +655,7 @@ test('sync and dispatch work together in a mocked end-to-end cycle', async () =>
           maxRunDurationMs: 30 * 60_000,
         },
         sync: {
-          wantedPageSize: 250,
+          wantedPageSize: 50,
           fullScanPageThreshold: 20,
           maxWantedPagesPerCollection: 4,
         },
