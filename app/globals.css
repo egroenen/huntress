@@ -128,8 +128,7 @@ select {
 }
 
 .secondary-button,
-.console-button--ghost,
-.table-inline-button {
+.console-button--ghost {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.12);
   color: var(--text);
