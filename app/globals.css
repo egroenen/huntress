@@ -581,6 +581,11 @@ select {
   gap: 1rem;
 }
 
+.transmission-controls {
+  display: grid;
+  gap: 1rem;
+}
+
 .candidate-section-controls {
   display: flex;
   justify-content: flex-end;
