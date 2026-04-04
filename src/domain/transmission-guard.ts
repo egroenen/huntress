@@ -196,11 +196,23 @@ const removeTorrentAndSuppress = async (input: {
 export const runTransmissionGuard = async (input: {
   database: DatabaseContext;
   config: ResolvedConfig;
-  client: TransmissionApiClient;
+  client: TransmissionApiClient | null;
   now?: Date;
 }): Promise<TransmissionGuardRunSummary> => {
   const now = input.now ?? new Date();
   const nowIso = now.toISOString();
+  if (!input.client) {
+    updateActiveSuppressionsMetric(
+      input.database.repositories.releaseSuppressions.listActive(nowIso).length
+    );
+
+    return {
+      observedCount: 0,
+      removedCount: 0,
+      suppressionCount: 0,
+      linkedCount: 0,
+    };
+  }
   const torrents = await input.client.getTorrents();
   const mediaItems = listMediaItems(input.database);
 

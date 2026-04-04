@@ -540,6 +540,113 @@ select {
   padding: 1.2rem 1rem;
 }
 
+.settings-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.settings-status-card {
+  border: 1px solid #d9e3ee;
+  border-radius: 10px;
+  background: #f9fbfe;
+  padding: 1rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.settings-status-card__header,
+.settings-form__heading,
+.settings-form__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.settings-status-card__header h4,
+.settings-form__heading h4 {
+  margin: 0;
+}
+
+.settings-status-card p {
+  margin: 0;
+  color: var(--content-muted);
+}
+
+.settings-status-card__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin: 0;
+}
+
+.settings-status-card__meta dt {
+  color: var(--content-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.settings-status-card__meta dd {
+  margin: 0.25rem 0 0;
+  color: #243142;
+  font-weight: 600;
+}
+
+.settings-form {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.settings-form__section {
+  display: grid;
+  gap: 0.85rem;
+  border: 1px solid #d9e3ee;
+  border-radius: 10px;
+  background: #f9fbfe;
+  padding: 1rem;
+}
+
+.settings-form__section label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.settings-form__section span {
+  color: var(--content-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.settings-form__section input {
+  border: 1px solid #d9e3ee;
+  border-radius: 8px;
+  background: #fff;
+  color: #243142;
+  padding: 0.72rem 0.85rem;
+}
+
+.settings-notice {
+  margin: 0 0 1rem;
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  font-weight: 600;
+}
+
+.settings-notice.is-success {
+  background: rgba(39, 174, 96, 0.12);
+  color: #18703b;
+}
+
+.settings-notice.is-error {
+  background: rgba(214, 69, 80, 0.12);
+  color: #982330;
+}
+
 @media (max-width: 1100px) {
   .console-shell {
     grid-template-columns: 13.5rem minmax(0, 1fr);
@@ -547,7 +654,9 @@ select {
 
   .stats-grid,
   .dependency-grid,
-  .latest-run__summary {
+  .latest-run__summary,
+  .settings-status-grid,
+  .settings-status-card__meta {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -577,7 +686,15 @@ select {
 
   .stats-grid,
   .dependency-grid,
-  .latest-run__summary {
+  .latest-run__summary,
+  .settings-status-grid,
+  .settings-status-card__meta {
     grid-template-columns: 1fr;
+  }
+
+  .settings-form__heading,
+  .settings-form__actions {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

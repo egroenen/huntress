@@ -18,27 +18,27 @@ export const rawConfigSchema = z.object({
   }),
   auth: z.object({
     enabled: z.boolean(),
-    session_secret_env: z.string().min(1),
+    session_secret_env: z.string().min(1).optional().default('APP_SESSION_SECRET'),
     session_absolute_ttl: durationStringSchema,
     session_idle_ttl: durationStringSchema,
   }),
   instances: z.object({
     sonarr: z.object({
       url: z.string().url(),
-      api_key_env: z.string().min(1),
+      api_key_env: z.string().min(1).optional().default('SONARR_API_KEY'),
     }),
     radarr: z.object({
       url: z.string().url(),
-      api_key_env: z.string().min(1),
+      api_key_env: z.string().min(1).optional().default('RADARR_API_KEY'),
     }),
     prowlarr: z.object({
       url: z.string().url(),
-      api_key_env: z.string().min(1),
+      api_key_env: z.string().min(1).optional().default('PROWLARR_API_KEY'),
     }),
     transmission: z.object({
       url: z.string().url(),
-      username_env: z.string().min(1),
-      password_env: z.string().min(1),
+      username_env: z.string().min(1).optional().default('TRANSMISSION_RPC_USERNAME'),
+      password_env: z.string().min(1).optional().default('TRANSMISSION_RPC_PASSWORD'),
     }),
   }),
   scheduler: z.object({
@@ -109,7 +109,7 @@ export const resolvedConfigSchema = z
     }),
     auth: z.object({
       enabled: z.boolean(),
-      sessionSecret: z.string().min(1),
+      sessionSecret: z.string().min(1).nullable(),
       sessionSecretEnv: z.string().min(1),
       sessionAbsoluteTtlMs: z.number().int().positive(),
       sessionIdleTtlMs: z.number().int().positive(),
@@ -117,24 +117,24 @@ export const resolvedConfigSchema = z
     instances: z.object({
       sonarr: z.object({
         url: z.string().url(),
-        apiKey: z.string().min(1),
+        apiKey: z.string().min(1).nullable(),
         apiKeyEnv: z.string().min(1),
       }),
       radarr: z.object({
         url: z.string().url(),
-        apiKey: z.string().min(1),
+        apiKey: z.string().min(1).nullable(),
         apiKeyEnv: z.string().min(1),
       }),
       prowlarr: z.object({
         url: z.string().url(),
-        apiKey: z.string().min(1),
+        apiKey: z.string().min(1).nullable(),
         apiKeyEnv: z.string().min(1),
       }),
       transmission: z.object({
         url: z.string().url(),
-        username: z.string().min(1),
+        username: z.string().min(1).nullable(),
         usernameEnv: z.string().min(1),
-        password: z.string().min(1),
+        password: z.string().min(1).nullable(),
         passwordEnv: z.string().min(1),
       }),
     }),
@@ -188,24 +188,24 @@ export interface RedactedResolvedConfig extends Omit<
   'auth' | 'instances'
 > {
   auth: Omit<ResolvedConfig['auth'], 'sessionSecret'> & {
-    sessionSecret: '[redacted]';
+    sessionSecret: '[redacted]' | null;
   };
   instances: {
     sonarr: Omit<ResolvedConfig['instances']['sonarr'], 'apiKey'> & {
-      apiKey: '[redacted]';
+      apiKey: '[redacted]' | null;
     };
     radarr: Omit<ResolvedConfig['instances']['radarr'], 'apiKey'> & {
-      apiKey: '[redacted]';
+      apiKey: '[redacted]' | null;
     };
     prowlarr: Omit<ResolvedConfig['instances']['prowlarr'], 'apiKey'> & {
-      apiKey: '[redacted]';
+      apiKey: '[redacted]' | null;
     };
     transmission: Omit<
       ResolvedConfig['instances']['transmission'],
       'username' | 'password'
     > & {
-      username: '[redacted]';
-      password: '[redacted]';
+      username: '[redacted]' | null;
+      password: '[redacted]' | null;
     };
   };
 }

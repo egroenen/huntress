@@ -21,8 +21,8 @@ import {
 } from './decision-engine';
 
 export interface SearchDispatchClients {
-  sonarr: SonarrApiClient;
-  radarr: RadarrApiClient;
+  sonarr: SonarrApiClient | null;
+  radarr: RadarrApiClient | null;
 }
 
 export interface SearchDispatchRunInput {
@@ -66,6 +66,7 @@ const getAppItems = (
 const buildDecisionSet = (
   database: DatabaseContext,
   config: ResolvedConfig,
+  clients: SearchDispatchClients,
   now: Date
 ): CandidateDecision[] => {
   const sonarrItems = getAppItems(database, 'sonarr_episode');
@@ -76,7 +77,7 @@ const buildDecisionSet = (
     now,
     panicDisableSearch: config.safety.panicDisableSearch,
     globalSearchBlocked: false,
-    appAvailable: true,
+    appAvailable: clients.sonarr !== null,
     appDispatchLimit: config.policies.sonarr.maxSearchesPerCycle,
     globalDispatchLimit: config.safety.maxGlobalDispatchPerCycle,
   });
@@ -93,7 +94,7 @@ const buildDecisionSet = (
     now,
     panicDisableSearch: config.safety.panicDisableSearch,
     globalSearchBlocked: false,
-    appAvailable: true,
+    appAvailable: clients.radarr !== null,
     appDispatchLimit: config.policies.radarr.maxSearchesPerCycle,
     globalDispatchLimit: Math.max(
       config.safety.maxGlobalDispatchPerCycle - sonarrReservedDispatches,
@@ -107,9 +108,15 @@ const buildDecisionSet = (
 export const getSearchCandidatePreview = (input: {
   database: DatabaseContext;
   config: ResolvedConfig;
+  clients: SearchDispatchClients;
   now?: Date;
 }): CandidateDecision[] => {
-  return buildDecisionSet(input.database, input.config, input.now ?? new Date());
+  return buildDecisionSet(
+    input.database,
+    input.config,
+    input.clients,
+    input.now ?? new Date()
+  );
 };
 
 const createItemMap = (database: DatabaseContext): Map<string, MediaItemStateRecord> => {
@@ -197,7 +204,15 @@ const dispatchCandidate = async (
   item: MediaItemStateRecord
 ) => {
   if (item.mediaType === 'sonarr_episode') {
+    if (!clients.sonarr) {
+      throw new Error('Sonarr is not configured');
+    }
+
     return clients.sonarr.searchEpisode(item.arrId);
+  }
+
+  if (!clients.radarr) {
+    throw new Error('Radarr is not configured');
   }
 
   return clients.radarr.searchMovie(item.arrId);
@@ -213,7 +228,7 @@ export const executeSearchDispatchRun = async (
     input.sleep ??
     ((durationMs: number) =>
       new Promise<void>((resolve) => setTimeout(resolve, durationMs)));
-  const decisions = buildDecisionSet(input.database, input.config, runNow);
+  const decisions = buildDecisionSet(input.database, input.config, input.clients, runNow);
   const itemMap = createItemMap(input.database);
   const attempts: SearchAttemptRecord[] = [];
   const throttleState = getThrottleState(input.database, nowIso);

@@ -22,6 +22,7 @@ The tickets are written as plain Markdown so they can be worked through in order
 14. `T014-test-harness-and-hardening.md`
 15. `T015-release-selection-and-upgrade-escalation.md`
 16. `T016-search-rate-controls-and-budget-visibility.md`
+17. `T017-in-app-configuration-bootstrap.md`
 
 ## Notes
 
@@ -33,3 +34,4 @@ The tickets are written as plain Markdown so they can be worked through in order
 - Each ticket should carry a top-level `Status` field using: `Backlog`, `In Progress`, `Testing`, or `Done`.
 - `T015` is intentionally post-MVP. It expands the orchestrator from “decide what to search” into “participate in which release to accept.”
 - `T016` is high-value even if it lands late. Search-rate protection and visibility are essential for private-tracker-safe operation.
+- `T017` makes the app bootable and operable before external services are fully configured, replacing env-var-only startup with persisted in-app connection settings.

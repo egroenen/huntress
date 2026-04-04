@@ -14,3 +14,4 @@ next-env.d.ts
 *.sqlite-wal
 coverage/
 tsconfig.tsbuildinfo
+tsconfig.typecheck.tsbuildinfo

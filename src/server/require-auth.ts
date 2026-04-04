@@ -53,6 +53,26 @@ export const requireAuthenticatedConsoleContext = async () => {
         `action:run-live:${authenticated.sessionId}`,
         runtime.config.auth.sessionSecret
       ),
+      saveSettings: createCsrfToken(
+        `action:save-settings:${authenticated.sessionId}`,
+        runtime.config.auth.sessionSecret
+      ),
+      testSonarr: createCsrfToken(
+        `action:test-connection:sonarr:${authenticated.sessionId}`,
+        runtime.config.auth.sessionSecret
+      ),
+      testRadarr: createCsrfToken(
+        `action:test-connection:radarr:${authenticated.sessionId}`,
+        runtime.config.auth.sessionSecret
+      ),
+      testProwlarr: createCsrfToken(
+        `action:test-connection:prowlarr:${authenticated.sessionId}`,
+        runtime.config.auth.sessionSecret
+      ),
+      testTransmission: createCsrfToken(
+        `action:test-connection:transmission:${authenticated.sessionId}`,
+        runtime.config.auth.sessionSecret
+      ),
     },
   };
 };

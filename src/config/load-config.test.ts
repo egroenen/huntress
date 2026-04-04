@@ -101,20 +101,21 @@ test('loadConfig resolves a valid config file and redacts secrets', async () => 
   assert.equal(redactedConfig.auth.sessionSecret, '[redacted]');
 });
 
-test('loadConfig fails when a required environment variable is missing', async () => {
+test('loadConfig keeps missing environment-backed secrets unset instead of failing', async () => {
   const configPath = await createConfigFile(baseConfig);
+  const { config, redactedConfig } = await loadConfig({
+    argv: ['--config', configPath],
+    env: {
+      ...validEnv,
+      SONARR_API_KEY: undefined,
+      APP_SESSION_SECRET: undefined,
+    },
+  });
 
-  await assert.rejects(
-    async () =>
-      loadConfig({
-        argv: ['--config', configPath],
-        env: {
-          ...validEnv,
-          SONARR_API_KEY: undefined,
-        },
-      }),
-    /Missing required environment variable: SONARR_API_KEY/
-  );
+  assert.equal(config.instances.sonarr.apiKey, null);
+  assert.equal(config.auth.sessionSecret, null);
+  assert.equal(redactedConfig.instances.sonarr.apiKey, null);
+  assert.equal(redactedConfig.auth.sessionSecret, null);
 });
 
 test('loadConfig fails when absolute session TTL is not greater than idle TTL', async () => {

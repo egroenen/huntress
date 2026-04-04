@@ -2,15 +2,15 @@ import 'server-only';
 
 import { cookies, headers } from 'next/headers';
 
-import { loadConfig } from '@/src/config';
-import { getDatabaseContext } from '@/src/db/runtime';
+import { getRuntimeContext } from '@/src/server/runtime';
 
 export const getAppContext = async () => {
-  const [{ config }, database] = await Promise.all([loadConfig(), getDatabaseContext()]);
+  const runtime = await getRuntimeContext();
 
   return {
-    config,
-    database,
+    config: runtime.config,
+    redactedConfig: runtime.redactedConfig,
+    database: runtime.database,
     requestMetadata: {
       ipAddress: (await headers()).get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
       userAgent: (await headers()).get('user-agent'),

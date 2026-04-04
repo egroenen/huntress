@@ -25,6 +25,7 @@ interface PersistableSnapshot {
 
 export interface AppStateSyncSummary {
   app: ArrAppName;
+  status: 'synced' | 'not_configured';
   syncedAt: string;
   missingCount: number;
   cutoffCount: number;
@@ -40,8 +41,8 @@ export interface ArrStateSyncSummary {
 }
 
 export interface ArrSyncClients {
-  sonarr: SonarrApiClient;
-  radarr: RadarrApiClient;
+  sonarr: SonarrApiClient | null;
+  radarr: RadarrApiClient | null;
 }
 
 const SONARR_MEDIA_TYPE: MediaType = 'sonarr_episode';
@@ -199,11 +200,24 @@ const syncAppState = async (input: {
   app: ArrAppName;
   mediaType: MediaType;
   database: DatabaseContext;
-  getWantedMissing: () => Promise<ArrWantedRecord[]>;
-  getWantedCutoff: () => Promise<ArrWantedRecord[]>;
-  getQueueDetails: () => Promise<ArrQueueRecord[]>;
+  getWantedMissing?: () => Promise<ArrWantedRecord[]>;
+  getWantedCutoff?: () => Promise<ArrWantedRecord[]>;
+  getQueueDetails?: () => Promise<ArrQueueRecord[]>;
   syncedAt: string;
 }): Promise<AppStateSyncSummary> => {
+  if (!input.getWantedMissing || !input.getWantedCutoff || !input.getQueueDetails) {
+    return {
+      app: input.app,
+      status: 'not_configured',
+      syncedAt: input.syncedAt,
+      missingCount: 0,
+      cutoffCount: 0,
+      queueCount: 0,
+      upsertedCount: 0,
+      ignoredCount: 0,
+    };
+  }
+
   const [missing, cutoff, queue] = await Promise.all([
     input.getWantedMissing(),
     input.getWantedCutoff(),
@@ -256,6 +270,7 @@ const syncAppState = async (input: {
 
   return {
     app: input.app,
+    status: 'synced',
     syncedAt: input.syncedAt,
     missingCount: missing.length,
     cutoffCount: cutoff.length,
@@ -271,24 +286,34 @@ export const syncArrState = async (input: {
   now?: Date;
 }): Promise<ArrStateSyncSummary> => {
   const syncedAt = (input.now ?? new Date()).toISOString();
+  const sonarrClient = input.clients.sonarr;
+  const radarrClient = input.clients.radarr;
 
   const [sonarr, radarr] = await Promise.all([
     syncAppState({
       app: 'sonarr',
       mediaType: SONARR_MEDIA_TYPE,
       database: input.database,
-      getWantedMissing: () => input.clients.sonarr.getWantedMissing(),
-      getWantedCutoff: () => input.clients.sonarr.getWantedCutoff(),
-      getQueueDetails: () => input.clients.sonarr.getQueueDetails(),
+      ...(sonarrClient
+        ? {
+            getWantedMissing: () => sonarrClient.getWantedMissing(),
+            getWantedCutoff: () => sonarrClient.getWantedCutoff(),
+            getQueueDetails: () => sonarrClient.getQueueDetails(),
+          }
+        : {}),
       syncedAt,
     }),
     syncAppState({
       app: 'radarr',
       mediaType: RADARR_MEDIA_TYPE,
       database: input.database,
-      getWantedMissing: () => input.clients.radarr.getWantedMissing(),
-      getWantedCutoff: () => input.clients.radarr.getWantedCutoff(),
-      getQueueDetails: () => input.clients.radarr.getQueueDetails(),
+      ...(radarrClient
+        ? {
+            getWantedMissing: () => radarrClient.getWantedMissing(),
+            getWantedCutoff: () => radarrClient.getWantedCutoff(),
+            getQueueDetails: () => radarrClient.getQueueDetails(),
+          }
+        : {}),
       syncedAt,
     }),
   ]);

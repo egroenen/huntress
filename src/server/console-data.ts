@@ -1,10 +1,9 @@
 import 'server-only';
 
 import type { RedactedResolvedConfig } from '@/src/config';
-import { loadConfig } from '@/src/config';
 import { getSearchCandidatePreview, type CandidateDecision } from '@/src/domain';
 import type { ProwlarrHealthRecord } from '@/src/integrations';
-import type { RuntimeContext } from '@/src/server/runtime';
+import { getRuntimeContext, type RuntimeContext } from '@/src/server/runtime';
 import type { DependencyHealthCard } from '@/src/ui';
 
 const summarizeProwlarrHealth = (
@@ -45,46 +44,115 @@ const buildUnavailableCard = (name: string, error: unknown): DependencyHealthCar
 export const probeDependencyHealth = async (
   runtime: RuntimeContext
 ): Promise<DependencyHealthCard[]> => {
+  const connectionStatus = runtime.connectionStatus;
+
+  if (
+    !runtime.clients.sonarr &&
+    !runtime.clients.radarr &&
+    !runtime.clients.prowlarr &&
+    !runtime.clients.transmission
+  ) {
+    return [
+      {
+        name: 'Sonarr',
+        status: 'degraded',
+        summary: 'Not configured yet.',
+        detail: connectionStatus.sonarr.summary,
+      },
+      {
+        name: 'Radarr',
+        status: 'degraded',
+        summary: 'Not configured yet.',
+        detail: connectionStatus.radarr.summary,
+      },
+      {
+        name: 'Prowlarr',
+        status: 'degraded',
+        summary: 'Not configured yet.',
+        detail: connectionStatus.prowlarr.summary,
+      },
+      {
+        name: 'Transmission',
+        status: 'degraded',
+        summary: 'Not configured yet.',
+        detail: connectionStatus.transmission.summary,
+      },
+    ];
+  }
+
   const [sonarr, radarr, prowlarrHealth, prowlarrIndexerStatus, transmission] =
     await Promise.allSettled([
-      runtime.clients.sonarr.probeSystemStatus(),
-      runtime.clients.radarr.probeSystemStatus(),
-      runtime.clients.prowlarr.getHealth(),
-      runtime.clients.prowlarr.getIndexerStatus(),
-      runtime.clients.transmission.probeSession(),
+      runtime.clients.sonarr?.probeSystemStatus(),
+      runtime.clients.radarr?.probeSystemStatus(),
+      runtime.clients.prowlarr?.getHealth(),
+      runtime.clients.prowlarr?.getIndexerStatus(),
+      runtime.clients.transmission?.probeSession(),
     ]);
 
   const dependencyCards: DependencyHealthCard[] = [];
 
   dependencyCards.push(
-    sonarr.status === 'fulfilled'
+    runtime.clients.sonarr === null
       ? {
           name: 'Sonarr',
-          status: 'healthy',
-          summary: sonarr.value.version
-            ? `Connected to Sonarr ${sonarr.value.version}.`
-            : 'Connected successfully.',
-          detail: sonarr.value.appName ?? null,
+          status: 'degraded',
+          summary: 'Not configured yet.',
+          detail: connectionStatus.sonarr.summary,
         }
-      : buildUnavailableCard('Sonarr', sonarr.reason)
+      : sonarr.status === 'fulfilled' && sonarr.value
+        ? {
+            name: 'Sonarr',
+            status: 'healthy',
+            summary: sonarr.value.version
+              ? `Connected to Sonarr ${sonarr.value.version}.`
+              : 'Connected successfully.',
+            detail: sonarr.value.appName ?? null,
+          }
+        : buildUnavailableCard(
+            'Sonarr',
+            sonarr.status === 'rejected'
+              ? sonarr.reason
+              : new Error('Sonarr probe returned no result')
+          )
   );
 
   dependencyCards.push(
-    radarr.status === 'fulfilled'
+    runtime.clients.radarr === null
       ? {
           name: 'Radarr',
-          status: 'healthy',
-          summary: radarr.value.version
-            ? `Connected to Radarr ${radarr.value.version}.`
-            : 'Connected successfully.',
-          detail: radarr.value.appName ?? null,
+          status: 'degraded',
+          summary: 'Not configured yet.',
+          detail: connectionStatus.radarr.summary,
         }
-      : buildUnavailableCard('Radarr', radarr.reason)
+      : radarr.status === 'fulfilled' && radarr.value
+        ? {
+            name: 'Radarr',
+            status: 'healthy',
+            summary: radarr.value.version
+              ? `Connected to Radarr ${radarr.value.version}.`
+              : 'Connected successfully.',
+            detail: radarr.value.appName ?? null,
+          }
+        : buildUnavailableCard(
+            'Radarr',
+            radarr.status === 'rejected'
+              ? radarr.reason
+              : new Error('Radarr probe returned no result')
+          )
   );
 
-  if (
+  if (runtime.clients.prowlarr === null) {
+    dependencyCards.push({
+      name: 'Prowlarr',
+      status: 'degraded',
+      summary: 'Not configured yet.',
+      detail: connectionStatus.prowlarr.summary,
+    });
+  } else if (
     prowlarrHealth.status === 'fulfilled' &&
-    prowlarrIndexerStatus.status === 'fulfilled'
+    prowlarrHealth.value &&
+    prowlarrIndexerStatus.status === 'fulfilled' &&
+    prowlarrIndexerStatus.value
   ) {
     const healthSummary = summarizeProwlarrHealth(prowlarrHealth.value);
     const enabledIndexerCount = prowlarrIndexerStatus.value.filter(
@@ -125,19 +193,31 @@ export const probeDependencyHealth = async (
   }
 
   dependencyCards.push(
-    transmission.status === 'fulfilled'
+    runtime.clients.transmission === null
       ? {
           name: 'Transmission',
-          status: 'healthy',
-          summary: transmission.value.version
-            ? `Transmission ${transmission.value.version} reachable.`
-            : 'Transmission RPC reachable.',
-          detail:
-            transmission.value.rpcVersion !== null
-              ? `RPC v${transmission.value.rpcVersion}`
-              : null,
+          status: 'degraded',
+          summary: 'Not configured yet.',
+          detail: connectionStatus.transmission.summary,
         }
-      : buildUnavailableCard('Transmission', transmission.reason)
+      : transmission.status === 'fulfilled' && transmission.value
+        ? {
+            name: 'Transmission',
+            status: 'healthy',
+            summary: transmission.value.version
+              ? `Transmission ${transmission.value.version} reachable.`
+              : 'Transmission RPC reachable.',
+            detail:
+              transmission.value.rpcVersion !== null
+                ? `RPC v${transmission.value.rpcVersion}`
+                : null,
+          }
+        : buildUnavailableCard(
+            'Transmission',
+            transmission.status === 'rejected'
+              ? transmission.reason
+              : new Error('Transmission probe returned no result')
+          )
   );
 
   return dependencyCards;
@@ -153,6 +233,10 @@ export const getDashboardCandidateSnapshot = (
   const all = getSearchCandidatePreview({
     database: runtime.database,
     config: runtime.config,
+    clients: {
+      sonarr: runtime.clients.sonarr,
+      radarr: runtime.clients.radarr,
+    },
   });
 
   return {
@@ -163,6 +247,6 @@ export const getDashboardCandidateSnapshot = (
 };
 
 export const getRedactedConfig = async (): Promise<RedactedResolvedConfig> => {
-  const { redactedConfig } = await loadConfig();
-  return redactedConfig;
+  const runtime = await getRuntimeContext();
+  return runtime.redactedConfig;
 };

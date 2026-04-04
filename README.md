@@ -14,16 +14,16 @@ Current local runtime note:
 ### Start in development
 
 1. Install dependencies with `pnpm install`
-2. Export the required secrets:
-   - `APP_SESSION_SECRET`
-   - `SONARR_API_KEY`
-   - `RADARR_API_KEY`
-   - `PROWLARR_API_KEY`
-   - `TRANSMISSION_RPC_USERNAME`
-   - `TRANSMISSION_RPC_PASSWORD`
-3. Start the dev server with `pnpm dev`
+2. Start the dev server with `pnpm dev`
 
 The Next.js dev server uses its own development port. The app's internal orchestration config still lives in [config/config.yaml](/home/eddyg/projects/edarr/config/config.yaml).
+
+Startup behavior:
+
+- If no admin user exists yet, the app redirects to `/setup`.
+- If Sonarr, Radarr, Prowlarr, or Transmission credentials are missing, the app still boots and exposes the settings page so you can configure them in-app.
+- If `APP_SESSION_SECRET` is not set, edarr auto-generates and persists one locally.
+- In local development, if the sample `/data/...` SQLite path is not writable, edarr falls back to a repo-local `./data/...` path automatically.
 
 ### Tooling
 
@@ -66,14 +66,10 @@ docker run --rm \
   -p 47892:47892 \
   -v "$(pwd)/config:/config:ro" \
   -v "$(pwd)/data:/data" \
-  -e APP_SESSION_SECRET=replace-me \
-  -e SONARR_API_KEY=replace-me \
-  -e RADARR_API_KEY=replace-me \
-  -e PROWLARR_API_KEY=replace-me \
-  -e TRANSMISSION_RPC_USERNAME=replace-me \
-  -e TRANSMISSION_RPC_PASSWORD=replace-me \
   edarr:local
 ```
+
+You can still supply env vars for secrets in container deployments if you want them to override the saved in-app settings, but they are no longer required for first boot.
 
 ### Compose example
 

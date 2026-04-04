@@ -1,5 +1,5 @@
 import { mkdir } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 import BetterSqlite3, { type Database as SqliteDatabase } from 'better-sqlite3';
 
@@ -81,9 +81,30 @@ export const initializeDatabase = async (
   databasePath: string
 ): Promise<DatabaseContext> => {
   const resolvedPath = resolve(databasePath);
-  await mkdir(dirname(resolvedPath), { recursive: true });
 
-  const connection = new BetterSqlite3(resolvedPath);
+  let writablePath = resolvedPath;
+
+  try {
+    await mkdir(dirname(resolvedPath), { recursive: true });
+  } catch (error) {
+    const shouldUseLocalFallback =
+      error instanceof Error &&
+      'code' in error &&
+      error.code === 'EACCES' &&
+      resolvedPath.startsWith('/data/');
+
+    if (!shouldUseLocalFallback) {
+      throw error;
+    }
+
+    writablePath = resolve(
+      process.cwd(),
+      join('data', databasePath.slice('/data/'.length))
+    );
+    await mkdir(dirname(writablePath), { recursive: true });
+  }
+
+  const connection = new BetterSqlite3(writablePath);
   configureDatabase(connection);
 
   const appliedMigrations = applyMigrations(connection);

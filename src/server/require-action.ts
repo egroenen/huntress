@@ -10,12 +10,23 @@ import {
 } from '@/src/auth';
 import { getRuntimeContext } from '@/src/server/runtime';
 
-type ActionName = 'run-sync' | 'run-dry' | 'run-live' | `clear-suppression:${number}`;
+type ActionName =
+  | 'run-sync'
+  | 'run-dry'
+  | 'run-live'
+  | 'save-settings'
+  | `clear-suppression:${number}`
+  | `test-connection:${'sonarr' | 'radarr' | 'prowlarr' | 'transmission'}`;
 
 const buildActionPurpose = (actionName: ActionName, sessionId: string): string => {
   if (actionName.startsWith('clear-suppression:')) {
     const suppressionId = actionName.slice('clear-suppression:'.length);
     return `action:clear-suppression:${suppressionId}:${sessionId}`;
+  }
+
+  if (actionName.startsWith('test-connection:')) {
+    const service = actionName.slice('test-connection:'.length);
+    return `action:test-connection:${service}:${sessionId}`;
   }
 
   return `action:${actionName}:${sessionId}`;

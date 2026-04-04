@@ -14,7 +14,8 @@ import {
 
 const DEFAULT_CONFIG_PATHS = ['/config/config.yaml', './config/config.yaml'];
 
-const redact = (): '[redacted]' => '[redacted]';
+const redact = (value: string | null): '[redacted]' | null =>
+  value ? '[redacted]' : null;
 
 const durationToMs = (value: string): number => {
   const amount = Number.parseInt(value.slice(0, -1), 10);
@@ -62,15 +63,8 @@ const parseListenAddress = (
 
 type EnvSource = Record<string, string | undefined>;
 
-const resolveEnv = (envName: string, env: EnvSource): string => {
-  const resolvedValue = env[envName];
-
-  if (!resolvedValue) {
-    throw new Error(`Missing required environment variable: ${envName}`);
-  }
-
-  return resolvedValue;
-};
+const resolveOptionalEnv = (envName: string, env: EnvSource): string | null =>
+  env[envName]?.trim() || null;
 
 const resolveSearchPolicy = (policy: RawConfig['policies']['sonarr']) => {
   return {
@@ -127,7 +121,7 @@ const resolveConfig = (
     },
     auth: {
       enabled: rawConfig.auth.enabled,
-      sessionSecret: resolveEnv(rawConfig.auth.session_secret_env, env),
+      sessionSecret: resolveOptionalEnv(rawConfig.auth.session_secret_env, env),
       sessionSecretEnv: rawConfig.auth.session_secret_env,
       sessionAbsoluteTtlMs: durationToMs(rawConfig.auth.session_absolute_ttl),
       sessionIdleTtlMs: durationToMs(rawConfig.auth.session_idle_ttl),
@@ -135,24 +129,24 @@ const resolveConfig = (
     instances: {
       sonarr: {
         url: rawConfig.instances.sonarr.url,
-        apiKey: resolveEnv(rawConfig.instances.sonarr.api_key_env, env),
+        apiKey: resolveOptionalEnv(rawConfig.instances.sonarr.api_key_env, env),
         apiKeyEnv: rawConfig.instances.sonarr.api_key_env,
       },
       radarr: {
         url: rawConfig.instances.radarr.url,
-        apiKey: resolveEnv(rawConfig.instances.radarr.api_key_env, env),
+        apiKey: resolveOptionalEnv(rawConfig.instances.radarr.api_key_env, env),
         apiKeyEnv: rawConfig.instances.radarr.api_key_env,
       },
       prowlarr: {
         url: rawConfig.instances.prowlarr.url,
-        apiKey: resolveEnv(rawConfig.instances.prowlarr.api_key_env, env),
+        apiKey: resolveOptionalEnv(rawConfig.instances.prowlarr.api_key_env, env),
         apiKeyEnv: rawConfig.instances.prowlarr.api_key_env,
       },
       transmission: {
         url: rawConfig.instances.transmission.url,
-        username: resolveEnv(rawConfig.instances.transmission.username_env, env),
+        username: resolveOptionalEnv(rawConfig.instances.transmission.username_env, env),
         usernameEnv: rawConfig.instances.transmission.username_env,
-        password: resolveEnv(rawConfig.instances.transmission.password_env, env),
+        password: resolveOptionalEnv(rawConfig.instances.transmission.password_env, env),
         passwordEnv: rawConfig.instances.transmission.password_env,
       },
     },
@@ -204,25 +198,25 @@ const redactConfig = (config: ResolvedConfig): RedactedResolvedConfig => {
     ...config,
     auth: {
       ...config.auth,
-      sessionSecret: redact(),
+      sessionSecret: redact(config.auth.sessionSecret),
     },
     instances: {
       sonarr: {
         ...config.instances.sonarr,
-        apiKey: redact(),
+        apiKey: redact(config.instances.sonarr.apiKey),
       },
       radarr: {
         ...config.instances.radarr,
-        apiKey: redact(),
+        apiKey: redact(config.instances.radarr.apiKey),
       },
       prowlarr: {
         ...config.instances.prowlarr,
-        apiKey: redact(),
+        apiKey: redact(config.instances.prowlarr.apiKey),
       },
       transmission: {
         ...config.instances.transmission,
-        username: redact(),
-        password: redact(),
+        username: redact(config.instances.transmission.username),
+        password: redact(config.instances.transmission.password),
       },
     },
   };

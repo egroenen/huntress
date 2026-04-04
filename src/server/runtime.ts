@@ -13,65 +13,111 @@ import {
 } from '@/src/integrations';
 import { configureLogger, logger } from '@/src/observability';
 import { createSchedulerCoordinator, type CoordinatedRunType } from '@/src/scheduler';
+import {
+  resolveRuntimeConfig,
+  type ConfigurableServiceName,
+  type RuntimeConnectionStatus,
+} from '@/src/server/runtime-config';
 
 export interface RuntimeContext {
-  config: Awaited<ReturnType<typeof loadConfig>>['config'];
+  config: Awaited<ReturnType<typeof loadConfig>>['config'] & {
+    auth: Awaited<ReturnType<typeof loadConfig>>['config']['auth'] & {
+      sessionSecret: string;
+    };
+  };
+  redactedConfig: Awaited<ReturnType<typeof loadConfig>>['redactedConfig'];
   database: Awaited<ReturnType<typeof getDatabaseContext>>;
   clients: {
-    sonarr: ReturnType<typeof createSonarrClient>;
-    radarr: ReturnType<typeof createRadarrClient>;
-    prowlarr: ReturnType<typeof createProwlarrClient>;
-    transmission: ReturnType<typeof createTransmissionClient>;
+    sonarr: ReturnType<typeof createSonarrClient> | null;
+    radarr: ReturnType<typeof createRadarrClient> | null;
+    prowlarr: ReturnType<typeof createProwlarrClient> | null;
+    transmission: ReturnType<typeof createTransmissionClient> | null;
   };
+  connectionStatus: Record<ConfigurableServiceName, RuntimeConnectionStatus>;
+  sessionSecretSource: 'env' | 'persisted' | 'generated';
   scheduler: ReturnType<typeof createSchedulerCoordinator>;
 }
 
 declare global {
-  var __edarrRuntimeContext: Promise<RuntimeContext> | undefined;
+  var __edarrRuntimeCore:
+    | Promise<{
+        loadedConfig: Awaited<ReturnType<typeof loadConfig>>;
+        database: Awaited<ReturnType<typeof getDatabaseContext>>;
+        scheduler: ReturnType<typeof createSchedulerCoordinator>;
+      }>
+    | undefined;
 }
 
-const buildRuntimeContext = async (): Promise<RuntimeContext> => {
-  const [{ config }, database] = await Promise.all([loadConfig(), getDatabaseContext()]);
-  configureLogger(config.logging.level);
+const createClients = (config: RuntimeContext['config']): RuntimeContext['clients'] => {
+  return {
+    sonarr: config.instances.sonarr.apiKey
+      ? createSonarrClient({
+          baseUrl: config.instances.sonarr.url,
+          apiKey: config.instances.sonarr.apiKey,
+        })
+      : null,
+    radarr: config.instances.radarr.apiKey
+      ? createRadarrClient({
+          baseUrl: config.instances.radarr.url,
+          apiKey: config.instances.radarr.apiKey,
+        })
+      : null,
+    prowlarr: config.instances.prowlarr.apiKey
+      ? createProwlarrClient({
+          baseUrl: config.instances.prowlarr.url,
+          apiKey: config.instances.prowlarr.apiKey,
+        })
+      : null,
+    transmission:
+      config.instances.transmission.username && config.instances.transmission.password
+        ? createTransmissionClient({
+            baseUrl: config.instances.transmission.url,
+            username: config.instances.transmission.username,
+            password: config.instances.transmission.password,
+          })
+        : null,
+  };
+};
 
-  const clients = {
-    sonarr: createSonarrClient({
-      baseUrl: config.instances.sonarr.url,
-      apiKey: config.instances.sonarr.apiKey,
-    }),
-    radarr: createRadarrClient({
-      baseUrl: config.instances.radarr.url,
-      apiKey: config.instances.radarr.apiKey,
-    }),
-    prowlarr: createProwlarrClient({
-      baseUrl: config.instances.prowlarr.url,
-      apiKey: config.instances.prowlarr.apiKey,
-    }),
-    transmission: createTransmissionClient({
-      baseUrl: config.instances.transmission.url,
-      username: config.instances.transmission.username,
-      password: config.instances.transmission.password,
-    }),
+const buildRuntimeCore = async () => {
+  const [loadedConfig, database] = await Promise.all([
+    loadConfig(),
+    getDatabaseContext(),
+  ]);
+  configureLogger(loadedConfig.config.logging.level);
+
+  const resolved = resolveRuntimeConfig(loadedConfig, database);
+  const createRuntimeState = () => {
+    const nextResolved = resolveRuntimeConfig(loadedConfig, database);
+
+    return {
+      config: nextResolved.config as RuntimeContext['config'],
+      redactedConfig: nextResolved.redactedConfig,
+      clients: createClients(nextResolved.config as RuntimeContext['config']),
+      connectionStatus: nextResolved.connectionStatus,
+      sessionSecretSource: nextResolved.sessionSecretSource,
+    };
   };
 
   const scheduler = createSchedulerCoordinator({
     database,
-    cadenceMs: config.scheduler.cycleEveryMs,
-    startupGracePeriodMs: config.scheduler.startupGracePeriodMs,
-    lockTtlMs: Math.max(config.scheduler.cycleEveryMs, 15 * 60_000),
+    cadenceMs: resolved.config.scheduler.cycleEveryMs,
+    startupGracePeriodMs: resolved.config.scheduler.startupGracePeriodMs,
+    lockTtlMs: Math.max(resolved.config.scheduler.cycleEveryMs, 15 * 60_000),
     async executeRun(context) {
+      const runtimeState = createRuntimeState();
       const syncSummary = await syncArrState({
         database,
         clients: {
-          sonarr: clients.sonarr,
-          radarr: clients.radarr,
+          sonarr: runtimeState.clients.sonarr,
+          radarr: runtimeState.clients.radarr,
         },
       });
 
       const transmissionSummary = await runTransmissionGuard({
         database,
-        config,
-        client: clients.transmission,
+        config: runtimeState.config,
+        client: runtimeState.clients.transmission,
       });
 
       if (context.runType === 'sync_only') {
@@ -86,10 +132,10 @@ const buildRuntimeContext = async (): Promise<RuntimeContext> => {
 
       const dispatchSummary = await executeSearchDispatchRun({
         database,
-        config,
+        config: runtimeState.config,
         clients: {
-          sonarr: clients.sonarr,
-          radarr: clients.radarr,
+          sonarr: runtimeState.clients.sonarr,
+          radarr: runtimeState.clients.radarr,
         },
         runId: context.runId,
         live: context.liveDispatchAllowed,
@@ -115,26 +161,36 @@ const buildRuntimeContext = async (): Promise<RuntimeContext> => {
   scheduler.start();
   logger.info({
     event: 'startup_complete',
-    mode: config.mode,
-    configPath: config.meta.configPath,
-    sqlitePath: config.storage.sqlitePath,
-    cycleEveryMs: config.scheduler.cycleEveryMs,
+    mode: resolved.config.mode,
+    configPath: resolved.config.meta.configPath,
+    sqlitePath: resolved.config.storage.sqlitePath,
+    cycleEveryMs: resolved.config.scheduler.cycleEveryMs,
   });
 
   return {
-    config,
+    loadedConfig,
     database,
-    clients,
     scheduler,
   };
 };
 
 export const getRuntimeContext = async (): Promise<RuntimeContext> => {
-  if (!globalThis.__edarrRuntimeContext) {
-    globalThis.__edarrRuntimeContext = buildRuntimeContext();
+  if (!globalThis.__edarrRuntimeCore) {
+    globalThis.__edarrRuntimeCore = buildRuntimeCore();
   }
 
-  return globalThis.__edarrRuntimeContext;
+  const runtimeCore = await globalThis.__edarrRuntimeCore;
+  const resolved = resolveRuntimeConfig(runtimeCore.loadedConfig, runtimeCore.database);
+
+  return {
+    config: resolved.config as RuntimeContext['config'],
+    redactedConfig: resolved.redactedConfig,
+    database: runtimeCore.database,
+    clients: createClients(resolved.config as RuntimeContext['config']),
+    connectionStatus: resolved.connectionStatus,
+    sessionSecretSource: resolved.sessionSecretSource,
+    scheduler: runtimeCore.scheduler,
+  };
 };
 
 export const runManualCycle = async (
