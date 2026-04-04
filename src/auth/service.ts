@@ -5,7 +5,7 @@ import {
   createSessionCookieOptions,
   createSessionRecord,
   createSignedValue,
-  verifySignedValue
+  verifySignedValue,
 } from './session.js';
 
 export interface AuthConfiguration {
@@ -42,7 +42,7 @@ const createSessionResponse = (
   return {
     user,
     sessionId,
-    cookieValue: createSignedValue(sessionId, authConfig.sessionSecret)
+    cookieValue: createSignedValue(sessionId, authConfig.sessionSecret),
   };
 };
 
@@ -75,7 +75,7 @@ export const bootstrapAdminUser = async (
     passwordHash,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
-    disabled: false
+    disabled: false,
   };
 
   database.repositories.appUsers.create(user);
@@ -129,7 +129,7 @@ export const loginUser = async (
     username,
     ipAddress: input.requestMetadata.ipAddress,
     attemptedAt: nowIso,
-    success: passwordValid
+    success: passwordValid,
   });
 
   if (!user || user.disabled || !passwordValid) {
@@ -159,10 +159,7 @@ export const resolveAuthenticatedSession = (
     return null;
   }
 
-  const sessionId = verifySignedValue(
-    signedSessionCookie,
-    authConfig.sessionSecret
-  );
+  const sessionId = verifySignedValue(signedSessionCookie, authConfig.sessionSecret);
 
   if (!sessionId) {
     return null;
@@ -207,10 +204,7 @@ export const logoutSession = (
     return;
   }
 
-  const sessionId = verifySignedValue(
-    signedSessionCookie,
-    authConfig.sessionSecret
-  );
+  const sessionId = verifySignedValue(signedSessionCookie, authConfig.sessionSecret);
 
   if (!sessionId) {
     return;
@@ -220,7 +214,5 @@ export const logoutSession = (
 };
 
 export const getSessionCookieOptions = (authConfig: AuthConfiguration) => {
-  return createSessionCookieOptions(
-    Math.floor(authConfig.sessionAbsoluteTtlMs / 1_000)
-  );
+  return createSessionCookieOptions(Math.floor(authConfig.sessionAbsoluteTtlMs / 1_000));
 };

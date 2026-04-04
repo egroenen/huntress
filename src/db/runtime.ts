@@ -10,9 +10,7 @@ declare global {
   var __edarrDatabaseContext: Promise<DatabaseContext> | undefined;
 }
 
-const maybeApplyAuthReset = async (
-  database: DatabaseContext
-): Promise<void> => {
+const maybeApplyAuthReset = async (database: DatabaseContext): Promise<void> => {
   if (process.env.RESET_AUTH !== 'true') {
     return;
   }
@@ -32,9 +30,9 @@ const maybeApplyAuthReset = async (
   database.repositories.serviceState.set({
     key: AUTH_RESET_STATE_KEY,
     value: {
-      completedAt: now
+      completedAt: now,
     },
-    updatedAt: now
+    updatedAt: now,
   });
 };
 

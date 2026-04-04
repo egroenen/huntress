@@ -149,6 +149,6 @@ export const migrations: MigrationDefinition[] = [
 
       CREATE INDEX idx_login_attempt_username_attempted_at
       ON login_attempt(username, attempted_at);
-    `
-  }
+    `,
+  },
 ];

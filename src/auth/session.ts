@@ -14,10 +14,7 @@ export const createSignedValue = (value: string, secret: string): string => {
   return `${value}.${signValue(value, secret)}`;
 };
 
-export const verifySignedValue = (
-  signedValue: string,
-  secret: string
-): string | null => {
+export const verifySignedValue = (signedValue: string, secret: string): string | null => {
   const separatorIndex = signedValue.lastIndexOf('.');
 
   if (separatorIndex <= 0) {
@@ -60,7 +57,7 @@ export const createSessionRecord = (
     expiresAt: new Date(now.getTime() + absoluteTtlMs).toISOString(),
     idleExpiresAt: new Date(now.getTime() + idleTtlMs).toISOString(),
     ipAddress,
-    userAgent
+    userAgent,
   };
 };
 
@@ -72,6 +69,6 @@ export const createSessionCookieOptions = (
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     path: '/',
-    maxAge: maxAgeSeconds
+    maxAge: maxAgeSeconds,
   };
 };

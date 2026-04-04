@@ -6,7 +6,7 @@ import {
   getSessionCookieOptions,
   isBootstrapRequired,
   SESSION_COOKIE_NAME,
-  verifyCsrfToken
+  verifyCsrfToken,
 } from '@/src/auth';
 import { getAppContext } from '@/src/server/app-context';
 
@@ -49,12 +49,12 @@ export async function POST(request: Request) {
       {
         sessionSecret: config.auth.sessionSecret,
         sessionAbsoluteTtlMs: config.auth.sessionAbsoluteTtlMs,
-        sessionIdleTtlMs: config.auth.sessionIdleTtlMs
+        sessionIdleTtlMs: config.auth.sessionIdleTtlMs,
       },
       {
         username,
         password,
-        requestMetadata
+        requestMetadata,
       }
     );
 
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
       getSessionCookieOptions({
         sessionSecret: config.auth.sessionSecret,
         sessionAbsoluteTtlMs: config.auth.sessionAbsoluteTtlMs,
-        sessionIdleTtlMs: config.auth.sessionIdleTtlMs
+        sessionIdleTtlMs: config.auth.sessionIdleTtlMs,
       })
     );
 

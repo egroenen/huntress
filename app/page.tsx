@@ -5,7 +5,7 @@ import {
   getSessionCookieOptions,
   isBootstrapRequired,
   resolveAuthenticatedSession,
-  SESSION_COOKIE_NAME
+  SESSION_COOKIE_NAME,
 } from '@/src/auth';
 import { getAppContext } from '@/src/server/app-context';
 
@@ -23,7 +23,7 @@ export default async function HomePage() {
     {
       sessionSecret: config.auth.sessionSecret,
       sessionAbsoluteTtlMs: config.auth.sessionAbsoluteTtlMs,
-      sessionIdleTtlMs: config.auth.sessionIdleTtlMs
+      sessionIdleTtlMs: config.auth.sessionIdleTtlMs,
     },
     cookieStore.get(SESSION_COOKIE_NAME)?.value
   );
@@ -38,7 +38,7 @@ export default async function HomePage() {
     getSessionCookieOptions({
       sessionSecret: config.auth.sessionSecret,
       sessionAbsoluteTtlMs: config.auth.sessionAbsoluteTtlMs,
-      sessionIdleTtlMs: config.auth.sessionIdleTtlMs
+      sessionIdleTtlMs: config.auth.sessionIdleTtlMs,
     })
   );
 

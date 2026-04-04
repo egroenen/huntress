@@ -11,5 +11,5 @@ export {
   type RunHistoryRecord,
   type SearchAttemptRecord,
   type ServiceStateRecord,
-  type TransmissionTorrentStateRecord
+  type TransmissionTorrentStateRecord,
 } from './repositories.js';

@@ -5,11 +5,11 @@ export {
   isBootstrapRequired,
   loginUser,
   logoutSession,
-  resolveAuthenticatedSession
+  resolveAuthenticatedSession,
 } from './service.js';
 export type {
   AuthConfiguration,
   AuthenticatedSession,
-  RequestMetadata
+  RequestMetadata,
 } from './service.js';
 export { SESSION_COOKIE_NAME } from './session.js';

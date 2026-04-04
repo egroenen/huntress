@@ -17,10 +17,7 @@ test('initializeDatabase creates the schema on an empty database', async () => {
 
   try {
     const tables = database.connection
-      .prepare<
-        [],
-        { name: string }
-      >(
+      .prepare<[], { name: string }>(
         `
           SELECT name
           FROM sqlite_master
@@ -44,7 +41,7 @@ test('initializeDatabase creates the schema on an empty database', async () => {
           'search_attempt',
           'service_state',
           'sqlite_sequence',
-          'transmission_torrent_state'
+          'transmission_torrent_state',
         ].includes(table)
       ),
       [
@@ -58,7 +55,7 @@ test('initializeDatabase creates the schema on an empty database', async () => {
         'search_attempt',
         'service_state',
         'sqlite_sequence',
-        'transmission_torrent_state'
+        'transmission_torrent_state',
       ]
     );
 
@@ -82,9 +79,10 @@ test('initializeDatabase does not reapply migrations on a second startup', async
 
   try {
     const row = secondDatabase.connection
-      .prepare<[], { total: number } | undefined>(
-        'SELECT COUNT(*) AS total FROM schema_migrations'
-      )
+      .prepare<
+        [],
+        { total: number } | undefined
+      >('SELECT COUNT(*) AS total FROM schema_migrations')
       .get();
 
     assert.equal(secondDatabase.appliedMigrations.length, 0);
@@ -102,7 +100,7 @@ test('repositories can write and read core records', async () => {
     database.repositories.serviceState.set({
       key: 'bootstrap_state',
       value: { completed: false },
-      updatedAt: '2026-04-04T00:00:00.000Z'
+      updatedAt: '2026-04-04T00:00:00.000Z',
     });
 
     database.repositories.appUsers.create({
@@ -111,7 +109,7 @@ test('repositories can write and read core records', async () => {
       passwordHash: 'hash',
       createdAt: '2026-04-04T00:00:00.000Z',
       updatedAt: '2026-04-04T00:00:00.000Z',
-      disabled: false
+      disabled: false,
     });
 
     database.repositories.mediaItemState.upsert({
@@ -131,16 +129,15 @@ test('repositories can write and read core records', async () => {
       suppressedUntil: null,
       suppressionReason: null,
       lastSeenAt: '2026-04-04T00:00:00.000Z',
-      stateHash: 'state-hash-1'
+      stateHash: 'state-hash-1',
     });
 
     const serviceState = database.repositories.serviceState.get<{
       completed: boolean;
     }>('bootstrap_state');
     const user = database.repositories.appUsers.findByUsername('admin');
-    const mediaItem = database.repositories.mediaItemState.getByMediaKey(
-      'radarr:movie:1'
-    );
+    const mediaItem =
+      database.repositories.mediaItemState.getByMediaKey('radarr:movie:1');
 
     assert.deepEqual(serviceState?.value, { completed: false });
     assert.equal(database.repositories.appUsers.count(), 1);

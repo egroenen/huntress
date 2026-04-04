@@ -11,13 +11,13 @@ import {
   isBootstrapRequired,
   loginUser,
   logoutSession,
-  resolveAuthenticatedSession
+  resolveAuthenticatedSession,
 } from './service.js';
 
 const authConfig = {
   sessionSecret: 'test-secret',
   sessionAbsoluteTtlMs: 7 * 24 * 60 * 60 * 1_000,
-  sessionIdleTtlMs: 24 * 60 * 60 * 1_000
+  sessionIdleTtlMs: 24 * 60 * 60 * 1_000,
 };
 
 const createDatabasePath = async (): Promise<string> => {
@@ -36,8 +36,8 @@ test('bootstrap creates the first admin user and session', async () => {
       password: 'very-strong-password',
       requestMetadata: {
         ipAddress: '127.0.0.1',
-        userAgent: 'test-runner'
-      }
+        userAgent: 'test-runner',
+      },
     });
 
     assert.equal(result.user.username, 'admin');
@@ -57,8 +57,8 @@ test('login returns a valid authenticated session for correct credentials', asyn
       password: 'very-strong-password',
       requestMetadata: {
         ipAddress: '127.0.0.1',
-        userAgent: 'bootstrap'
-      }
+        userAgent: 'bootstrap',
+      },
     });
 
     const loginResult = await loginUser(database, authConfig, {
@@ -66,8 +66,8 @@ test('login returns a valid authenticated session for correct credentials', asyn
       password: 'very-strong-password',
       requestMetadata: {
         ipAddress: '127.0.0.1',
-        userAgent: 'test-runner'
-      }
+        userAgent: 'test-runner',
+      },
     });
 
     const resolved = resolveAuthenticatedSession(
@@ -91,8 +91,8 @@ test('login rejects invalid credentials and records a failed login attempt', asy
       password: 'very-strong-password',
       requestMetadata: {
         ipAddress: '127.0.0.1',
-        userAgent: 'bootstrap'
-      }
+        userAgent: 'bootstrap',
+      },
     });
 
     await assert.rejects(
@@ -102,17 +102,16 @@ test('login rejects invalid credentials and records a failed login attempt', asy
           password: 'wrong-password',
           requestMetadata: {
             ipAddress: '127.0.0.1',
-            userAgent: 'test-runner'
-          }
+            userAgent: 'test-runner',
+          },
         }),
       /Invalid username or password/
     );
 
-    const recentFailures =
-      database.repositories.loginAttempts.countFailuresSince(
-        'admin',
-        '2000-01-01T00:00:00.000Z'
-      );
+    const recentFailures = database.repositories.loginAttempts.countFailuresSince(
+      'admin',
+      '2000-01-01T00:00:00.000Z'
+    );
 
     assert.equal(recentFailures, 1);
   } finally {
@@ -129,8 +128,8 @@ test('logout invalidates the session', async () => {
       password: 'very-strong-password',
       requestMetadata: {
         ipAddress: '127.0.0.1',
-        userAgent: 'bootstrap'
-      }
+        userAgent: 'bootstrap',
+      },
     });
 
     logoutSession(database, authConfig, bootstrap.cookieValue);

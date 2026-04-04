@@ -36,9 +36,10 @@ const ensureMigrationTable = (database: SqliteDatabase): void => {
 
 const getAppliedMigrationVersions = (database: SqliteDatabase): Set<string> => {
   const rows = database
-    .prepare<[], { version: string }>(
-      'SELECT version FROM schema_migrations ORDER BY version ASC'
-    )
+    .prepare<
+      [],
+      { version: string }
+    >('SELECT version FROM schema_migrations ORDER BY version ASC')
     .all();
 
   return new Set(rows.map((row) => row.version));
@@ -60,9 +61,7 @@ const applyMigrations = (database: SqliteDatabase): AppliedMigration[] => {
     const transaction = database.transaction(() => {
       database.exec(migration.sql);
       database
-        .prepare(
-          'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)'
-        )
+        .prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)')
         .run(migration.version, appliedAt);
     });
 
@@ -71,7 +70,7 @@ const applyMigrations = (database: SqliteDatabase): AppliedMigration[] => {
     appliedMigrations.push({
       version: migration.version,
       description: migration.description,
-      appliedAt
+      appliedAt,
     });
   }
 
@@ -96,6 +95,6 @@ export const initializeDatabase = async (
     appliedMigrations,
     close(): void {
       connection.close();
-    }
+    },
   };
 };

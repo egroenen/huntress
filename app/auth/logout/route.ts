@@ -4,7 +4,7 @@ import {
   assertSameOrigin,
   logoutSession,
   SESSION_COOKIE_NAME,
-  verifyCsrfToken
+  verifyCsrfToken,
 } from '@/src/auth';
 import { getAppContext } from '@/src/server/app-context';
 
@@ -27,11 +27,7 @@ export async function POST(request: Request) {
     if (
       !sessionId ||
       typeof csrfToken !== 'string' ||
-      !verifyCsrfToken(
-        csrfToken,
-        `logout:${sessionId}`,
-        config.auth.sessionSecret
-      )
+      !verifyCsrfToken(csrfToken, `logout:${sessionId}`, config.auth.sessionSecret)
     ) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
@@ -41,7 +37,7 @@ export async function POST(request: Request) {
       {
         sessionSecret: config.auth.sessionSecret,
         sessionAbsoluteTtlMs: config.auth.sessionAbsoluteTtlMs,
-        sessionIdleTtlMs: config.auth.sessionIdleTtlMs
+        sessionIdleTtlMs: config.auth.sessionIdleTtlMs,
       },
       signedSessionCookie
     );
@@ -52,7 +48,7 @@ export async function POST(request: Request) {
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
       path: '/',
-      expires: new Date(0)
+      expires: new Date(0),
     });
 
     return response;

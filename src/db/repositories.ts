@@ -128,7 +128,7 @@ export const createRepositories = (database: SqliteDatabase) => {
       return {
         key: row.key,
         value: decodeJson<T>(row.value_json),
-        updatedAt: row.updated_at
+        updatedAt: row.updated_at,
       };
     },
     set<T>(record: ServiceStateRecord<T>): void {
@@ -145,20 +145,21 @@ export const createRepositories = (database: SqliteDatabase) => {
         .run({
           key: record.key,
           value_json: encodeJson(record.value),
-          updated_at: record.updatedAt
+          updated_at: record.updatedAt,
         });
     },
     delete(key: string): void {
       database.prepare('DELETE FROM service_state WHERE key = ?').run(key);
-    }
+    },
   };
 
   const appUsers = {
     count(): number {
       const row = database
-        .prepare<[], { total: number } | undefined>(
-          'SELECT COUNT(*) AS total FROM app_user'
-        )
+        .prepare<
+          [],
+          { total: number } | undefined
+        >('SELECT COUNT(*) AS total FROM app_user')
         .get();
 
       return row?.total ?? 0;
@@ -177,21 +178,22 @@ export const createRepositories = (database: SqliteDatabase) => {
           password_hash: record.passwordHash,
           created_at: record.createdAt,
           updated_at: record.updatedAt,
-          disabled: fromBoolean(record.disabled)
+          disabled: fromBoolean(record.disabled),
         });
     },
     findByUsername(username: string): AppUserRecord | null {
       const row = database
         .prepare<
           [string],
-          {
-            id: string;
-            username: string;
-            password_hash: string;
-            created_at: string;
-            updated_at: string;
-            disabled: number;
-          } | undefined
+          | {
+              id: string;
+              username: string;
+              password_hash: string;
+              created_at: string;
+              updated_at: string;
+              disabled: number;
+            }
+          | undefined
         >(
           `
             SELECT id, username, password_hash, created_at, updated_at, disabled
@@ -211,21 +213,22 @@ export const createRepositories = (database: SqliteDatabase) => {
         passwordHash: row.password_hash,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
-        disabled: toBoolean(row.disabled)
+        disabled: toBoolean(row.disabled),
       };
     },
     findById(id: string): AppUserRecord | null {
       const row = database
         .prepare<
           [string],
-          {
-            id: string;
-            username: string;
-            password_hash: string;
-            created_at: string;
-            updated_at: string;
-            disabled: number;
-          } | undefined
+          | {
+              id: string;
+              username: string;
+              password_hash: string;
+              created_at: string;
+              updated_at: string;
+              disabled: number;
+            }
+          | undefined
         >(
           `
             SELECT id, username, password_hash, created_at, updated_at, disabled
@@ -245,12 +248,12 @@ export const createRepositories = (database: SqliteDatabase) => {
         passwordHash: row.password_hash,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
-        disabled: toBoolean(row.disabled)
+        disabled: toBoolean(row.disabled),
       };
     },
     deleteAll(): void {
       database.prepare('DELETE FROM app_user').run();
-    }
+    },
   };
 
   const appSessions = {
@@ -274,23 +277,24 @@ export const createRepositories = (database: SqliteDatabase) => {
           expires_at: record.expiresAt,
           idle_expires_at: record.idleExpiresAt,
           ip_address: record.ipAddress,
-          user_agent: record.userAgent
+          user_agent: record.userAgent,
         });
     },
     findById(id: string): AppSessionRecord | null {
       const row = database
         .prepare<
           [string],
-          {
-            id: string;
-            user_id: string;
-            created_at: string;
-            last_seen_at: string;
-            expires_at: string;
-            idle_expires_at: string;
-            ip_address: string | null;
-            user_agent: string | null;
-          } | undefined
+          | {
+              id: string;
+              user_id: string;
+              created_at: string;
+              last_seen_at: string;
+              expires_at: string;
+              idle_expires_at: string;
+              ip_address: string | null;
+              user_agent: string | null;
+            }
+          | undefined
         >(
           `
             SELECT id, user_id, created_at, last_seen_at, expires_at, idle_expires_at, ip_address, user_agent
@@ -312,7 +316,7 @@ export const createRepositories = (database: SqliteDatabase) => {
         expiresAt: row.expires_at,
         idleExpiresAt: row.idle_expires_at,
         ipAddress: row.ip_address,
-        userAgent: row.user_agent
+        userAgent: row.user_agent,
       };
     },
     touch(id: string, lastSeenAt: string, idleExpiresAt: string): void {
@@ -343,7 +347,7 @@ export const createRepositories = (database: SqliteDatabase) => {
     },
     deleteAll(): void {
       database.prepare('DELETE FROM app_session').run();
-    }
+    },
   };
 
   const loginAttempts = {
@@ -359,15 +363,12 @@ export const createRepositories = (database: SqliteDatabase) => {
           username: record.username,
           ip_address: record.ipAddress,
           attempted_at: record.attemptedAt,
-          success: fromBoolean(record.success)
+          success: fromBoolean(record.success),
         });
     },
     countFailuresSince(username: string, sinceIso: string): number {
       const row = database
-        .prepare<
-          [string, string],
-          { total: number } | undefined
-        >(
+        .prepare<[string, string], { total: number } | undefined>(
           `
             SELECT COUNT(*) AS total
             FROM login_attempt
@@ -377,7 +378,7 @@ export const createRepositories = (database: SqliteDatabase) => {
         .get(username, sinceIso);
 
       return row?.total ?? 0;
-    }
+    },
   };
 
   const mediaItemState = {
@@ -431,32 +432,33 @@ export const createRepositories = (database: SqliteDatabase) => {
           suppressed_until: record.suppressedUntil,
           suppression_reason: record.suppressionReason,
           last_seen_at: record.lastSeenAt,
-          state_hash: record.stateHash
+          state_hash: record.stateHash,
         });
     },
     getByMediaKey(mediaKey: string): MediaItemStateRecord | null {
       const row = database
         .prepare<
           [string],
-          {
-            media_key: string;
-            media_type: string;
-            arr_id: number;
-            parent_arr_id: number | null;
-            title: string;
-            monitored: number;
-            release_date: string | null;
-            wanted_state: string;
-            in_queue: number;
-            retry_count: number;
-            last_search_at: string | null;
-            last_grab_at: string | null;
-            next_eligible_at: string | null;
-            suppressed_until: string | null;
-            suppression_reason: string | null;
-            last_seen_at: string;
-            state_hash: string;
-          } | undefined
+          | {
+              media_key: string;
+              media_type: string;
+              arr_id: number;
+              parent_arr_id: number | null;
+              title: string;
+              monitored: number;
+              release_date: string | null;
+              wanted_state: string;
+              in_queue: number;
+              retry_count: number;
+              last_search_at: string | null;
+              last_grab_at: string | null;
+              next_eligible_at: string | null;
+              suppressed_until: string | null;
+              suppression_reason: string | null;
+              last_seen_at: string;
+              state_hash: string;
+            }
+          | undefined
         >('SELECT * FROM media_item_state WHERE media_key = ?')
         .get(mediaKey);
 
@@ -481,18 +483,19 @@ export const createRepositories = (database: SqliteDatabase) => {
         suppressedUntil: row.suppressed_until,
         suppressionReason: row.suppression_reason,
         lastSeenAt: row.last_seen_at,
-        stateHash: row.state_hash
+        stateHash: row.state_hash,
       };
     },
     count(): number {
       const row = database
-        .prepare<[], { total: number } | undefined>(
-          'SELECT COUNT(*) AS total FROM media_item_state'
-        )
+        .prepare<
+          [],
+          { total: number } | undefined
+        >('SELECT COUNT(*) AS total FROM media_item_state')
         .get();
 
       return row?.total ?? 0;
-    }
+    },
   };
 
   const runHistory = {
@@ -520,7 +523,7 @@ export const createRepositories = (database: SqliteDatabase) => {
           dispatch_count: record.dispatchCount,
           skip_count: record.skipCount,
           error_count: record.errorCount,
-          summary_json: encodeJson(record.summary)
+          summary_json: encodeJson(record.summary),
         });
     },
     update(record: RunHistoryRecord): void {
@@ -550,25 +553,26 @@ export const createRepositories = (database: SqliteDatabase) => {
           dispatch_count: record.dispatchCount,
           skip_count: record.skipCount,
           error_count: record.errorCount,
-          summary_json: encodeJson(record.summary)
+          summary_json: encodeJson(record.summary),
         });
     },
     getLatest(): RunHistoryRecord | null {
       const row = database
         .prepare<
           [],
-          {
-            id: string;
-            run_type: string;
-            started_at: string;
-            finished_at: string | null;
-            status: string;
-            candidate_count: number;
-            dispatch_count: number;
-            skip_count: number;
-            error_count: number;
-            summary_json: string;
-          } | undefined
+          | {
+              id: string;
+              run_type: string;
+              started_at: string;
+              finished_at: string | null;
+              status: string;
+              candidate_count: number;
+              dispatch_count: number;
+              skip_count: number;
+              error_count: number;
+              summary_json: string;
+            }
+          | undefined
         >('SELECT * FROM run_history ORDER BY started_at DESC LIMIT 1')
         .get();
 
@@ -586,9 +590,9 @@ export const createRepositories = (database: SqliteDatabase) => {
         dispatchCount: row.dispatch_count,
         skipCount: row.skip_count,
         errorCount: row.error_count,
-        summary: decodeJson<Record<string, unknown>>(row.summary_json)
+        summary: decodeJson<Record<string, unknown>>(row.summary_json),
       };
-    }
+    },
   };
 
   const searchAttempts = {
@@ -619,7 +623,7 @@ export const createRepositories = (database: SqliteDatabase) => {
             arr_command_id: record.arrCommandId,
             attempted_at: record.attemptedAt,
             completed_at: record.completedAt,
-            outcome: record.outcome
+            outcome: record.outcome,
           });
         }
       });
@@ -665,9 +669,9 @@ export const createRepositories = (database: SqliteDatabase) => {
         arrCommandId: row.arr_command_id,
         attemptedAt: row.attempted_at,
         completedAt: row.completed_at,
-        outcome: row.outcome
+        outcome: row.outcome,
       }));
-    }
+    },
   };
 
   const releaseSuppressions = {
@@ -690,7 +694,7 @@ export const createRepositories = (database: SqliteDatabase) => {
           reason: record.reason,
           source: record.source,
           created_at: record.createdAt,
-          expires_at: record.expiresAt
+          expires_at: record.expiresAt,
         });
 
       return Number(result.lastInsertRowid);
@@ -727,12 +731,12 @@ export const createRepositories = (database: SqliteDatabase) => {
         reason: row.reason,
         source: row.source,
         createdAt: row.created_at,
-        expiresAt: row.expires_at
+        expiresAt: row.expires_at,
       }));
     },
     clearById(id: number): void {
       database.prepare('DELETE FROM release_suppression WHERE id = ?').run(id);
-    }
+    },
   };
 
   const transmissionTorrentState = {
@@ -773,27 +777,28 @@ export const createRepositories = (database: SqliteDatabase) => {
           linked_media_key: record.linkedMediaKey,
           removed_at: record.removedAt,
           removal_reason: record.removalReason,
-          no_progress_since: record.noProgressSince
+          no_progress_since: record.noProgressSince,
         });
     },
     getByHash(hashString: string): TransmissionTorrentStateRecord | null {
       const row = database
         .prepare<
           [string],
-          {
-            hash_string: string;
-            name: string;
-            status: number;
-            percent_done: number;
-            error_code: number | null;
-            error_string: string | null;
-            first_seen_at: string;
-            last_seen_at: string;
-            linked_media_key: string | null;
-            removed_at: string | null;
-            removal_reason: string | null;
-            no_progress_since: string | null;
-          } | undefined
+          | {
+              hash_string: string;
+              name: string;
+              status: number;
+              percent_done: number;
+              error_code: number | null;
+              error_string: string | null;
+              first_seen_at: string;
+              last_seen_at: string;
+              linked_media_key: string | null;
+              removed_at: string | null;
+              removal_reason: string | null;
+              no_progress_since: string | null;
+            }
+          | undefined
         >('SELECT * FROM transmission_torrent_state WHERE hash_string = ?')
         .get(hashString);
 
@@ -813,9 +818,9 @@ export const createRepositories = (database: SqliteDatabase) => {
         linkedMediaKey: row.linked_media_key,
         removedAt: row.removed_at,
         removalReason: row.removal_reason,
-        noProgressSince: row.no_progress_since
+        noProgressSince: row.no_progress_since,
       };
-    }
+    },
   };
 
   return {
@@ -827,7 +832,7 @@ export const createRepositories = (database: SqliteDatabase) => {
     runHistory,
     searchAttempts,
     releaseSuppressions,
-    transmissionTorrentState
+    transmissionTorrentState,
   };
 };
 
