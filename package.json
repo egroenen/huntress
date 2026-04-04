@@ -1,0 +1,51 @@
+{
+  "name": "edarr",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deterministic Arr re-search orchestrator with operator UI",
+  "type": "module",
+  "packageManager": "pnpm@10.30.1",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "start": "next start",
+    "build": "next build",
+    "typegen": "next typegen",
+    "typecheck": "pnpm typegen && tsc --noEmit",
+    "check": "pnpm typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
+    "better-sqlite3": "^12.8.0",
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "yaml": "^2.6.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.2.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "eslint": "^9.18.0",
+    "eslint-config-next": "^15.0.0",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

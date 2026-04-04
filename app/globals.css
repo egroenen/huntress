@@ -1,0 +1,171 @@
+:root {
+  color-scheme: dark;
+  --bg: #0e141b;
+  --surface: #182330;
+  --surface-alt: #223244;
+  --text: #f2f5f7;
+  --muted: #9cb2c8;
+  --accent: #64d2b0;
+  --border: rgba(255, 255, 255, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top, rgba(100, 210, 176, 0.16), transparent 28%),
+    linear-gradient(180deg, #0f1720 0%, #0a0f15 100%);
+  color: var(--text);
+  font-family:
+    'Segoe UI',
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+}
+
+body {
+  min-height: 100vh;
+}
+
+.page {
+  margin: 0 auto;
+  max-width: 960px;
+  padding: 4rem 1.5rem 5rem;
+}
+
+.hero {
+  margin-bottom: 2rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.75rem;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin: 0;
+  max-width: 12ch;
+  font-size: clamp(2.5rem, 8vw, 4.8rem);
+  line-height: 0.95;
+}
+
+.lede {
+  margin-top: 1.25rem;
+  max-width: 44rem;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1.7;
+}
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(24, 35, 48, 0.92), rgba(12, 18, 25, 0.95));
+  padding: 1.5rem;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.panel h2 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+}
+
+.panel dl {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0;
+}
+
+.panel dt {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.panel dd {
+  margin: 0.25rem 0 0;
+  font-weight: 600;
+}
+
+.auth-page {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 2rem 1rem;
+}
+
+.auth-panel {
+  width: min(100%, 32rem);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: linear-gradient(
+    180deg,
+    rgba(24, 35, 48, 0.92),
+    rgba(12, 18, 25, 0.95)
+  );
+  padding: 2rem;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.auth-panel h1 {
+  margin: 0 0 0.75rem;
+  font-size: clamp(2rem, 5vw, 3rem);
+  line-height: 0.95;
+}
+
+.auth-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.auth-form span {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.auth-form input {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  padding: 0.9rem 1rem;
+  font: inherit;
+}
+
+.auth-form button,
+.secondary-button {
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #07231d;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.9rem 1.2rem;
+}
+
+.auth-inline-form {
+  margin-top: 1.5rem;
+}
+
+.secondary-button {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}

@@ -1,0 +1,16 @@
+.codex
+.claude
+.sfdx
+.sfdx/
+node_modules/
+dist/
+.next/
+.DS_Store
+.env
+data/
+next-env.d.ts
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+coverage/
+tsconfig.tsbuildinfo
