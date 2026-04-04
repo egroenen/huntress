@@ -628,7 +628,16 @@ select {
 }
 
 .table-inline-button {
+  background: #eef4fb;
+  border-color: #bfd1e5;
+  color: #1f3550;
   padding: 0.45rem 0.7rem;
+}
+
+.table-inline-button:hover {
+  background: #dce8f7;
+  border-color: #99b6d4;
+  color: #13263b;
 }
 
 .config-pre {

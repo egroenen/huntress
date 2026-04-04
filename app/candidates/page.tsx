@@ -474,12 +474,12 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
               retryCount: candidate.retryCount,
               nextEligibleAt: formatTimestamp(candidate.nextEligibleAt),
               actions: (
-                <form action="/api/actions/manual-fetch" method="post">
+                <form action="/api/actions/manual-fetch" method="post" className="table-inline-form">
                   <input type="hidden" name="csrfToken" value={runtime.csrfTokens.manualFetch} />
                   <input type="hidden" name="mediaKey" value={candidate.mediaKey} />
                   <button
                     type="submit"
-                    className="console-button console-button--ghost"
+                    className="table-inline-button"
                     title="Manually trigger a scoped search for this item now. This overrides normal cooldown and rolling search limits."
                     aria-label={`Manual fetch ${candidate.title}`}
                   >
