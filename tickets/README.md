@@ -20,6 +20,8 @@ The tickets are written as plain Markdown so they can be worked through in order
 12. `T012-observability-and-health.md`
 13. `T013-containerization-and-runtime-packaging.md`
 14. `T014-test-harness-and-hardening.md`
+15. `T015-release-selection-and-upgrade-escalation.md`
+16. `T016-search-rate-controls-and-budget-visibility.md`
 
 ## Notes
 
@@ -29,3 +31,5 @@ The tickets are written as plain Markdown so they can be worked through in order
 - Multi-instance support is explicitly deferred.
 - The UI remains operational and lightweight, not a full SPA-first dashboard.
 - Each ticket should carry a top-level `Status` field using: `Backlog`, `In Progress`, `Testing`, or `Done`.
+- `T015` is intentionally post-MVP. It expands the orchestrator from “decide what to search” into “participate in which release to accept.”
+- `T016` is high-value even if it lands late. Search-rate protection and visibility are essential for private-tracker-safe operation.

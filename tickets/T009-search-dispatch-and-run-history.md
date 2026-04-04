@@ -14,6 +14,8 @@ Turn eligible candidates into actual Sonarr and Radarr search commands while upd
   - global dispatch spacing
   - global cycle caps
   - per-app cycle caps
+  - rolling cooldown windows for recent search volume
+  - optional hard stop when a configured search budget is exceeded over a time window
 - Persist `search_attempt` records for both dispatch and skip decisions.
 - Update `media_item_state` fields after dispatch:
   - `retry_count`
@@ -38,11 +40,19 @@ Turn eligible candidates into actual Sonarr and Radarr search commands while upd
 - No bulk whole-library commands.
 - Dry-run mode must exercise the same decision path without sending commands.
 - A failed dispatch should not silently look like a skip.
+- Release-level selection is explicitly deferred. `T009` triggers Arr searches only; choosing a specific fallback release or forcing a fast-follow upgrade policy belongs in a later acquisition-policy layer.
+- Rate limiting needs to protect against tracker blacklisting, not just internal queue bursts.
+- Implement both:
+  - per-cycle controls
+  - rolling-window controls such as searches per 15m, 1h, and 24h
+- When a rolling-window threshold is exceeded, the dispatcher should stop sending searches and record an explicit throttle reason instead of silently dropping items.
+- Dispatch pacing and throttle decisions must be visible to later UI/metrics work.
 
 ## Acceptance Criteria
 
 - Manual dry-run persists decisions without sending search commands.
 - Live runs send only budget-allowed commands.
+- Live runs stop dispatching cleanly when rolling-window search budgets are exceeded.
 - Post-dispatch state updates are written correctly.
 - Run history reflects dispatch, skip, and error counts accurately.
 
@@ -50,3 +60,4 @@ Turn eligible candidates into actual Sonarr and Radarr search commands while upd
 
 - Integration tests with mocked Sonarr/Radarr command endpoints.
 - Verification that dry-run performs no dispatches.
+- Tests for rolling-window throttling and explicit throttle stop behavior.
