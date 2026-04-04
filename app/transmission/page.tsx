@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
-import { ConsoleShell, DataTable, SectionCard } from '@/src/ui';
+import { ConsoleShell, DataTable, SectionCard, StatusBadge } from '@/src/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +19,158 @@ type TransmissionSort =
   | 'progress_asc'
   | 'linked_media_asc'
   | 'linked_media_desc';
+
+const formatDurationFromMs = (durationMs: number): string => {
+  const totalSeconds = Math.max(Math.round(durationMs / 1000), 0);
+
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
+
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (totalMinutes < 60) {
+    return seconds > 0 ? `${totalMinutes}m ${seconds}s` : `${totalMinutes}m`;
+  }
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours < 24) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+
+  return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
+};
+
+const formatDurationSince = (value: string | null, now: Date): string => {
+  if (!value) {
+    return 'n/a';
+  }
+
+  const timestamp = new Date(value).getTime();
+
+  if (!Number.isFinite(timestamp)) {
+    return 'n/a';
+  }
+
+  return formatDurationFromMs(Math.max(now.getTime() - timestamp, 0));
+};
+
+const formatTransmissionState = (status: number): string => {
+  switch (status) {
+    case 0:
+      return 'stopped';
+    case 1:
+      return 'check wait';
+    case 2:
+      return 'checking';
+    case 3:
+      return 'download wait';
+    case 4:
+      return 'downloading';
+    case 5:
+      return 'seed wait';
+    case 6:
+      return 'seeding';
+    default:
+      return `status ${status}`;
+  }
+};
+
+const getGuardInsight = (input: {
+  removedAt: string | null;
+  removalReason: string | null;
+  errorCode: number | null;
+  percentDone: number;
+  noProgressSince: string | null;
+  stallNoProgressForMs: number;
+  now: Date;
+}): {
+  label: string;
+  tone: 'healthy' | 'degraded' | 'unavailable' | 'success';
+  removeAt: string | null;
+  countdown: string;
+} => {
+  if (input.removedAt) {
+    return {
+      label: 'removed',
+      tone: 'unavailable',
+      removeAt: input.removedAt,
+      countdown: 'done',
+    };
+  }
+
+  if ((input.errorCode ?? 0) > 0) {
+    return {
+      label: 'error removable',
+      tone: 'unavailable',
+      removeAt: input.now.toISOString(),
+      countdown: 'eligible now',
+    };
+  }
+
+  if (input.percentDone >= 1) {
+    return {
+      label: 'complete',
+      tone: 'healthy',
+      removeAt: null,
+      countdown: 'safe',
+    };
+  }
+
+  if (!input.noProgressSince) {
+    return {
+      label: 'active',
+      tone: 'healthy',
+      removeAt: null,
+      countdown: 'tracking',
+    };
+  }
+
+  const noProgressAt = new Date(input.noProgressSince).getTime();
+
+  if (!Number.isFinite(noProgressAt)) {
+    return {
+      label: 'active',
+      tone: 'healthy',
+      removeAt: null,
+      countdown: 'tracking',
+    };
+  }
+
+  const removeAt = new Date(noProgressAt + input.stallNoProgressForMs).toISOString();
+  const remainingMs = noProgressAt + input.stallNoProgressForMs - input.now.getTime();
+
+  if (remainingMs <= 0) {
+    return {
+      label: 'stalled removable',
+      tone: 'unavailable',
+      removeAt,
+      countdown: 'eligible now',
+    };
+  }
+
+  if (remainingMs <= 60 * 60 * 1000) {
+    return {
+      label: 'remove soon',
+      tone: 'degraded',
+      removeAt,
+      countdown: formatDurationFromMs(remainingMs),
+    };
+  }
+
+  return {
+    label: 'stalling',
+    tone: 'degraded',
+    removeAt,
+    countdown: formatDurationFromMs(remainingMs),
+  };
+};
 
 const formatTimestamp = (value: string | null): string => {
   if (!value) {
@@ -239,6 +391,7 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
   const currentPage = clampPage(parsePositivePage(searchParams.page), sortedTorrents.length);
   const start = (currentPage - 1) * PAGE_SIZE;
   const pagedTorrents = sortedTorrents.slice(start, start + PAGE_SIZE);
+  const now = new Date();
 
   return (
     <ConsoleShell
@@ -322,30 +475,82 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
 
       <SectionCard
         title="Recent torrent observations"
-        subtitle="Rows are sorted using the selected view and can be paged when the cache gets large."
+        subtitle={`Rows are sorted using the selected view and can be paged when the cache gets large. Stall removal threshold is ${formatDurationFromMs(runtime.config.transmissionGuard.stallNoProgressForMs)}.`}
         actions={renderPagination({ currentPage, totalItems: sortedTorrents.length, sort })}
       >
         <DataTable
           columns={[
             { key: 'name', label: 'Torrent' },
+            { key: 'state', label: 'State' },
+            { key: 'guard', label: 'Guard status' },
             { key: 'progress', label: 'Progress', align: 'right' },
             { key: 'linkedMediaKey', label: 'Linked media' },
+            { key: 'noProgressSince', label: 'No progress' },
+            { key: 'removeIn', label: 'Remove in' },
             { key: 'lastSeenAt', label: 'Last seen' },
-            { key: 'removedAt', label: 'Removed at' },
+            { key: 'removeAt', label: 'Remove at' },
+            { key: 'error', label: 'Error' },
             { key: 'removalReason', label: 'Removal reason' },
           ]}
-          rows={pagedTorrents.map((torrent) => ({
-            name: torrent.name,
-            progress: `${Math.round(torrent.percentDone * 100)}%`,
-            linkedMediaKey: torrent.linkedMediaKey ?? 'unlinked',
-            lastSeenAt: formatTimestamp(torrent.lastSeenAt),
-            removedAt: formatTimestamp(torrent.removedAt),
-            removalReason: torrent.removalReason ? (
-              <code className="reason-code">{torrent.removalReason}</code>
-            ) : (
-              <span className="console-muted">none</span>
-            ),
-          }))}
+          rows={pagedTorrents.map((torrent) => {
+            const insight = getGuardInsight({
+              removedAt: torrent.removedAt,
+              removalReason: torrent.removalReason,
+              errorCode: torrent.errorCode,
+              percentDone: torrent.percentDone,
+              noProgressSince: torrent.noProgressSince,
+              stallNoProgressForMs: runtime.config.transmissionGuard.stallNoProgressForMs,
+              now,
+            });
+
+            return {
+              name: torrent.name,
+              state: (
+                <span className="table-app-label">
+                  {formatTransmissionState(torrent.status)}
+                </span>
+              ),
+              guard: (
+                <StatusBadge status={insight.tone}>
+                  {insight.label}
+                </StatusBadge>
+              ),
+              progress: `${Math.round(torrent.percentDone * 100)}%`,
+              linkedMediaKey: torrent.linkedMediaKey ?? 'unlinked',
+              noProgressSince: torrent.noProgressSince ? (
+                <span>
+                  {formatTimestamp(torrent.noProgressSince)}
+                  <br />
+                  <span className="console-muted">
+                    {formatDurationSince(torrent.noProgressSince, now)} ago
+                  </span>
+                </span>
+              ) : (
+                <span className="console-muted">active / none</span>
+              ),
+              removeIn: insight.countdown,
+              lastSeenAt: formatTimestamp(torrent.lastSeenAt),
+              removeAt: formatTimestamp(insight.removeAt),
+              error: torrent.errorCode ? (
+                <span>
+                  <code className="reason-code">error {torrent.errorCode}</code>
+                  {torrent.errorString ? (
+                    <>
+                      <br />
+                      <span className="console-muted">{torrent.errorString}</span>
+                    </>
+                  ) : null}
+                </span>
+              ) : (
+                <span className="console-muted">none</span>
+              ),
+              removalReason: torrent.removalReason ? (
+                <code className="reason-code">{torrent.removalReason}</code>
+              ) : (
+                <span className="console-muted">none</span>
+              ),
+            };
+          })}
           emptyMessage="No Transmission torrent observations have been stored yet."
         />
       </SectionCard>
