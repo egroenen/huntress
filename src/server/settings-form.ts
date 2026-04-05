@@ -164,8 +164,8 @@ export const parseReleaseSelectionOverridesForm = (
     })(),
     requireEnglish: readCheckbox(formData, `${prefix}RequireEnglish`),
     upgradeRetryAfterFallbackMs:
-      readPositiveInteger(formData, `${prefix}UpgradeRetryAfterFallbackMinutes`)! *
-      60_000,
+      readPositiveInteger(formData, `${prefix}UpgradeRetryAfterFallbackDays`)! *
+      86_400_000,
   });
 
   return {

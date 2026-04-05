@@ -247,16 +247,19 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
                 <span>Require English-language releases</span>
               </label>
               <label>
-                <span>Upgrade retry after fallback (minutes)</span>
+                <span>Upgrade retry after fallback (days)</span>
                 <input
                   type="number"
                   min="1"
                   step="1"
-                  name="sonarrUpgradeRetryAfterFallbackMinutes"
+                  name="sonarrUpgradeRetryAfterFallbackDays"
                   defaultValue={
-                    Math.round(
-                      releaseSelectionOverrides.sonarr.upgradeRetryAfterFallbackMs /
-                        60_000
+                    Math.max(
+                      1,
+                      Math.ceil(
+                        releaseSelectionOverrides.sonarr
+                          .upgradeRetryAfterFallbackMs / 86_400_000
+                      )
                     )
                   }
                 />
@@ -398,16 +401,19 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
                 <span>Require English-language releases</span>
               </label>
               <label>
-                <span>Upgrade retry after fallback (minutes)</span>
+                <span>Upgrade retry after fallback (days)</span>
                 <input
                   type="number"
                   min="1"
                   step="1"
-                  name="radarrUpgradeRetryAfterFallbackMinutes"
+                  name="radarrUpgradeRetryAfterFallbackDays"
                   defaultValue={
-                    Math.round(
-                      releaseSelectionOverrides.radarr.upgradeRetryAfterFallbackMs /
-                        60_000
+                    Math.max(
+                      1,
+                      Math.ceil(
+                        releaseSelectionOverrides.radarr
+                          .upgradeRetryAfterFallbackMs / 86_400_000
+                      )
                     )
                   }
                 />
