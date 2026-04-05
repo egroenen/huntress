@@ -20,6 +20,18 @@ type TransmissionSort =
   | 'linked_media_asc'
   | 'linked_media_desc';
 
+type TransmissionGuardFilter =
+  | 'all'
+  | 'active'
+  | 'stalling'
+  | 'remove_soon'
+  | 'stalled_removable'
+  | 'error_removable'
+  | 'removed'
+  | 'complete';
+
+type TransmissionLinkedFilter = 'all' | 'linked' | 'unlinked';
+
 const formatDurationFromMs = (durationMs: number): string => {
   const totalSeconds = Math.max(Math.round(durationMs / 1000), 0);
 
@@ -215,6 +227,39 @@ const parseSort = (value: string | string[] | undefined): TransmissionSort => {
   }
 };
 
+const parseGuardFilter = (
+  value: string | string[] | undefined
+): TransmissionGuardFilter => {
+  const normalized = parseStringParam(value);
+
+  switch (normalized) {
+    case 'active':
+    case 'stalling':
+    case 'remove_soon':
+    case 'stalled_removable':
+    case 'error_removable':
+    case 'removed':
+    case 'complete':
+      return normalized;
+    default:
+      return 'all';
+  }
+};
+
+const parseLinkedFilter = (
+  value: string | string[] | undefined
+): TransmissionLinkedFilter => {
+  const normalized = parseStringParam(value);
+
+  switch (normalized) {
+    case 'linked':
+    case 'unlinked':
+      return normalized;
+    default:
+      return 'all';
+  }
+};
+
 const clampPage = (page: number, totalItems: number): number => {
   const totalPages = Math.max(Math.ceil(totalItems / PAGE_SIZE), 1);
   return Math.min(page, totalPages);
@@ -223,11 +268,26 @@ const clampPage = (page: number, totalItems: number): number => {
 const buildTransmissionParams = (input: {
   sort: TransmissionSort;
   page: number;
+  query: string;
+  guard: TransmissionGuardFilter;
+  linked: TransmissionLinkedFilter;
 }): URLSearchParams => {
   const params = new URLSearchParams();
 
   if (input.sort !== DEFAULT_SORT) {
     params.set('sort', input.sort);
+  }
+
+  if (input.query.trim()) {
+    params.set('q', input.query.trim());
+  }
+
+  if (input.guard !== 'all') {
+    params.set('guard', input.guard);
+  }
+
+  if (input.linked !== 'all') {
+    params.set('linked', input.linked);
   }
 
   if (input.page > 1) {
@@ -240,6 +300,9 @@ const buildTransmissionParams = (input: {
 const buildTransmissionHref = (input: {
   sort: TransmissionSort;
   page: number;
+  query: string;
+  guard: TransmissionGuardFilter;
+  linked: TransmissionLinkedFilter;
 }): string => {
   const params = buildTransmissionParams(input);
   const suffix = params.toString();
@@ -333,6 +396,9 @@ const renderPagination = (input: {
   currentPage: number;
   totalItems: number;
   sort: TransmissionSort;
+  query: string;
+  guard: TransmissionGuardFilter;
+  linked: TransmissionLinkedFilter;
 }): ReactNode => {
   const totalPages = Math.max(Math.ceil(input.totalItems / PAGE_SIZE), 1);
 
@@ -355,6 +421,9 @@ const renderPagination = (input: {
             href={buildTransmissionHref({
               sort: input.sort,
               page: input.currentPage - 1,
+              query: input.query,
+              guard: input.guard,
+              linked: input.linked,
             })}
             className="console-link"
           >
@@ -368,6 +437,9 @@ const renderPagination = (input: {
             href={buildTransmissionHref({
               sort: input.sort,
               page: input.currentPage + 1,
+              query: input.query,
+              guard: input.guard,
+              linked: input.linked,
             })}
             className="console-link"
           >
@@ -386,12 +458,57 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
   const searchParams = await props.searchParams;
   const state = parseStringParam(searchParams.state);
   const sort = parseSort(searchParams.sort);
+  const query = parseStringParam(searchParams.q).trim();
+  const guardFilter = parseGuardFilter(searchParams.guard);
+  const linkedFilter = parseLinkedFilter(searchParams.linked);
   const recentTorrents = runtime.database.repositories.transmissionTorrentState.listRecent(500);
-  const sortedTorrents = sortTorrents(recentTorrents, sort);
+  const now = new Date();
+  const filteredTorrents = recentTorrents.filter((torrent) => {
+    const insight = getGuardInsight({
+      removedAt: torrent.removedAt,
+      removalReason: torrent.removalReason,
+      errorCode: torrent.errorCode,
+      percentDone: torrent.percentDone,
+      noProgressSince: torrent.noProgressSince,
+      stallNoProgressForMs: runtime.config.transmissionGuard.stallNoProgressForMs,
+      now,
+    });
+
+    if (query) {
+      const haystack = [
+        torrent.name,
+        torrent.linkedMediaKey ?? '',
+        torrent.removalReason ?? '',
+        insight.label,
+        formatTransmissionState(torrent.status),
+        torrent.errorString ?? '',
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      if (!haystack.includes(query.toLowerCase())) {
+        return false;
+      }
+    }
+
+    if (guardFilter !== 'all' && insight.label !== guardFilter.replaceAll('_', ' ')) {
+      return false;
+    }
+
+    if (linkedFilter === 'linked' && !torrent.linkedMediaKey) {
+      return false;
+    }
+
+    if (linkedFilter === 'unlinked' && torrent.linkedMediaKey) {
+      return false;
+    }
+
+    return true;
+  });
+  const sortedTorrents = sortTorrents(filteredTorrents, sort);
   const currentPage = clampPage(parsePositivePage(searchParams.page), sortedTorrents.length);
   const start = (currentPage - 1) * PAGE_SIZE;
   const pagedTorrents = sortedTorrents.slice(start, start + PAGE_SIZE);
-  const now = new Date();
 
   return (
     <ConsoleShell
@@ -434,6 +551,39 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
 
           <form action="/transmission" method="get" className="candidate-filters">
             <div className="candidate-filters__grid">
+              <label className="candidate-filters__field candidate-filters__field--wide">
+                <span>Search</span>
+                <input
+                  type="search"
+                  name="q"
+                  defaultValue={query}
+                  placeholder="Torrent, linked media, guard state, or error text"
+                />
+              </label>
+
+              <label className="candidate-filters__field">
+                <span>Linked</span>
+                <select name="linked" defaultValue={linkedFilter}>
+                  <option value="all">All torrents</option>
+                  <option value="linked">Linked only</option>
+                  <option value="unlinked">Unlinked only</option>
+                </select>
+              </label>
+
+              <label className="candidate-filters__field">
+                <span>Guard status</span>
+                <select name="guard" defaultValue={guardFilter}>
+                  <option value="all">All guard states</option>
+                  <option value="active">Active</option>
+                  <option value="stalling">Stalling</option>
+                  <option value="remove_soon">Remove soon</option>
+                  <option value="stalled_removable">Stalled removable</option>
+                  <option value="error_removable">Error removable</option>
+                  <option value="removed">Removed</option>
+                  <option value="complete">Complete</option>
+                </select>
+              </label>
+
               <label className="candidate-filters__field">
                 <span>Sort</span>
                 <select name="sort" defaultValue={sort}>
@@ -459,11 +609,11 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
           <div className="candidate-filters__actions">
             <div className="transmission-controls__links">
               <a href="/transmission" className="console-link">
-                Reset view
+                Clear filters
               </a>
               <span className="console-muted">
-                {sortedTorrents.length} cached observation
-                {sortedTorrents.length === 1 ? '' : 's'}
+                {sortedTorrents.length} matching observation
+                {sortedTorrents.length === 1 ? '' : 's'} of {recentTorrents.length}
               </span>
             </div>
             <span className="console-muted">
@@ -476,7 +626,14 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
       <SectionCard
         title="Recent torrent observations"
         subtitle={`Rows are sorted using the selected view and can be paged when the cache gets large. Stall removal threshold is ${formatDurationFromMs(runtime.config.transmissionGuard.stallNoProgressForMs)}.`}
-        actions={renderPagination({ currentPage, totalItems: sortedTorrents.length, sort })}
+        actions={renderPagination({
+          currentPage,
+          totalItems: sortedTorrents.length,
+          sort,
+          query,
+          guard: guardFilter,
+          linked: linkedFilter,
+        })}
       >
         <DataTable
           columns={[
