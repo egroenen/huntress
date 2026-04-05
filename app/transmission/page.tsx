@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   ConsoleShell,
@@ -536,6 +537,12 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
   );
   const start = (currentPage - 1) * PAGE_SIZE;
   const pagedTorrents = sortedTorrents.slice(start, start + PAGE_SIZE);
+  const displayMediaItems = await hydrateMediaDisplayRecords(
+    runtime,
+    pagedTorrents
+      .map((torrent) => torrent.linkedMediaKey)
+      .filter((mediaKey): mediaKey is string => mediaKey !== null)
+  );
 
   return (
     <ConsoleShell
@@ -700,9 +707,7 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
                 <div className="linked-media-cell" title={torrent.linkedMediaKey}>
                   <MediaItemLink
                     config={runtime.config}
-                    mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
-                      torrent.linkedMediaKey
-                    )}
+                    mediaItem={displayMediaItems.get(torrent.linkedMediaKey) ?? null}
                     fallbackTitle={resolveTitle(torrent.linkedMediaKey) ?? 'Linked item'}
                     className="external-item-link"
                   />

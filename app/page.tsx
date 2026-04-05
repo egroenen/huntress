@@ -4,6 +4,7 @@ import {
   getDashboardCandidateSnapshot,
   probeDependencyHealth,
 } from '@/src/server/console-data';
+import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import { getSearchRateSnapshot } from '@/src/observability';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
@@ -133,6 +134,12 @@ export default async function HomePage() {
   );
   const recentTorrents =
     runtime.database.repositories.transmissionTorrentState.listRecent(5);
+  const displayMediaItems = await hydrateMediaDisplayRecords(runtime, [
+    ...candidates.all.slice(0, 8).map((candidate) => candidate.mediaKey),
+    ...recentTorrents
+      .map((torrent) => torrent.linkedMediaKey)
+      .filter((mediaKey): mediaKey is string => mediaKey !== null),
+  ]);
 
   const dispatchableCount = candidates.all.filter(
     (candidate) => candidate.decision === 'dispatch'
@@ -435,9 +442,7 @@ export default async function HomePage() {
             title: (
               <MediaItemLink
                 config={runtime.config}
-                mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
-                  candidate.mediaKey
-                )}
+                mediaItem={displayMediaItems.get(candidate.mediaKey) ?? null}
                 fallbackTitle={candidate.title}
                 className="external-item-link"
               />
@@ -501,9 +506,7 @@ export default async function HomePage() {
               <div className="linked-media-cell" title={torrent.linkedMediaKey}>
                 <MediaItemLink
                   config={runtime.config}
-                  mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
-                    torrent.linkedMediaKey
-                  )}
+                  mediaItem={displayMediaItems.get(torrent.linkedMediaKey) ?? null}
                   fallbackTitle="Linked item"
                   className="external-item-link"
                 />

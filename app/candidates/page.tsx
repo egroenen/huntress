@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import type { CandidateDecision } from '@/src/domain';
 import { getDashboardCandidateSnapshot } from '@/src/server/console-data';
+import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   CandidateSectionToggle,
@@ -376,6 +377,10 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
     sonarr: filteredCandidates.sonarr.slice(sonarrStart, sonarrStart + PAGE_SIZE),
     radarr: filteredCandidates.radarr.slice(radarrStart, radarrStart + PAGE_SIZE),
   };
+  const displayMediaItems = await hydrateMediaDisplayRecords(runtime, [
+    ...pagedCandidates.sonarr.map((candidate) => candidate.mediaKey),
+    ...pagedCandidates.radarr.map((candidate) => candidate.mediaKey),
+  ]);
 
   return (
     <ConsoleShell
@@ -503,9 +508,7 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
                   title: (
                     <MediaItemLink
                       config={runtime.config}
-                      mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
-                        candidate.mediaKey
-                      )}
+                      mediaItem={displayMediaItems.get(candidate.mediaKey) ?? null}
                       fallbackTitle={candidate.title}
                       className="external-item-link"
                     />

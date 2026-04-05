@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
 
 import type { RunHistoryRecord, SearchAttemptRecord } from '@/src/db';
+import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   ConsoleShell,
@@ -597,6 +598,14 @@ export default async function RunDetailPage({
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE
   );
+  const displayMediaItems = await hydrateMediaDisplayRecords(runtime, [
+    ...attempts.map((attempt) => attempt.mediaKey),
+    ...(summary.mediaKey ? [summary.mediaKey] : []),
+  ]);
+  const resolveDisplayMediaItem = (mediaKey: string) => displayMediaItems.get(mediaKey) ?? null;
+  const hydratedManualFetchMediaItem = summary.mediaKey
+    ? resolveDisplayMediaItem(summary.mediaKey)
+    : manualFetchMediaItem;
 
   return (
     <ConsoleShell
@@ -612,7 +621,7 @@ export default async function RunDetailPage({
         ← Run history
       </Link>
       {renderRunSummarySection(run, summary, totalAttempts)}
-      {renderManualFetchSection(summary, manualFetchMediaItem, runtime.config)}
+      {renderManualFetchSection(summary, hydratedManualFetchMediaItem, runtime.config)}
       {renderSyncSection(summary)}
       {renderTransmissionSection(summary)}
       {renderDispatchSection(summary)}
@@ -686,7 +695,7 @@ export default async function RunDetailPage({
           rows={buildAttemptRows(
             attempts,
             resolveTitle,
-            resolveMediaItem,
+            resolveDisplayMediaItem,
             runtime.config
           )}
           emptyMessage="No attempt rows were recorded for this run."

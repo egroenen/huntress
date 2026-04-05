@@ -8,6 +8,7 @@ import type {
   ArrWantedPageResult,
   ArrSystemStatus,
   RadarrMovieRecord,
+  SonarrEpisodeRecord,
   SonarrSeriesRecord,
   ArrWantedRecord,
 } from './types';
@@ -79,6 +80,16 @@ const sonarrSeriesSchema = z
     id: z.number(),
     title: z.string(),
     titleSlug: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+const sonarrEpisodeSchema = z
+  .object({
+    id: z.number(),
+    title: z.string(),
+    seasonNumber: z.number().int().nullable().optional(),
+    episodeNumber: z.number().int().nullable().optional(),
+    seriesId: z.number(),
   })
   .passthrough();
 
@@ -173,6 +184,37 @@ const buildExternalPath = (prefix: 'series' | 'movie', slug: string | null): str
   const trimmedSlug = slug.trim();
 
   return trimmedSlug.length > 0 ? `${prefix}/${trimmedSlug}` : null;
+};
+
+const formatEpisodeCode = (
+  seasonNumber: unknown,
+  episodeNumber: unknown
+): string | null => {
+  if (
+    typeof seasonNumber !== 'number' ||
+    typeof episodeNumber !== 'number' ||
+    !Number.isInteger(seasonNumber) ||
+    !Number.isInteger(episodeNumber)
+  ) {
+    return null;
+  }
+
+  return `S${seasonNumber} E${episodeNumber}`;
+};
+
+const buildSonarrWantedTitle = (entry: {
+  series?: { title?: string | undefined } | undefined;
+  title: string;
+  seasonNumber?: unknown;
+  episodeNumber?: unknown;
+}): string => {
+  const segments = [
+    entry.series?.title?.trim() || null,
+    formatEpisodeCode(entry.seasonNumber, entry.episodeNumber),
+    entry.title.trim(),
+  ].filter((segment): segment is string => Boolean(segment && segment.length > 0));
+
+  return segments.join(' - ');
 };
 
 interface ArrPaginatedResponse<TItem> {
@@ -392,6 +434,25 @@ export const fetchSonarrSeries = async (
   };
 };
 
+export const fetchSonarrEpisode = async (
+  options: ArrClientOptions,
+  episodeId: number
+): Promise<SonarrEpisodeRecord> => {
+  const result = await requestJson(
+    joinUrl(options.baseUrl, `/api/v3/episode/${episodeId}`),
+    sonarrEpisodeSchema,
+    createRequestOptions(options)
+  );
+
+  return {
+    id: result.id,
+    title: result.title,
+    seasonNumber: result.seasonNumber ?? null,
+    episodeNumber: result.episodeNumber ?? null,
+    seriesId: result.seriesId,
+  };
+};
+
 export const fetchRadarrMovie = async (
   options: ArrClientOptions,
   movieId: number
@@ -463,7 +524,7 @@ export const fetchSonarrWanted = async (
     itemId: entry.id,
     parentId: entry.seriesId,
     externalPath: buildExternalPath('series', entry.series?.titleSlug ?? null),
-    title: entry.series?.title ? `${entry.series.title} - ${entry.title}` : entry.title,
+    title: buildSonarrWantedTitle(entry),
     monitored: entry.monitored,
     hasFile: entry.hasFile ?? null,
     qualityCutoffNotMet: kind === 'cutoff' ? true : null,
@@ -522,7 +583,7 @@ export const fetchSonarrWantedPage = async (
       itemId: entry.id,
       parentId: entry.seriesId,
       externalPath: buildExternalPath('series', entry.series?.titleSlug ?? null),
-      title: entry.series?.title ? `${entry.series.title} - ${entry.title}` : entry.title,
+      title: buildSonarrWantedTitle(entry),
       monitored: entry.monitored,
       hasFile: entry.hasFile ?? null,
       qualityCutoffNotMet: kind === 'cutoff' ? true : null,

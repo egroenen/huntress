@@ -12,6 +12,7 @@ export type {
   DependencyHealth,
   ProwlarrHealthRecord,
   ProwlarrIndexerStatusRecord,
+  SonarrEpisodeRecord,
   TransmissionSessionProbe,
   TransmissionTorrentRecord,
 } from './types';

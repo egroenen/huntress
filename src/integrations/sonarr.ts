@@ -5,12 +5,14 @@ import type {
   ArrSystemStatus,
   ArrWantedPageResult,
   ArrWantedRecord,
+  SonarrEpisodeRecord,
   SonarrSeriesRecord,
 } from './types';
 import {
   deleteArrQueueItem,
   dispatchArrCommand,
   fetchArrQueue,
+  fetchSonarrEpisode,
   fetchSonarrSeries,
   fetchArrSystemStatus,
   fetchSonarrWantedPage,
@@ -47,6 +49,9 @@ export const createSonarrClient = (options: SonarrClient) => {
     },
     getSeries(seriesId: number): Promise<SonarrSeriesRecord> {
       return fetchSonarrSeries(clientOptions, seriesId);
+    },
+    getEpisode(episodeId: number): Promise<SonarrEpisodeRecord> {
+      return fetchSonarrEpisode(clientOptions, episodeId);
     },
     removeQueueItem(
       queueId: number,

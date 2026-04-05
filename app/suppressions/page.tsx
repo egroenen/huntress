@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { createCsrfToken } from '@/src/auth';
+import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import {
   ConfirmButton,
   ConsoleShell,
@@ -187,6 +188,10 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE
   );
+  const displayMediaItems = await hydrateMediaDisplayRecords(
+    runtime,
+    pagedSuppressions.map((suppression) => suppression.mediaKey)
+  );
 
   return (
     <ConsoleShell
@@ -244,9 +249,7 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
               <div className="suppression-title" title={suppression.mediaKey}>
                 <MediaItemLink
                   config={runtime.config}
-                  mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
-                    suppression.mediaKey
-                  )}
+                  mediaItem={displayMediaItems.get(suppression.mediaKey) ?? null}
                   fallbackTitle={resolveTitle(suppression.mediaKey) ?? 'Unknown title'}
                   className="external-item-link"
                 />

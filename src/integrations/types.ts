@@ -61,6 +61,14 @@ export interface SonarrSeriesRecord {
   titleSlug: string | null;
 }
 
+export interface SonarrEpisodeRecord {
+  id: number;
+  title: string;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
+  seriesId: number;
+}
+
 export interface RadarrMovieRecord {
   id: number;
   title: string;
