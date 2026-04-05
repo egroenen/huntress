@@ -1229,6 +1229,48 @@ export const createRepositories = (database: SqliteDatabase) => {
         noProgressSince: row.no_progress_since,
       }));
     },
+    listAll(): TransmissionTorrentStateRecord[] {
+      const rows = database
+        .prepare<
+          [],
+          {
+            hash_string: string;
+            name: string;
+            status: number;
+            percent_done: number;
+            error_code: number | null;
+            error_string: string | null;
+            first_seen_at: string;
+            last_seen_at: string;
+            linked_media_key: string | null;
+            removed_at: string | null;
+            removal_reason: string | null;
+            no_progress_since: string | null;
+          }
+        >(
+          `
+            SELECT *
+            FROM transmission_torrent_state
+            ORDER BY COALESCE(removed_at, last_seen_at) DESC, hash_string ASC
+          `
+        )
+        .all();
+
+      return rows.map((row) => ({
+        hashString: row.hash_string,
+        name: row.name,
+        status: row.status,
+        percentDone: row.percent_done,
+        errorCode: row.error_code,
+        errorString: row.error_string,
+        firstSeenAt: row.first_seen_at,
+        lastSeenAt: row.last_seen_at,
+        linkedMediaKey: row.linked_media_key,
+        removedAt: row.removed_at,
+        removalReason: row.removal_reason,
+        noProgressSince: row.no_progress_since,
+      }));
+    },
     deleteAll(): void {
       database.prepare('DELETE FROM transmission_torrent_state').run();
     },

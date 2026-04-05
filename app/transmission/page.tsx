@@ -461,9 +461,9 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
   const query = parseStringParam(searchParams.q).trim();
   const guardFilter = parseGuardFilter(searchParams.guard);
   const linkedFilter = parseLinkedFilter(searchParams.linked);
-  const recentTorrents = runtime.database.repositories.transmissionTorrentState.listRecent(500);
+  const allTorrents = runtime.database.repositories.transmissionTorrentState.listAll();
   const now = new Date();
-  const filteredTorrents = recentTorrents.filter((torrent) => {
+  const filteredTorrents = allTorrents.filter((torrent) => {
     const insight = getGuardInsight({
       removedAt: torrent.removedAt,
       removalReason: torrent.removalReason,
@@ -613,7 +613,7 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
               </a>
               <span className="console-muted">
                 {sortedTorrents.length} matching observation
-                {sortedTorrents.length === 1 ? '' : 's'} of {recentTorrents.length}
+                {sortedTorrents.length === 1 ? '' : 's'} of {allTorrents.length}
               </span>
             </div>
             <span className="console-muted">
