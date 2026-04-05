@@ -469,7 +469,6 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
   const runtime = await requireAuthenticatedConsoleContext();
   const dependencyCards = await probeDependencyHealth(runtime);
   const searchParams = await props.searchParams;
-  const state = parseStringParam(searchParams.state);
   const notice = parseStringParam(searchParams.notice);
   const noticeStatus = parseStringParam(searchParams.status);
   const sort = parseSort(searchParams.sort);
@@ -599,13 +598,6 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
               }
             >
               {notice}
-            </p>
-          ) : null}
-
-          {state === 'cache-reset' ? (
-            <p className="settings-notice is-success">
-              Transmission cache cleared. The next sync or guard pass will rebuild
-              observations from fresh data.
             </p>
           ) : null}
 

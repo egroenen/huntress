@@ -125,14 +125,38 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
         ) : null}
 
         <form action={saveSettingsAction} className="settings-form">
+          <input
+            type="hidden"
+            name="saveSettingsCsrfToken"
+            value={runtime.csrfTokens.saveSettings}
+          />
+          <input
+            type="hidden"
+            name="testSonarrCsrfToken"
+            value={runtime.csrfTokens.testSonarr}
+          />
+          <input
+            type="hidden"
+            name="testRadarrCsrfToken"
+            value={runtime.csrfTokens.testRadarr}
+          />
+          <input
+            type="hidden"
+            name="testProwlarrCsrfToken"
+            value={runtime.csrfTokens.testProwlarr}
+          />
+          <input
+            type="hidden"
+            name="testTransmissionCsrfToken"
+            value={runtime.csrfTokens.testTransmission}
+          />
+
           <section className="settings-form__section">
             <div className="settings-form__heading">
               <h4>Sonarr</h4>
               <button
                 type="submit"
                 formAction={testConnectionAction.bind(null, 'sonarr')}
-                name="csrfToken"
-                value={runtime.csrfTokens.testSonarr}
                 className="console-button console-button--ghost"
               >
                 Test connection
@@ -285,8 +309,6 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
               <button
                 type="submit"
                 formAction={testConnectionAction.bind(null, 'radarr')}
-                name="csrfToken"
-                value={runtime.csrfTokens.testRadarr}
                 className="console-button console-button--ghost"
               >
                 Test connection
@@ -439,8 +461,6 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
               <button
                 type="submit"
                 formAction={testConnectionAction.bind(null, 'prowlarr')}
-                name="csrfToken"
-                value={runtime.csrfTokens.testProwlarr}
                 className="console-button console-button--ghost"
               >
                 Test connection
@@ -482,8 +502,6 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
               <button
                 type="submit"
                 formAction={testConnectionAction.bind(null, 'transmission')}
-                name="csrfToken"
-                value={runtime.csrfTokens.testTransmission}
                 className="console-button console-button--ghost"
               >
                 Test connection
@@ -593,8 +611,6 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
             <button
               type="submit"
               className="console-button"
-              name="csrfToken"
-              value={runtime.csrfTokens.saveSettings}
             >
               Save settings
             </button>

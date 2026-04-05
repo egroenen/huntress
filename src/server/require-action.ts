@@ -94,11 +94,14 @@ export const authenticateConsoleAction = async (
 
 export const authenticateConsoleFormAction = async (
   formData: FormData,
-  actionName: ActionName
+  actionName: ActionName,
+  options?: {
+    csrfFieldName?: string;
+  }
 ) => {
   const runtime = await getRuntimeContext();
   const cookieStore = await cookies();
-  const csrfToken = formData.get('csrfToken');
+  const csrfToken = formData.get(options?.csrfFieldName ?? 'csrfToken');
 
   if (typeof csrfToken !== 'string') {
     throw new Error('Missing CSRF token');
