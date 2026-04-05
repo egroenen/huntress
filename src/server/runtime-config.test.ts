@@ -39,7 +39,7 @@ instances:
     username_env: "TRANSMISSION_RPC_USERNAME"
     password_env: "TRANSMISSION_RPC_PASSWORD"
 scheduler:
-  cycle_every: "6h"
+  cycle_every: "30m"
   startup_grace_period: "10m"
   max_run_duration: "30m"
 sync:

@@ -28,8 +28,8 @@ instances:
     password_env: 'TRANSMISSION_RPC_PASSWORD'
 
 scheduler:
-  cycle_every: '6h'
-  startup_grace_period: '10m'
+  cycle_every: '30m'
+  startup_grace_period: '1m'
   max_run_duration: '30m'
 
 sync:
