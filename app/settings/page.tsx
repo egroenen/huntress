@@ -5,6 +5,7 @@ import {
   buildSearchSafetyOverridesFromConfig,
 } from '@/src/server/runtime-config';
 import { ConsoleShell, SectionCard, StatusBadge } from '@/src/ui';
+import { formatConfigSourceLabel, formatServiceName } from '@/src/ui/formatters';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,7 +45,7 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
           {Object.values(runtime.connectionStatus).map((service) => (
             <article key={service.service} className="settings-status-card">
               <div className="settings-status-card__header">
-                <h4>{service.service}</h4>
+                <h4>{formatServiceName(service.service)}</h4>
                 <StatusBadge status={statusTone(service.configured)}>
                   {service.configured ? 'configured' : 'needs setup'}
                 </StatusBadge>
@@ -53,11 +54,11 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
               <dl className="settings-status-card__meta">
                 <div>
                   <dt>URL source</dt>
-                  <dd>{service.urlSource}</dd>
+                  <dd>{formatConfigSourceLabel(service.urlSource)}</dd>
                 </div>
                 <div>
                   <dt>Credential source</dt>
-                  <dd>{service.secretSource}</dd>
+                  <dd>{formatConfigSourceLabel(service.secretSource)}</dd>
                 </div>
               </dl>
             </article>
@@ -242,10 +243,10 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
 
           <section className="settings-form__section">
             <div className="settings-form__heading">
-              <h4>Search safety budgets</h4>
+              <h4>Dispatch safety budgets</h4>
             </div>
             <p className="settings-form__hint">
-              Override the rolling live-search budgets used to protect trackers.
+              Override the rolling live-dispatch budgets used to protect trackers.
               Leave a field blank to fall back to the config file default.
             </p>
             <label>

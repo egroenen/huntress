@@ -447,7 +447,7 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
               Clear filters
             </a>
             <button type="submit" className="console-button">
-              Apply view
+              Apply filters
             </button>
           </div>
         </form>
