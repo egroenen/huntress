@@ -6,6 +6,7 @@ import type {
 } from '@/src/db';
 import type {
   ArrQueueRecord,
+  RadarrApiClient,
   SonarrApiClient,
   TransmissionApiClient,
   TransmissionTorrentRecord,
@@ -398,13 +399,18 @@ const createReleaseSuppression = (input: {
   return true;
 };
 
-const handleBlockedSonarrQueueItems = async (input: {
+type BlockableArrQueueClient =
+  | Pick<SonarrApiClient, 'getQueueDetails' | 'removeQueueItem'>
+  | Pick<RadarrApiClient, 'getQueueDetails' | 'removeQueueItem'>;
+
+const handleBlockedArrQueueItems = async (input: {
   database: DatabaseContext;
-  sonarrClient: SonarrApiClient | null;
+  app: 'sonarr' | 'radarr';
+  client: BlockableArrQueueClient | null;
   activityTracker?: ActivityTracker;
   now: Date;
 }): Promise<{ removedCount: number; suppressionCount: number; linkedCount: number }> => {
-  if (!input.sonarrClient) {
+  if (!input.client) {
     return {
       removedCount: 0,
       suppressionCount: 0,
@@ -414,7 +420,7 @@ const handleBlockedSonarrQueueItems = async (input: {
 
   const nowIso = input.now.toISOString();
   const queueDownloadMap = getQueueDownloadMap(input.database);
-  const queueDetails = await input.sonarrClient.getQueueDetails();
+  const queueDetails = await input.client.getQueueDetails();
   const blockedItems = queueDetails
     .map((record) => ({
       record,
@@ -442,9 +448,9 @@ const handleBlockedSonarrQueueItems = async (input: {
   }
 
   input.activityTracker?.warn({
-    source: 'transmission',
+    source: input.app,
     stage: 'blocked_queue_detected',
-    message: `Found ${blockedItems.length} blocked Sonarr queue item${blockedItems.length === 1 ? '' : 's'}`,
+    message: `Found ${blockedItems.length} blocked ${input.app} queue item${blockedItems.length === 1 ? '' : 's'}`,
     detail:
       'Removing from queue/download client and suppressing the exact torrent fingerprints.',
     progressCurrent: 0,
@@ -468,15 +474,15 @@ const handleBlockedSonarrQueueItems = async (input: {
     }
 
     input.activityTracker?.warn({
-      source: 'transmission',
+      source: input.app,
       stage: 'blocked_queue_remove',
-      message: `Removing blocked Sonarr queue item ${index + 1} of ${blockedItems.length}`,
+      message: `Removing blocked ${input.app} queue item ${index + 1} of ${blockedItems.length}`,
       detail: `${queueRecord.title} (${entry.blockedMessage.message})`,
       progressCurrent: index + 1,
       progressTotal: blockedItems.length,
     });
 
-    await input.sonarrClient.removeQueueItem(queueRecord.id, {
+    await input.client.removeQueueItem(queueRecord.id, {
       removeFromClient: true,
       blocklist: true,
       skipRedownload: true,
@@ -536,7 +542,8 @@ const handleBlockedSonarrQueueItems = async (input: {
     }
 
     logger.warn({
-      event: 'blocked_sonarr_queue_item_removed',
+      event: 'blocked_arr_queue_item_removed',
+      app: input.app,
       queueId: queueRecord.id,
       title: queueRecord.title,
       linkedMediaKey,
@@ -599,14 +606,16 @@ export const runTransmissionGuard = async (input: {
   config: ResolvedConfig;
   client: TransmissionApiClient | null;
   sonarrClient?: SonarrApiClient | null;
+  radarrClient?: RadarrApiClient | null;
   activityTracker?: ActivityTracker;
   now?: Date;
 }): Promise<TransmissionGuardRunSummary> => {
   const now = input.now ?? new Date();
   const nowIso = now.toISOString();
-  const dangerousQueueSummary = await handleBlockedSonarrQueueItems({
+  const sonarrBlockedQueueSummary = await handleBlockedArrQueueItems({
     database: input.database,
-    sonarrClient: input.sonarrClient ?? null,
+    app: 'sonarr',
+    client: input.sonarrClient ?? null,
     now,
     ...(input.activityTracker
       ? {
@@ -614,6 +623,26 @@ export const runTransmissionGuard = async (input: {
         }
       : {}),
   });
+  const radarrBlockedQueueSummary = await handleBlockedArrQueueItems({
+    database: input.database,
+    app: 'radarr',
+    client: input.radarrClient ?? null,
+    now,
+    ...(input.activityTracker
+      ? {
+          activityTracker: input.activityTracker,
+        }
+      : {}),
+  });
+  const blockedQueueSummary = {
+    removedCount:
+      sonarrBlockedQueueSummary.removedCount + radarrBlockedQueueSummary.removedCount,
+    suppressionCount:
+      sonarrBlockedQueueSummary.suppressionCount +
+      radarrBlockedQueueSummary.suppressionCount,
+    linkedCount:
+      sonarrBlockedQueueSummary.linkedCount + radarrBlockedQueueSummary.linkedCount,
+  };
 
   if (!input.client) {
     input.activityTracker?.info({
@@ -627,9 +656,9 @@ export const runTransmissionGuard = async (input: {
 
     return {
       observedCount: 0,
-      removedCount: dangerousQueueSummary.removedCount,
-      suppressionCount: dangerousQueueSummary.suppressionCount,
-      linkedCount: dangerousQueueSummary.linkedCount,
+      removedCount: blockedQueueSummary.removedCount,
+      suppressionCount: blockedQueueSummary.suppressionCount,
+      linkedCount: blockedQueueSummary.linkedCount,
     };
   }
   input.activityTracker?.info({
@@ -641,9 +670,9 @@ export const runTransmissionGuard = async (input: {
   const mediaItems = listMediaItems(input.database);
   const queueDownloadMap = getQueueDownloadMap(input.database);
 
-  let removedCount = dangerousQueueSummary.removedCount;
-  let suppressionCount = dangerousQueueSummary.suppressionCount;
-  let linkedCount = dangerousQueueSummary.linkedCount;
+  let removedCount = blockedQueueSummary.removedCount;
+  let suppressionCount = blockedQueueSummary.suppressionCount;
+  let linkedCount = blockedQueueSummary.linkedCount;
 
   input.activityTracker?.info({
     source: 'transmission',

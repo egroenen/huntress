@@ -8,7 +8,7 @@ import test from 'node:test';
 import type { ResolvedConfig } from '@/src/config';
 import { initializeDatabase } from '@/src/db';
 import { createTransmissionClient } from '@/src/integrations';
-import type { SonarrApiClient } from '@/src/integrations';
+import type { RadarrApiClient, SonarrApiClient } from '@/src/integrations';
 
 import { runTransmissionGuard } from './transmission-guard';
 
@@ -780,6 +780,132 @@ test('runTransmissionGuard removes Sonarr queue items that are not upgrades and 
     assert.equal(titleSuppression?.reason, 'TX_NOT_UPGRADE_REMOVE');
     assert.equal(torrentState?.removalReason, 'TX_NOT_UPGRADE_REMOVE');
     assert.equal(torrentState?.linkedMediaKey, 'sonarr:episode:50451');
+  } finally {
+    database.close();
+  }
+});
+
+test('runTransmissionGuard removes dangerous Radarr queue items and permanently suppresses the torrent hash', async () => {
+  const removedQueueItems: Array<{
+    queueId: number;
+    options: {
+      removeFromClient: boolean;
+      blocklist: boolean;
+      skipRedownload: boolean;
+    };
+  }> = [];
+  const databasePath = await createDatabasePath();
+  const database = await initializeDatabase(databasePath);
+  const config = createResolvedConfig();
+
+  database.repositories.mediaItemState.upsert({
+    mediaKey: 'radarr:movie:3476',
+    mediaType: 'radarr_movie',
+    arrId: 3476,
+    parentArrId: null,
+    title: 'The Drama',
+    monitored: true,
+    releaseDate: '2026-04-05T00:00:00.000Z',
+    wantedState: 'missing',
+    inQueue: true,
+    retryCount: 0,
+    lastSearchAt: null,
+    lastGrabAt: null,
+    nextEligibleAt: null,
+    suppressedUntil: null,
+    suppressionReason: null,
+    lastSeenAt: '2026-04-05T01:00:00.000Z',
+    stateHash: 'radarr-movie-state',
+  });
+  database.repositories.serviceState.set({
+    key: 'arr_queue_download_map:radarr',
+    value: {
+      '3b412731d42e3f1afb2e8f38d137d0f073a8f604': 'radarr:movie:3476',
+    },
+    updatedAt: '2026-04-05T01:00:00.000Z',
+  });
+
+  const radarrClient = {
+    async getQueueDetails() {
+      return [
+        {
+          id: 789,
+          title: 'www.UIndex.org    -    The Drama 2026 1080p HD X264 1080p',
+          status: 'completed',
+          trackedDownloadState: 'importPending',
+          trackedDownloadStatus: 'warning',
+          protocol: 'torrent',
+          downloadId: '3B412731D42E3F1AFB2E8F38D137D0F073A8F604',
+          estimatedCompletionTime: null,
+          payload: {
+            statusMessages: [
+              {
+                title: 'www.UIndex.org    -    The Drama 2026 1080p HD X264 1080p',
+                messages: ['Caution: Found executable file'],
+              },
+            ],
+          },
+        },
+      ];
+    },
+    async removeQueueItem(
+      queueId: number,
+      options: {
+        removeFromClient: boolean;
+        blocklist: boolean;
+        skipRedownload: boolean;
+      }
+    ) {
+      removedQueueItems.push({ queueId, options });
+    },
+  } as unknown as RadarrApiClient;
+
+  try {
+    const summary = await runTransmissionGuard({
+      database,
+      config,
+      client: null,
+      radarrClient,
+      now: new Date('2026-04-05T01:05:00.000Z'),
+    });
+
+    const suppressions = database.repositories.releaseSuppressions.listActive(
+      '2026-04-05T01:05:00.000Z'
+    );
+    const hashSuppression = suppressions.find(
+      (suppression) => suppression.fingerprintType === 'torrent_hash'
+    );
+    const titleSuppression = suppressions.find(
+      (suppression) => suppression.fingerprintType === 'release_title'
+    );
+    const torrentState =
+      database.repositories.transmissionTorrentState.getByHash(
+        '3b412731d42e3f1afb2e8f38d137d0f073a8f604'
+      );
+
+    assert.equal(summary.observedCount, 0);
+    assert.equal(summary.removedCount, 1);
+    assert.equal(summary.suppressionCount, 2);
+    assert.equal(summary.linkedCount, 1);
+    assert.deepEqual(removedQueueItems, [
+      {
+        queueId: 789,
+        options: {
+          removeFromClient: true,
+          blocklist: true,
+          skipRedownload: true,
+        },
+      },
+    ]);
+    assert.equal(hashSuppression?.reason, 'TX_DANGEROUS_DOWNLOAD_REMOVE');
+    assert.equal(hashSuppression?.expiresAt, '9999-12-31T23:59:59.999Z');
+    assert.equal(
+      hashSuppression?.fingerprintValue,
+      '3b412731d42e3f1afb2e8f38d137d0f073a8f604'
+    );
+    assert.equal(titleSuppression?.reason, 'TX_DANGEROUS_DOWNLOAD_REMOVE');
+    assert.equal(torrentState?.removalReason, 'TX_DANGEROUS_DOWNLOAD_REMOVE');
+    assert.equal(torrentState?.linkedMediaKey, 'radarr:movie:3476');
   } finally {
     database.close();
   }

@@ -207,6 +207,11 @@ test('Sonarr client probes system status and normalizes wanted/queue responses',
 });
 
 test('Radarr client normalizes wanted movie responses', async () => {
+  const observedDeleteRequests: Array<{
+    pathname: string;
+    search: string;
+    method: string;
+  }> = [];
   const server = await startJsonServer((request, response) => {
     response.setHeader('Content-Type', 'application/json');
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
@@ -284,6 +289,16 @@ test('Radarr client normalizes wanted movie responses', async () => {
       return;
     }
 
+    if (url.pathname === '/api/v3/queue/7' && request.method === 'DELETE') {
+      observedDeleteRequests.push({
+        pathname: url.pathname,
+        search: url.search,
+        method: request.method ?? 'DELETE',
+      });
+      response.end(JSON.stringify({}));
+      return;
+    }
+
     response.statusCode = 404;
     response.end(JSON.stringify({ error: 'not found' }));
   });
@@ -297,11 +312,24 @@ test('Radarr client normalizes wanted movie responses', async () => {
 
     const missing = await client.getWantedMissing();
     const cutoff = await client.getWantedCutoff();
+    await client.removeQueueItem(7, {
+      removeFromClient: true,
+      blocklist: true,
+      skipRedownload: true,
+    });
 
     assert.equal(missing.length, 2);
     assert.equal(missing[0]?.itemType, 'movie');
     assert.equal(missing[0]?.releaseDate, '2024-02-03T00:00:00Z');
     assert.equal(cutoff[0]?.qualityCutoffNotMet, false);
+    assert.deepEqual(observedDeleteRequests, [
+      {
+        pathname: '/api/v3/queue/7',
+        search:
+          '?removeFromClient=true&blocklist=true&skipRedownload=true',
+        method: 'DELETE',
+      },
+    ]);
   } finally {
     await server.close();
   }
