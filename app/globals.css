@@ -393,10 +393,15 @@ select {
   text-transform: uppercase;
 }
 
-.status-badge--healthy,
-.status-badge--success {
+.status-badge--healthy {
   background: rgba(47, 193, 115, 0.16);
   color: #0f7c42;
+}
+
+.status-badge--success {
+  background: #d6f4e4;
+  border-color: #3c9a63;
+  color: #0d4a2a;
 }
 
 .status-badge--degraded,
