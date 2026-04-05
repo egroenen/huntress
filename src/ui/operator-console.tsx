@@ -2,7 +2,11 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import type { SchedulerCoordinatorStatus } from '@/src/scheduler';
-import { formatDisplayMode, formatRunTypeLabel } from './formatters';
+import {
+  formatDisplayMode,
+  formatReasonCodeLabel,
+  formatRunTypeLabel,
+} from './formatters';
 
 type NavPath =
   | '/'
@@ -21,6 +25,7 @@ export interface ConsoleActionTokens {
   recoverRun: string;
   manualFetch: string;
   resetTransmissionCache: string;
+  clearSuppressions: string;
 }
 
 export interface DependencyHealthCard {
@@ -38,6 +43,7 @@ interface ConsoleShellProps {
   mode: 'dry-run' | 'live';
   schedulerStatus: SchedulerCoordinatorStatus;
   actionTokens: ConsoleActionTokens;
+  dependencyCards?: DependencyHealthCard[];
   children: ReactNode;
 }
 
@@ -50,7 +56,7 @@ interface StatCardProps {
   label: string;
   value: string | number;
   tone?: 'default' | 'success' | 'warn' | 'danger';
-  detail?: string;
+  detail?: ReactNode;
 }
 
 interface SectionCardProps {
@@ -63,7 +69,7 @@ interface SectionCardProps {
 interface TableProps {
   columns: Array<{
     key: string;
-    label: string;
+    label: ReactNode;
     align?: 'left' | 'right';
   }>;
   rows: Array<Record<string, ReactNode>>;
@@ -127,7 +133,14 @@ export const StatusBadge = ({
 };
 
 export const ReasonCodeBadge = ({ reasonCode }: { reasonCode: string }) => {
-  return <code className="reason-code">{reasonCode}</code>;
+  return (
+    <code
+      className="reason-code"
+      title={`${formatReasonCodeLabel(reasonCode)} (${reasonCode})`}
+    >
+      {formatReasonCodeLabel(reasonCode)}
+    </code>
+  );
 };
 
 const BrandMark = () => {
@@ -183,8 +196,19 @@ export const ConsoleShell = ({
   mode,
   schedulerStatus,
   actionTokens,
+  dependencyCards,
   children,
 }: ConsoleShellProps) => {
+  const activeDependencyIssues =
+    dependencyCards?.filter((card) => card.status !== 'healthy') ?? [];
+  const hasUnavailableDependency = activeDependencyIssues.some(
+    (card) => card.status === 'unavailable'
+  );
+  const dependencySummary =
+    activeDependencyIssues.length === 1
+      ? `${activeDependencyIssues[0]?.name}: ${activeDependencyIssues[0]?.summary}`
+      : `${activeDependencyIssues.length} dependency issues active`;
+
   return (
     <div className="console-shell">
       <aside className="console-sidebar">
@@ -332,6 +356,27 @@ export const ConsoleShell = ({
           </div>
         </header>
 
+        {activeDependencyIssues.length > 0 ? (
+          <div
+            className={
+              hasUnavailableDependency
+                ? 'dependency-banner dependency-banner--error'
+                : 'dependency-banner dependency-banner--warn'
+            }
+          >
+            <div>
+              <strong>{dependencySummary}</strong>
+              <p>
+                {activeDependencyIssues
+                  .map((card) => `${card.name}: ${card.detail ?? card.summary}`)
+                  .join(' · ')}
+              </p>
+            </div>
+            <Link href="/" className="console-link">
+              Review dependency health
+            </Link>
+          </div>
+        ) : null}
         <div className="console-content">{children}</div>
       </main>
     </div>
@@ -348,7 +393,7 @@ export const StatCard = ({ label, value, tone = 'default', detail }: StatCardPro
     <article className={`stat-card stat-card--${tone}`}>
       <span className="stat-card__label">{label}</span>
       <strong className="stat-card__value">{value}</strong>
-      {detail ? <p className="stat-card__detail">{detail}</p> : null}
+      {detail ? <div className="stat-card__detail">{detail}</div> : null}
     </article>
   );
 };
@@ -387,7 +432,12 @@ export const DataTable = ({ columns, rows, emptyMessage }: TableProps) => {
         <tbody>
           {rows.length > 0 ? (
             rows.map((row, index) => (
-              <tr key={`${index}-${String(row[columns[0]?.key ?? index])}`}>
+              <tr
+                key={`${index}-${String(row[columns[0]?.key ?? index])}`}
+                className={
+                  typeof row.__rowClassName === 'string' ? row.__rowClassName : undefined
+                }
+              >
                 {columns.map((column) => (
                   <td
                     key={column.key}

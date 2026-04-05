@@ -4,6 +4,7 @@ import type { CandidateDecision } from '@/src/domain';
 import {
   getCandidateReleasePreviewMap,
   getDashboardCandidateSnapshot,
+  probeDependencyHealth,
   type CandidateReleasePreview,
 } from '@/src/server/console-data';
 import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
@@ -415,6 +416,7 @@ const renderReleasePreview = (preview: CandidateReleasePreview | undefined) => {
 
 export default async function CandidatesPage(props: { searchParams: SearchParams }) {
   const runtime = await requireAuthenticatedConsoleContext();
+  const dependencyCards = await probeDependencyHealth(runtime);
   const searchParams = await props.searchParams;
   const candidates = getDashboardCandidateSnapshot(runtime);
   const filters: CandidateFilters = {
@@ -466,6 +468,7 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
       actionTokens={runtime.csrfTokens}
+      dependencyCards={dependencyCards}
     >
       <SectionCard
         title="Search, filter, and sort"

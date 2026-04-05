@@ -69,3 +69,32 @@ export const formatShortRunId = (value: string | null): string => {
 
   return `${prefix}${lastPart.slice(-8)}`;
 };
+
+const REASON_CODE_LABELS: Record<string, string> = {
+  ELIGIBLE_MISSING_RECENT: 'Missing - recent - eligible for search',
+  ELIGIBLE_MISSING_BACKLOG: 'Missing - backlog - eligible for search',
+  ELIGIBLE_CUTOFF_RECENT: 'Cutoff unmet - recent - eligible for search',
+  ELIGIBLE_CUTOFF_BACKLOG: 'Cutoff unmet - backlog - eligible for search',
+  SKIP_UNMONITORED: 'Skipped - item is not monitored',
+  SKIP_UNRELEASED: 'Skipped - item has not released yet',
+  SKIP_IGNORED_STATE: 'Skipped - item is currently ignored',
+  SKIP_IN_QUEUE: 'Skipped - already queued in Arr',
+  SKIP_ITEM_SUPPRESSED: 'Skipped - item is currently suppressed',
+  SKIP_RELEASE_SUPPRESSED: 'Skipped - release is suppressed',
+  SKIP_COOLDOWN_ACTIVE: 'Skipped - retry cooldown is active',
+  SKIP_GLOBAL_PANIC_DISABLE: 'Skipped - global dispatch panic switch is on',
+  SKIP_GLOBAL_SEARCH_BLOCKED: 'Skipped - global search block is active',
+  SKIP_APP_UNAVAILABLE: 'Skipped - app is unavailable',
+  SKIP_GLOBAL_BUDGET_EXHAUSTED: 'Skipped - global dispatch budget is exhausted',
+  SKIP_APP_BUDGET_EXHAUSTED: 'Skipped - app dispatch budget is exhausted',
+  SKIP_DRY_RUN_ONLY: 'Skipped - dry-run only',
+  TX_ERROR_REMOVE: 'Removed - Transmission reported an error',
+  TX_STALLED_REMOVE: 'Removed - stalled download',
+  TX_LOOP_REPEAT_RELEASE: 'Removed - repeated bad release loop',
+  TX_DANGEROUS_DOWNLOAD_REMOVE: 'Removed - dangerous file type',
+  TX_NOT_UPGRADE_REMOVE: 'Removed - not an upgrade',
+  TX_NO_ACTION: 'No action taken',
+};
+
+export const formatReasonCodeLabel = (reasonCode: string): string =>
+  REASON_CODE_LABELS[reasonCode] ?? formatServiceName(reasonCode.replaceAll('_', ' '));

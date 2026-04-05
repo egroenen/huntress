@@ -77,6 +77,13 @@ export interface RunHistoryRecord {
   summary: Record<string, unknown>;
 }
 
+export interface RunHistoryFilter {
+  runType?: string | null;
+  status?: string | null;
+  startedFrom?: string | null;
+  startedTo?: string | null;
+}
+
 export interface ActivityLogRecord {
   id?: number;
   occurredAt: string;
@@ -296,6 +303,36 @@ const toActivityLogRecord = (row: ActivityLogRow): ActivityLogRecord => {
 };
 
 export const createRepositories = (database: SqliteDatabase) => {
+  const buildRunHistoryFilter = (filter: RunHistoryFilter = {}) => {
+    const clauses: string[] = [];
+    const params: Array<string> = [];
+
+    if (filter.runType) {
+      clauses.push('run_type = ?');
+      params.push(filter.runType);
+    }
+
+    if (filter.status) {
+      clauses.push('status = ?');
+      params.push(filter.status);
+    }
+
+    if (filter.startedFrom) {
+      clauses.push('started_at >= ?');
+      params.push(filter.startedFrom);
+    }
+
+    if (filter.startedTo) {
+      clauses.push('started_at < ?');
+      params.push(filter.startedTo);
+    }
+
+    return {
+      whereClause: clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '',
+      params,
+    };
+  };
+
   const serviceState = {
     get<T>(key: string): ServiceStateRecord<T> | null {
       const row = database
@@ -831,6 +868,20 @@ export const createRepositories = (database: SqliteDatabase) => {
 
       return row?.total ?? 0;
     },
+    countFiltered(filter: RunHistoryFilter = {}): number {
+      const { whereClause, params } = buildRunHistoryFilter(filter);
+      const row = database
+        .prepare<unknown[], { total: number } | undefined>(
+          `
+            SELECT COUNT(*) AS total
+            FROM run_history
+            ${whereClause}
+          `
+        )
+        .get(...params);
+
+      return row?.total ?? 0;
+    },
     listPage(limit: number, offset: number): RunHistoryRecord[] {
       const rows = database
         .prepare<[number, number], RunHistoryRow>(
@@ -842,6 +893,26 @@ export const createRepositories = (database: SqliteDatabase) => {
           `
         )
         .all(limit, offset);
+
+      return rows.map((row) => toRunHistoryRecord(row));
+    },
+    listFilteredPage(
+      filter: RunHistoryFilter,
+      limit: number,
+      offset: number
+    ): RunHistoryRecord[] {
+      const { whereClause, params } = buildRunHistoryFilter(filter);
+      const rows = database
+        .prepare<unknown[], RunHistoryRow>(
+          `
+            SELECT *
+            FROM run_history
+            ${whereClause}
+            ORDER BY started_at DESC, id DESC
+            LIMIT ? OFFSET ?
+          `
+        )
+        .all(...params, limit, offset);
 
       return rows.map((row) => toRunHistoryRecord(row));
     },
@@ -890,6 +961,21 @@ export const createRepositories = (database: SqliteDatabase) => {
           `
         )
         .all(limit);
+
+      return rows.map((row) => toActivityLogRecord(row));
+    },
+    listByRunId(runId: string): ActivityLogRecord[] {
+      const rows = database
+        .prepare<[string], ActivityLogRow>(
+          `
+            SELECT id, occurred_at, level, source, stage, message, detail, run_id, run_type,
+                   progress_current, progress_total, metadata_json
+            FROM activity_log
+            WHERE run_id = ?
+            ORDER BY occurred_at ASC, id ASC
+          `
+        )
+        .all(runId);
 
       return rows.map((row) => toActivityLogRecord(row));
     },
@@ -1106,6 +1192,20 @@ export const createRepositories = (database: SqliteDatabase) => {
     },
     clearById(id: number): void {
       database.prepare('DELETE FROM release_suppression WHERE id = ?').run(id);
+    },
+    clearByIds(ids: number[]): number {
+      const uniqueIds = Array.from(new Set(ids.filter((id) => Number.isInteger(id))));
+
+      if (uniqueIds.length === 0) {
+        return 0;
+      }
+
+      const placeholders = uniqueIds.map(() => '?').join(', ');
+      const result = database
+        .prepare(`DELETE FROM release_suppression WHERE id IN (${placeholders})`)
+        .run(...uniqueIds);
+
+      return result.changes;
     },
   };
 

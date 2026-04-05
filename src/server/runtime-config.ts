@@ -35,6 +35,10 @@ export interface PersistedSearchSafetyOverrides {
   };
 }
 
+export interface PersistedSchedulerOverrides {
+  cycleEveryMinutes: number | null;
+}
+
 type ReleaseSelectionStrategy =
   | 'best_only'
   | 'good_enough_now'
@@ -78,6 +82,7 @@ const GENERATED_SESSION_SECRET_KEY = 'generated_session_secret';
 const PERSISTED_CONNECTION_SETTINGS_KEY = 'connection_settings';
 const PERSISTED_SEARCH_SAFETY_OVERRIDES_KEY = 'search_safety_overrides';
 const PERSISTED_RELEASE_SELECTION_OVERRIDES_KEY = 'release_selection_overrides';
+const PERSISTED_SCHEDULER_OVERRIDES_KEY = 'scheduler_overrides';
 
 const trimToNull = (value: string | null | undefined): string | null => {
   const normalized = value?.trim();
@@ -121,6 +126,16 @@ const getPersistedReleaseSelectionOverrides = (
   return (
     database.repositories.serviceState.get<PersistedReleaseSelectionOverrides>(
       PERSISTED_RELEASE_SELECTION_OVERRIDES_KEY
+    )?.value ?? null
+  );
+};
+
+const getPersistedSchedulerOverrides = (
+  database: DatabaseContext
+): PersistedSchedulerOverrides | null => {
+  return (
+    database.repositories.serviceState.get<PersistedSchedulerOverrides>(
+      PERSISTED_SCHEDULER_OVERRIDES_KEY
     )?.value ?? null
   );
 };
@@ -216,6 +231,10 @@ const createDefaultSearchSafetyOverrides = (): PersistedSearchSafetyOverrides =>
   };
 };
 
+const createDefaultSchedulerOverrides = (): PersistedSchedulerOverrides => ({
+  cycleEveryMinutes: null,
+});
+
 const createDefaultReleaseSelectionOverride = (
   policy: ResolvedConfig['policies']['sonarr']
 ): PersistedReleaseSelectionOverride => {
@@ -252,6 +271,12 @@ const normalizePersistedSearchSafetyOverrides = (
     },
   };
 };
+
+const normalizePersistedSchedulerOverrides = (
+  overrides: PersistedSchedulerOverrides | null
+): PersistedSchedulerOverrides => ({
+  cycleEveryMinutes: positiveIntOrNull(overrides?.cycleEveryMinutes),
+});
 
 const normalizeReleaseSelectionOverride = (
   override: PersistedReleaseSelectionOverride | null | undefined,
@@ -333,6 +358,25 @@ const ensurePersistedReleaseSelectionOverrides = (
   if (!existing) {
     database.repositories.serviceState.set({
       key: PERSISTED_RELEASE_SELECTION_OVERRIDES_KEY,
+      value: normalized,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  return normalized;
+};
+
+const ensurePersistedSchedulerOverrides = (
+  database: DatabaseContext
+): PersistedSchedulerOverrides => {
+  const existing = getPersistedSchedulerOverrides(database);
+  const normalized = normalizePersistedSchedulerOverrides(
+    existing ?? createDefaultSchedulerOverrides()
+  );
+
+  if (!existing) {
+    database.repositories.serviceState.set({
+      key: PERSISTED_SCHEDULER_OVERRIDES_KEY,
       value: normalized,
       updatedAt: new Date().toISOString(),
     });
@@ -429,6 +473,21 @@ export const savePersistedSearchSafetyOverrides = (
   return normalized;
 };
 
+export const savePersistedSchedulerOverrides = (
+  database: DatabaseContext,
+  overrides: PersistedSchedulerOverrides
+): PersistedSchedulerOverrides => {
+  const normalized = normalizePersistedSchedulerOverrides(overrides);
+
+  database.repositories.serviceState.set({
+    key: PERSISTED_SCHEDULER_OVERRIDES_KEY,
+    value: normalized,
+    updatedAt: new Date().toISOString(),
+  });
+
+  return normalized;
+};
+
 export const savePersistedReleaseSelectionOverrides = (
   database: DatabaseContext,
   config: ResolvedConfig,
@@ -455,6 +514,7 @@ export const resolveRuntimeConfig = (
   );
   const persistedSearchSafetyOverrides =
     ensurePersistedSearchSafetyOverrides(database);
+  const persistedSchedulerOverrides = ensurePersistedSchedulerOverrides(database);
   const persistedReleaseSelectionOverrides = ensurePersistedReleaseSelectionOverrides(
     database,
     loadedConfig.config
@@ -512,6 +572,13 @@ export const resolveRuntimeConfig = (
         username: transmissionUsername,
         password: transmissionPassword,
       },
+    },
+    scheduler: {
+      ...loadedConfig.config.scheduler,
+      cycleEveryMs:
+        (persistedSchedulerOverrides.cycleEveryMinutes ?? 0) > 0
+          ? persistedSchedulerOverrides.cycleEveryMinutes! * 60_000
+          : loadedConfig.config.scheduler.cycleEveryMs,
     },
     safety: {
       ...loadedConfig.config.safety,
@@ -677,6 +744,19 @@ export const buildSearchSafetyOverridesFromConfig = (
         persistedOverrides.rollingSearchLimits.per24h ??
         config.safety.rollingSearchLimits.per24h,
     },
+  };
+};
+
+export const buildSchedulerOverridesFromConfig = (
+  config: ResolvedConfig,
+  database: DatabaseContext
+): PersistedSchedulerOverrides => {
+  const persistedOverrides = ensurePersistedSchedulerOverrides(database);
+
+  return {
+    cycleEveryMinutes:
+      persistedOverrides.cycleEveryMinutes ??
+      Math.max(Math.round(config.scheduler.cycleEveryMs / 60_000), 1),
   };
 };
 

@@ -5,6 +5,7 @@ import type {
   ConfigurableServiceName,
   PersistedReleaseSelectionOverrides,
   PersistedSearchSafetyOverrides,
+  PersistedSchedulerOverrides,
 } from './runtime-config';
 
 const readString = (formData: FormData, key: string): string | null => {
@@ -73,6 +74,20 @@ export const parseSearchSafetyOverridesForm = (
       per1h: readPositiveInteger(formData, 'rollingLimit1h'),
       per24h: readPositiveInteger(formData, 'rollingLimit24h'),
     },
+  };
+};
+
+export const parseSchedulerOverridesForm = (
+  formData: FormData
+): PersistedSchedulerOverrides => {
+  const value = readPositiveInteger(formData, 'schedulerIntervalMinutes');
+
+  if (value !== null && (value < 5 || value > 120)) {
+    throw new Error('schedulerIntervalMinutes must be between 5 and 120 minutes');
+  }
+
+  return {
+    cycleEveryMinutes: value,
   };
 };
 

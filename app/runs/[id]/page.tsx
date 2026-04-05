@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
 
 import type { RunHistoryRecord, SearchAttemptRecord } from '@/src/db';
+import { probeDependencyHealth } from '@/src/server/console-data';
 import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
@@ -141,6 +142,32 @@ const formatDuration = (startedAt: string, finishedAt: string | null): string =>
   const remainingMinutes = minutes % 60;
 
   return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+};
+
+const formatProgress = (current: number | null, total: number | null): string => {
+  if (current === null && total === null) {
+    return 'n/a';
+  }
+
+  if (current !== null && total !== null) {
+    return `${current} / ${total}`;
+  }
+
+  return String(current ?? total);
+};
+
+const toActivityBadgeStatus = (
+  level: 'info' | 'warn' | 'error'
+): 'success' | 'degraded' | 'failed' => {
+  if (level === 'error') {
+    return 'failed';
+  }
+
+  if (level === 'warn') {
+    return 'degraded';
+  }
+
+  return 'success';
 };
 
 const parsePositivePage = (value: string | string[] | undefined): number => {
@@ -648,6 +675,7 @@ export default async function RunDetailPage({
     searchParams,
     requireAuthenticatedConsoleContext(),
   ]);
+  const dependencyCards = await probeDependencyHealth(runtime);
   const run = runtime.database.repositories.runHistory.getById(id);
 
   if (!run) {
@@ -655,6 +683,7 @@ export default async function RunDetailPage({
   }
 
   const totalAttempts = runtime.database.repositories.searchAttempts.countByRunId(id);
+  const runEvents = runtime.database.repositories.activityLog.listByRunId(id);
   const attemptQuery = Array.isArray(resolvedSearchParams.q)
     ? (resolvedSearchParams.q[0] ?? '')
     : (resolvedSearchParams.q ?? '');
@@ -737,6 +766,7 @@ export default async function RunDetailPage({
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
       actionTokens={runtime.csrfTokens}
+      dependencyCards={dependencyCards}
     >
       <Link href="/runs" className="console-link run-breadcrumb">
         ← Run history
@@ -746,6 +776,40 @@ export default async function RunDetailPage({
       {renderSyncSection(summary)}
       {renderTransmissionSection(summary)}
       {renderDispatchSection(summary)}
+      <SectionCard
+        title="Run event log"
+        subtitle="Detailed stage-by-stage events recorded for this run."
+      >
+        <DataTable
+          columns={[
+            { key: 'time', label: 'Time' },
+            { key: 'source', label: 'Source' },
+            { key: 'stage', label: 'Stage' },
+            { key: 'message', label: 'Message' },
+            { key: 'progress', label: 'Progress', align: 'right' },
+          ]}
+          rows={runEvents.map((event) => ({
+            time: formatTimestamp(event.occurredAt),
+            source: formatServiceName(event.source),
+            stage: (
+              <span className="activity-stage">
+                <StatusBadge status={toActivityBadgeStatus(event.level)}>
+                  {event.level}
+                </StatusBadge>
+                <code className="reason-code">{event.stage}</code>
+              </span>
+            ),
+            message: (
+              <div className="activity-message">
+                <strong>{event.message}</strong>
+                {event.detail ? <small>{event.detail}</small> : null}
+              </div>
+            ),
+            progress: formatProgress(event.progressCurrent, event.progressTotal),
+          }))}
+          emptyMessage="No detailed activity log was recorded for this run."
+        />
+      </SectionCard>
 
       <SectionCard
         title="Attempt log"

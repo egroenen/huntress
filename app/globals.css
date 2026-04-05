@@ -278,6 +278,34 @@ select {
   align-content: start;
 }
 
+.dependency-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid #dfd2a1;
+  border-radius: 10px;
+  background: #fff8df;
+  color: #5f4b16;
+  margin: 0 1.2rem 1.2rem;
+  padding: 0.9rem 1rem;
+}
+
+.dependency-banner strong {
+  display: block;
+}
+
+.dependency-banner p {
+  margin: 0.25rem 0 0;
+  color: inherit;
+}
+
+.dependency-banner--error {
+  border-color: #dbb3b8;
+  background: #fff0f2;
+  color: #7d2830;
+}
+
 .stats-grid {
   display: grid;
   gap: 1rem;
@@ -487,9 +515,46 @@ select {
   border-radius: 3px;
   background: #f7fafc;
   color: #39506d;
-  font-family: 'Cascadia Mono', 'SFMono-Regular', ui-monospace, monospace;
   font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.35;
   padding: 0.28rem 0.5rem;
+}
+
+.budget-meter {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.budget-meter__bar {
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dfe8f2;
+}
+
+.budget-meter__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.budget-meter__fill--healthy {
+  background: #2eb67d;
+}
+
+.budget-meter__fill--degraded {
+  background: #d9a441;
+}
+
+.budget-meter__fill--unavailable {
+  background: #d95b63;
+}
+
+.budget-meter__detail {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
 }
 
 .activity-panel {
@@ -591,10 +656,36 @@ select {
   color: #20324a;
 }
 
+.torrent-name-cell {
+  display: inline-block;
+  max-width: 28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: top;
+}
+
 .linked-media-cell code,
 .suppression-title code {
   display: inline-flex;
   margin-top: 0.3rem;
+}
+
+.transmission-details-cell {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.transmission-security-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #9c2d20;
+  font-weight: 800;
+}
+
+.transmission-row--dangerous {
+  background: rgba(217, 91, 99, 0.08);
 }
 
 .table-pagination,
@@ -652,6 +743,27 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.bulk-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  padding: 0 1rem 1rem;
+}
+
+.bulk-actions__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.table-select-checkbox {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
 }
 
 .transmission-controls {

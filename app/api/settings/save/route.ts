@@ -4,11 +4,13 @@ import {
   savePersistedConnectionSettings,
   savePersistedReleaseSelectionOverrides,
   savePersistedSearchSafetyOverrides,
+  savePersistedSchedulerOverrides,
 } from '@/src/server/runtime-config';
 import {
   parseConnectionSettingsForm,
   parseReleaseSelectionOverridesForm,
   parseSearchSafetyOverridesForm,
+  parseSchedulerOverridesForm,
 } from '@/src/server/settings-form';
 import { authenticateConsoleAction } from '@/src/server/require-action';
 
@@ -35,15 +37,27 @@ export async function POST(request: Request) {
     );
     const nextSettings = parseConnectionSettingsForm(formData);
     const nextOverrides = parseSearchSafetyOverridesForm(formData);
+    const nextSchedulerOverrides = parseSchedulerOverridesForm(formData);
     const nextReleaseSelectionOverrides =
       parseReleaseSelectionOverridesForm(formData);
 
     savePersistedConnectionSettings(runtime.database, nextSettings);
     savePersistedSearchSafetyOverrides(runtime.database, nextOverrides);
+    const savedSchedulerOverrides = savePersistedSchedulerOverrides(
+      runtime.database,
+      nextSchedulerOverrides
+    );
     savePersistedReleaseSelectionOverrides(
       runtime.database,
       runtime.config,
       nextReleaseSelectionOverrides
+    );
+    runtime.scheduler.updateCadence(
+      Math.max(
+        savedSchedulerOverrides.cycleEveryMinutes ??
+          Math.round(runtime.config.scheduler.cycleEveryMs / 60_000),
+        1
+      ) * 60_000
     );
 
     return buildRedirect(request, {

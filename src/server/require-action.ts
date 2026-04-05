@@ -18,6 +18,7 @@ type ActionName =
   | 'reset-transmission-cache'
   | 'manual-fetch'
   | 'save-settings'
+  | 'clear-suppressions'
   | `clear-suppression:${number}`
   | `test-connection:${'sonarr' | 'radarr' | 'prowlarr' | 'transmission'}`;
 

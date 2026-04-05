@@ -9,10 +9,12 @@ import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import { getSearchRateSnapshot } from '@/src/observability';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
+  BudgetMeter,
   ConsoleShell,
   DataTable,
   DependencyHealthGrid,
   MediaItemLink,
+  RelativeTimeLabel,
   ReasonCodeBadge,
   SectionCard,
   StatCard,
@@ -205,6 +207,7 @@ export default async function HomePage() {
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
       actionTokens={runtime.csrfTokens}
+      dependencyCards={dependencies}
     >
       <StatsGrid className="stats-grid--overview">
         <Link href="/settings" className="stat-card-link">
@@ -212,7 +215,15 @@ export default async function HomePage() {
             label="Dispatch mode"
             value={formatDisplayMode(runtime.config.mode)}
             tone={runtime.config.mode === 'live' ? 'success' : 'warn'}
-            detail={`Next cycle ${formatTimestamp(runtime.scheduler.getStatus().nextScheduledRunAt)}`}
+            detail={
+              runtime.scheduler.getStatus().nextScheduledRunAt ? (
+                <span>
+                  Next cycle <RelativeTimeLabel isoTimestamp={runtime.scheduler.getStatus().nextScheduledRunAt} />
+                </span>
+              ) : (
+                'No next cycle scheduled'
+              )
+            }
           />
         </Link>
         <Link href="/candidates" className="stat-card-link">
@@ -235,9 +246,15 @@ export default async function HomePage() {
             value={`${searchRate.windows[0]?.used ?? 0}/${searchRate.windows[0]?.limit ?? 0}`}
             tone={searchRate.currentThrottleReason ? 'warn' : 'default'}
             detail={
-              searchRate.currentThrottleReason
-                ? `${searchRate.currentThrottleReason} until ${formatTimestamp(searchRate.nextEligibleAt)}`
-                : 'Dispatch budget currently available'
+              <BudgetMeter
+                used={searchRate.windows[0]?.used ?? 0}
+                limit={searchRate.windows[0]?.limit ?? 0}
+                detail={
+                  searchRate.currentThrottleReason
+                    ? `${searchRate.currentThrottleReason} until ${formatTimestamp(searchRate.nextEligibleAt)}`
+                    : 'Dispatch budget currently available'
+                }
+              />
             }
           />
         </Link>
@@ -581,6 +598,7 @@ export default async function HomePage() {
             { key: 'used', label: 'Used', align: 'right' },
             { key: 'limit', label: 'Limit', align: 'right' },
             { key: 'remaining', label: 'Remaining', align: 'right' },
+            { key: 'usage', label: 'Usage' },
             { key: 'nextEligibleAt', label: 'Next eligible' },
           ]}
           rows={searchRate.windows.map((window) => ({
@@ -588,6 +606,7 @@ export default async function HomePage() {
             used: window.used,
             limit: window.limit,
             remaining: window.remaining,
+            usage: <BudgetMeter used={window.used} limit={window.limit} />,
             nextEligibleAt: formatTimestamp(window.nextEligibleAt),
           }))}
           emptyMessage="No dispatch budget windows are available."

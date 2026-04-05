@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { createCsrfToken } from '@/src/auth';
+import { probeDependencyHealth } from '@/src/server/console-data';
 import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import {
   ConfirmButton,
@@ -8,6 +9,7 @@ import {
   DataTable,
   MediaItemLink,
   SectionCard,
+  SuppressionSelectAll,
 } from '@/src/ui';
 import { formatServiceName } from '@/src/ui/formatters';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
@@ -142,10 +144,23 @@ const truncateValue = (value: string, maxLength = 88): string => {
 
 export default async function SuppressionsPage(props: { searchParams: SearchParams }) {
   const runtime = await requireAuthenticatedConsoleContext();
+  const dependencyCards = await probeDependencyHealth(runtime);
   const searchParams = await props.searchParams;
   const query = parseStringParam(searchParams.q).trim();
+  const notice =
+    typeof searchParams.notice === 'string' ? searchParams.notice : undefined;
+  const noticeStatus =
+    typeof searchParams.status === 'string' ? searchParams.status : undefined;
   const suppressions = runtime.database.repositories.releaseSuppressions.listActive(
     new Date().toISOString()
+  );
+  const returnToBase = buildSuppressionsHref({
+    page: parsePositivePage(searchParams.page),
+    query,
+  });
+  const displayMediaItems = await hydrateMediaDisplayRecords(
+    runtime,
+    suppressions.map((suppression) => suppression.mediaKey)
   );
 
   const titleCache = new Map<string, string | null>();
@@ -153,8 +168,9 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
     if (!titleCache.has(mediaKey)) {
       titleCache.set(
         mediaKey,
-        runtime.database.repositories.mediaItemState.getByMediaKey(mediaKey)?.title ??
-          null
+        displayMediaItems.get(mediaKey)?.title ??
+          runtime.database.repositories.mediaItemState.getByMediaKey(mediaKey)?.title ??
+          mediaKey
       );
     }
 
@@ -188,10 +204,10 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE
   );
-  const displayMediaItems = await hydrateMediaDisplayRecords(
-    runtime,
-    pagedSuppressions.map((suppression) => suppression.mediaKey)
-  );
+  const returnTo = buildSuppressionsHref({
+    page: currentPage,
+    query,
+  });
 
   return (
     <ConsoleShell
@@ -202,12 +218,24 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
       actionTokens={runtime.csrfTokens}
+      dependencyCards={dependencyCards}
     >
       <SectionCard
         title="Active suppressions"
         subtitle="These blocks expire automatically unless cleared early."
         actions={renderPagination(currentPage, filteredSuppressions.length, query)}
       >
+        {notice ? (
+          <p
+            className={
+              noticeStatus === 'success'
+                ? 'settings-notice is-success'
+                : 'settings-notice is-error'
+            }
+          >
+            {notice}
+          </p>
+        ) : null}
         <form action="/suppressions" method="get" className="candidate-filters">
           <div className="candidate-filters__grid">
             <label className="candidate-filters__field candidate-filters__field--wide">
@@ -235,8 +263,60 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
             </div>
           </div>
         </form>
+        <div className="bulk-actions">
+          <form
+            id="bulk-clear-selected-form"
+            action="/api/suppressions/clear-selected"
+            method="post"
+            className="bulk-actions__group"
+          >
+            <input
+              type="hidden"
+              name="csrfToken"
+              value={runtime.csrfTokens.clearSuppressions}
+            />
+            <input type="hidden" name="returnTo" value={returnTo} />
+            <ConfirmButton
+              type="submit"
+              className="console-button console-button--ghost"
+              confirmMessage="Clear the selected suppressions?"
+            >
+              Clear selected
+            </ConfirmButton>
+          </form>
+          <form
+            action="/api/suppressions/clear-selected"
+            method="post"
+            className="bulk-actions__group"
+          >
+            <input
+              type="hidden"
+              name="csrfToken"
+              value={runtime.csrfTokens.clearSuppressions}
+            />
+            <input type="hidden" name="returnTo" value={returnToBase} />
+            {filteredSuppressions
+              .map((suppression) => suppression.id)
+              .filter((id): id is number => typeof id === 'number')
+              .map((id) => (
+                <input key={id} type="hidden" name="suppressionIds" value={id} />
+              ))}
+            <ConfirmButton
+              type="submit"
+              className="console-button console-button--ghost"
+              confirmMessage={`Clear all ${filteredSuppressions.length} matching suppressions?`}
+              disabled={filteredSuppressions.length === 0}
+            >
+              Clear all matching
+            </ConfirmButton>
+          </form>
+        </div>
         <DataTable
           columns={[
+            {
+              key: 'select',
+              label: <SuppressionSelectAll />,
+            },
             { key: 'title', label: 'Title' },
             { key: 'mediaKey', label: 'Media key' },
             { key: 'fingerprintType', label: 'Fingerprint' },
@@ -245,12 +325,24 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
             { key: 'action', label: 'Action', align: 'right' },
           ]}
           rows={pagedSuppressions.map((suppression) => ({
+            select:
+              suppression.id !== undefined ? (
+                <input
+                  type="checkbox"
+                  name="suppressionIds"
+                  value={suppression.id}
+                  form="bulk-clear-selected-form"
+                  data-suppression-selectable="true"
+                  className="table-select-checkbox"
+                  aria-label={`Select suppression for ${resolveTitle(suppression.mediaKey) ?? suppression.mediaKey}`}
+                />
+              ) : null,
             title: (
               <div className="suppression-title" title={suppression.mediaKey}>
                 <MediaItemLink
                   config={runtime.config}
                   mediaItem={displayMediaItems.get(suppression.mediaKey) ?? null}
-                  fallbackTitle={resolveTitle(suppression.mediaKey) ?? 'Unknown title'}
+                  fallbackTitle={resolveTitle(suppression.mediaKey) ?? suppression.mediaKey}
                   className="external-item-link"
                 />
                 <span className="secondary-value">

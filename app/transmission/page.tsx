@@ -1,11 +1,13 @@
 import type { ReactNode } from 'react';
 
+import { probeDependencyHealth } from '@/src/server/console-data';
 import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   ConsoleShell,
   DataTable,
   MediaItemLink,
+  ReasonCodeBadge,
   SectionCard,
   StatusBadge,
 } from '@/src/ui';
@@ -463,6 +465,7 @@ const renderPagination = (input: {
 
 export default async function TransmissionPage(props: { searchParams: SearchParams }) {
   const runtime = await requireAuthenticatedConsoleContext();
+  const dependencyCards = await probeDependencyHealth(runtime);
   const searchParams = await props.searchParams;
   const state = parseStringParam(searchParams.state);
   const sort = parseSort(searchParams.sort);
@@ -553,6 +556,7 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
       actionTokens={runtime.csrfTokens}
+      dependencyCards={dependencyCards}
     >
       <SectionCard
         title="Transmission controls"
@@ -678,10 +682,7 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
             { key: 'linkedMediaKey', label: 'Linked media' },
             { key: 'noProgressSince', label: 'No progress' },
             { key: 'removeIn', label: 'Remove in' },
-            { key: 'lastSeenAt', label: 'Last seen' },
-            { key: 'removeAt', label: 'Remove at' },
-            { key: 'error', label: 'Error' },
-            { key: 'removalReason', label: 'Removal reason' },
+            { key: 'details', label: 'Details' },
           ]}
           rows={pagedTorrents.map((torrent) => {
             const insight = getGuardInsight({
@@ -693,9 +694,16 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
               stallNoProgressForMs: runtime.config.transmissionGuard.stallNoProgressForMs,
               now,
             });
+            const dangerousRemoval =
+              torrent.removalReason === 'TX_DANGEROUS_DOWNLOAD_REMOVE';
 
             return {
-              name: torrent.name,
+              __rowClassName: dangerousRemoval ? 'transmission-row--dangerous' : undefined,
+              name: (
+                <span className="torrent-name-cell" title={torrent.name}>
+                  {torrent.name}
+                </span>
+              ),
               state: (
                 <span className="table-app-label">
                   {formatTransmissionState(torrent.status)}
@@ -729,25 +737,37 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
                 <span className="console-muted">active / none</span>
               ),
               removeIn: insight.countdown,
-              lastSeenAt: formatTimestamp(torrent.lastSeenAt),
-              removeAt: formatTimestamp(insight.removeAt),
-              error: torrent.errorCode ? (
-                <span>
-                  <code className="reason-code">error {torrent.errorCode}</code>
-                  {torrent.errorString ? (
-                    <>
-                      <br />
-                      <span className="console-muted">{torrent.errorString}</span>
-                    </>
+              details: (
+                <div className="transmission-details-cell">
+                  {dangerousRemoval ? (
+                    <span className="transmission-security-flag">⚠ Security risk</span>
                   ) : null}
-                </span>
-              ) : (
-                <span className="console-muted">none</span>
-              ),
-              removalReason: torrent.removalReason ? (
-                <code className="reason-code">{torrent.removalReason}</code>
-              ) : (
-                <span className="console-muted">none</span>
+                  <span>
+                    <strong>Last seen:</strong> {formatTimestamp(torrent.lastSeenAt)}
+                  </span>
+                  <span>
+                    <strong>Remove at:</strong> {formatTimestamp(insight.removeAt)}
+                  </span>
+                  <span>
+                    <strong>Removal reason:</strong>{' '}
+                    {torrent.removalReason ? (
+                      <ReasonCodeBadge reasonCode={torrent.removalReason} />
+                    ) : (
+                      <span className="console-muted">none</span>
+                    )}
+                  </span>
+                  <span>
+                    <strong>Error:</strong>{' '}
+                    {torrent.errorCode ? (
+                      <>
+                        <code className="reason-code">error {torrent.errorCode}</code>
+                        {torrent.errorString ? ` ${torrent.errorString}` : ''}
+                      </>
+                    ) : (
+                      <span className="console-muted">none</span>
+                    )}
+                  </span>
+                </div>
               ),
             };
           })}

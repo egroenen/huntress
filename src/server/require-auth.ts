@@ -65,6 +65,10 @@ export const requireAuthenticatedConsoleContext = async () => {
         `action:reset-transmission-cache:${authenticated.sessionId}`,
         runtime.config.auth.sessionSecret
       ),
+      clearSuppressions: createCsrfToken(
+        `action:clear-suppressions:${authenticated.sessionId}`,
+        runtime.config.auth.sessionSecret
+      ),
       saveSettings: createCsrfToken(
         `action:save-settings:${authenticated.sessionId}`,
         runtime.config.auth.sessionSecret

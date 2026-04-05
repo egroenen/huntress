@@ -52,6 +52,11 @@ export interface SchedulerCoordinatorStatus {
   } | null;
 }
 
+export interface SchedulerCadenceUpdateResult {
+  cadenceMs: number;
+  nextScheduledRunAt: string | null;
+}
+
 export interface SchedulerCoordinatorOptions {
   database: DatabaseContext;
   cadenceMs: number;
@@ -211,6 +216,7 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
     ((handle: unknown) => clearInterval(handle as NodeJS.Timeout));
   const startedAt = now();
   const isLiveModeEnabled = options.isLiveModeEnabled ?? (() => true);
+  let cadenceMs = options.cadenceMs;
   let intervalHandle: unknown = null;
   let nextScheduledRunAt: Date | null = null;
 
@@ -419,17 +425,21 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
     };
   };
 
+  const scheduleInterval = (): void => {
+    nextScheduledRunAt = new Date(now().getTime() + cadenceMs);
+    intervalHandle = createScheduledInterval(() => {
+      nextScheduledRunAt = new Date(now().getTime() + cadenceMs);
+      void run('scheduled');
+    }, cadenceMs);
+  };
+
   return {
     start(): void {
       if (intervalHandle) {
         return;
       }
 
-      nextScheduledRunAt = new Date(now().getTime() + options.cadenceMs);
-      intervalHandle = createScheduledInterval(() => {
-        nextScheduledRunAt = new Date(now().getTime() + options.cadenceMs);
-        void run('scheduled');
-      }, options.cadenceMs);
+      scheduleInterval();
     },
     stop(): void {
       if (!intervalHandle) {
@@ -438,6 +448,22 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
 
       clearScheduledInterval(intervalHandle);
       intervalHandle = null;
+    },
+    updateCadence(nextCadenceMs: number): SchedulerCadenceUpdateResult {
+      cadenceMs = nextCadenceMs;
+
+      if (intervalHandle) {
+        clearScheduledInterval(intervalHandle);
+        intervalHandle = null;
+        scheduleInterval();
+      } else {
+        nextScheduledRunAt = new Date(now().getTime() + cadenceMs);
+      }
+
+      return {
+        cadenceMs,
+        nextScheduledRunAt: nextScheduledRunAt?.toISOString() ?? null,
+      };
     },
     isStartupGraceActive,
     runScheduledCycle(): Promise<RunInvocationResult> {

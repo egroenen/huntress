@@ -15,6 +15,7 @@ import {
   parseConnectionSettingsForm,
 } from '@/src/server/settings-form';
 import { authenticateConsoleAction } from '@/src/server/require-action';
+import { formatServiceName } from '@/src/ui/formatters';
 
 export const dynamic = 'force-dynamic';
 
@@ -109,21 +110,38 @@ export async function POST(
 
     if (!isServiceConfigured(service, effectiveSettings)) {
       return buildRedirect(request, {
-        status: 'error',
-        notice: `Please complete the ${service} connection fields before testing.`,
+        testService: service,
+        testStatus: 'error',
+        testNotice: `Please complete the ${formatServiceName(service)} connection fields before testing.`,
       });
     }
 
-    await testConnection(service, effectiveSettings);
+    const result = await testConnection(service, effectiveSettings);
+    let detail: string | null = null;
+
+    if (
+      (service === 'sonarr' || service === 'radarr') &&
+      result &&
+      'appName' in result
+    ) {
+      detail = `${result.appName ?? formatServiceName(service)} ${result.version ?? ''}`.trim();
+    } else if (service === 'transmission' && result) {
+      detail = `${result.version ?? 'Transmission'} reachable`;
+    } else if (service === 'prowlarr') {
+      detail = 'Health and indexer probes succeeded.';
+    }
 
     return buildRedirect(request, {
-      status: 'success',
-      notice: `${service} connection test succeeded`,
+      testService: service,
+      testStatus: 'success',
+      testNotice: `${formatServiceName(service)} connection test succeeded`,
+      ...(detail ? { testDetail: detail } : {}),
     });
   } catch (error) {
     return buildRedirect(request, {
-      status: 'error',
-      notice: error instanceof Error ? error.message : 'Connection test failed',
+      testService: service,
+      testStatus: 'error',
+      testNotice: error instanceof Error ? error.message : 'Connection test failed',
     });
   }
 }

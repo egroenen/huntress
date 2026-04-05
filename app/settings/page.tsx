@@ -1,8 +1,9 @@
-import { getRedactedConfig } from '@/src/server/console-data';
+import { getRedactedConfig, probeDependencyHealth } from '@/src/server/console-data';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   buildConnectionSettingsFromConfig,
   buildReleaseSelectionOverridesFromConfig,
+  buildSchedulerOverridesFromConfig,
   buildSearchSafetyOverridesFromConfig,
 } from '@/src/server/runtime-config';
 import { ConsoleShell, SectionCard, StatusBadge } from '@/src/ui';
@@ -17,13 +18,26 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 export default async function SettingsPage(props: { searchParams: SearchParams }) {
   const runtime = await requireAuthenticatedConsoleContext();
   const redactedConfig = await getRedactedConfig();
+  const dependencyCards = await probeDependencyHealth(runtime);
   const searchParams = await props.searchParams;
   const notice =
     typeof searchParams.notice === 'string' ? searchParams.notice : undefined;
   const noticeStatus =
     typeof searchParams.status === 'string' ? searchParams.status : undefined;
+  const testService =
+    typeof searchParams.testService === 'string' ? searchParams.testService : undefined;
+  const testStatus =
+    typeof searchParams.testStatus === 'string' ? searchParams.testStatus : undefined;
+  const testNotice =
+    typeof searchParams.testNotice === 'string' ? searchParams.testNotice : undefined;
+  const testDetail =
+    typeof searchParams.testDetail === 'string' ? searchParams.testDetail : undefined;
   const connectionSettings = buildConnectionSettingsFromConfig(runtime.config);
   const searchSafetyOverrides = buildSearchSafetyOverridesFromConfig(
+    runtime.config,
+    runtime.database
+  );
+  const schedulerOverrides = buildSchedulerOverridesFromConfig(
     runtime.config,
     runtime.database
   );
@@ -41,6 +55,7 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
       actionTokens={runtime.csrfTokens}
+      dependencyCards={dependencyCards}
     >
       <SectionCard
         title="Configuration status"
@@ -129,6 +144,18 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
               Disable this to use incremental randomized page coverage instead of a
               full wanted-page walk.
             </p>
+            {testService === 'sonarr' && testNotice ? (
+              <p
+                className={
+                  testStatus === 'success'
+                    ? 'settings-notice is-success'
+                    : 'settings-notice is-error'
+                }
+              >
+                {testNotice}
+                {testDetail ? ` ${testDetail}` : ''}
+              </p>
+            ) : null}
             <div className="settings-form__subsection">
               <h5>Release selection policy</h5>
               <label className="settings-form__checkbox">
@@ -262,6 +289,18 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
               Disable this to use incremental randomized page coverage instead of a
               full wanted-page walk.
             </p>
+            {testService === 'radarr' && testNotice ? (
+              <p
+                className={
+                  testStatus === 'success'
+                    ? 'settings-notice is-success'
+                    : 'settings-notice is-error'
+                }
+              >
+                {testNotice}
+                {testDetail ? ` ${testDetail}` : ''}
+              </p>
+            ) : null}
             <div className="settings-form__subsection">
               <h5>Release selection policy</h5>
               <label className="settings-form__checkbox">
@@ -383,6 +422,18 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
                 defaultValue={connectionSettings.prowlarr.apiKey ?? ''}
               />
             </label>
+            {testService === 'prowlarr' && testNotice ? (
+              <p
+                className={
+                  testStatus === 'success'
+                    ? 'settings-notice is-success'
+                    : 'settings-notice is-error'
+                }
+              >
+                {testNotice}
+                {testDetail ? ` ${testDetail}` : ''}
+              </p>
+            ) : null}
           </section>
 
           <section className="settings-form__section">
@@ -424,6 +475,38 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
                 placeholder="Optional"
               />
             </label>
+            {testService === 'transmission' && testNotice ? (
+              <p
+                className={
+                  testStatus === 'success'
+                    ? 'settings-notice is-success'
+                    : 'settings-notice is-error'
+                }
+              >
+                {testNotice}
+                {testDetail ? ` ${testDetail}` : ''}
+              </p>
+            ) : null}
+          </section>
+
+          <section className="settings-form__section">
+            <div className="settings-form__heading">
+              <h4>Scheduler</h4>
+            </div>
+            <label>
+              <span>Scheduler interval (minutes)</span>
+              <input
+                type="number"
+                min="5"
+                max="120"
+                step="1"
+                name="schedulerIntervalMinutes"
+                defaultValue={schedulerOverrides.cycleEveryMinutes ?? 30}
+              />
+            </label>
+            <p className="settings-form__hint">
+              Applies to the running scheduler immediately after saving.
+            </p>
           </section>
 
           <section className="settings-form__section">

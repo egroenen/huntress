@@ -1,4 +1,5 @@
 import { getActivityFeedState } from '@/src/observability';
+import { probeDependencyHealth } from '@/src/server/console-data';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import { AutoRefresh } from '@/src/ui/auto-refresh';
 import {
@@ -57,6 +58,7 @@ const toBadgeStatus = (
 
 export default async function StatusPage() {
   const runtime = await requireAuthenticatedConsoleContext();
+  const dependencyCards = await probeDependencyHealth(runtime);
   const activity = getActivityFeedState(runtime.database);
   const current = activity.current;
   const schedulerStatus = runtime.scheduler.getStatus();
@@ -72,6 +74,7 @@ export default async function StatusPage() {
       mode={runtime.config.mode}
       schedulerStatus={schedulerStatus}
       actionTokens={runtime.csrfTokens}
+      dependencyCards={dependencyCards}
     >
       <AutoRefresh intervalMs={5000} enabled={autoRefreshEnabled} />
 

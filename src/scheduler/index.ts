@@ -6,5 +6,6 @@ export {
   type RunExecutionContext,
   type RunExecutionResult,
   type RunInvocationResult,
+  type SchedulerCadenceUpdateResult,
   type SchedulerCoordinatorOptions,
 } from './run-coordinator';
