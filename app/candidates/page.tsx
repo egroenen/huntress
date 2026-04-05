@@ -549,7 +549,7 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
                     </form>
                   ),
                 }))}
-                emptyMessage={`No ${app} candidates are currently available.`}
+                emptyMessage={`No ${formatServiceName(app)} candidates are currently available.`}
               />
             </div>
           )}

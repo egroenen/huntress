@@ -462,8 +462,8 @@ export default async function HomePage() {
       </SectionCard>
 
       <SectionCard
-        title="Search budget"
-        subtitle="Rolling-window search usage used to protect indexers and private trackers."
+        title="Dispatch budget windows"
+        subtitle="Rolling-window live dispatch usage used to protect indexers and private trackers."
       >
         <DataTable
           columns={[
@@ -480,7 +480,7 @@ export default async function HomePage() {
             remaining: window.remaining,
             nextEligibleAt: formatTimestamp(window.nextEligibleAt),
           }))}
-          emptyMessage="No search-rate windows are available."
+          emptyMessage="No dispatch budget windows are available."
         />
       </SectionCard>
 
