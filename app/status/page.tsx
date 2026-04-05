@@ -61,6 +61,7 @@ export default async function StatusPage() {
   const current = activity.current;
   const schedulerStatus = runtime.scheduler.getStatus();
   const activeRun = schedulerStatus.activeRun;
+  const autoRefreshEnabled = Boolean(activeRun);
 
   return (
     <ConsoleShell
@@ -72,7 +73,7 @@ export default async function StatusPage() {
       schedulerStatus={schedulerStatus}
       actionTokens={runtime.csrfTokens}
     >
-      <AutoRefresh intervalMs={3000} />
+      <AutoRefresh intervalMs={5000} enabled={autoRefreshEnabled} />
 
       <StatsGrid>
         <StatCard
@@ -102,7 +103,12 @@ export default async function StatusPage() {
         <StatCard
           label="Last update"
           value={formatTimestamp(current?.occurredAt ?? null)}
-          detail={current?.detail ?? 'Auto-refreshing every 3 seconds'}
+          detail={
+            current?.detail ??
+            (autoRefreshEnabled
+              ? 'Live refresh active every 5 seconds'
+              : 'Refresh resumes automatically during the next active run')
+          }
         />
         <StatCard
           label="Progress"
@@ -122,18 +128,26 @@ export default async function StatusPage() {
         title="Current activity"
         subtitle="The most recent active stage reported by the running job."
         actions={
-          activeRun ? (
-            <form action="/api/actions/recover-run" method="post">
-              <input
-                type="hidden"
-                name="csrfToken"
-                value={runtime.csrfTokens.recoverRun}
-              />
-              <button type="submit" className="table-inline-button">
-                Recover run
-              </button>
-            </form>
-          ) : null
+          <div className="section-card__actions">
+            {autoRefreshEnabled ? (
+              <span className="status-live-indicator">
+                <span className="status-live-indicator__dot" />
+                Live refresh
+              </span>
+            ) : null}
+            {activeRun ? (
+              <form action="/api/actions/recover-run" method="post">
+                <input
+                  type="hidden"
+                  name="csrfToken"
+                  value={runtime.csrfTokens.recoverRun}
+                />
+                <button type="submit" className="table-inline-button">
+                  Recover run
+                </button>
+              </form>
+            ) : null}
+          </div>
         }
       >
         <div className="activity-panel">

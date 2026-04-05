@@ -1,7 +1,12 @@
 import 'server-only';
 
 import type { RedactedResolvedConfig } from '@/src/config';
-import { getSearchCandidatePreview, type CandidateDecision } from '@/src/domain';
+import {
+  getSearchCandidatePreview,
+  planReleaseSelection,
+  type CandidateDecision,
+  type PlannedReleaseSelection,
+} from '@/src/domain';
 import type { ProwlarrHealthRecord } from '@/src/integrations';
 import { getRuntimeContext, type RuntimeContext } from '@/src/server/runtime';
 import type { DependencyHealthCard } from '@/src/ui';
@@ -252,6 +257,68 @@ export const getDashboardCandidateSnapshot = (
     sonarr: all.filter((decision) => decision.app === 'sonarr'),
     radarr: all.filter((decision) => decision.app === 'radarr'),
   };
+};
+
+export interface CandidateReleasePreview {
+  mode: PlannedReleaseSelection['mode'];
+  reason: string;
+  selectedReleaseTitle: string | null;
+  selectedReleaseQuality: string | null;
+  selectedReleaseResolution: number | null;
+  selectedReleaseIndexer: string | null;
+  upgradePriority: boolean;
+}
+
+export const getCandidateReleasePreviewMap = async (
+  runtime: RuntimeContext,
+  candidates: CandidateDecision[]
+): Promise<Map<string, CandidateReleasePreview>> => {
+  const dispatchCandidates = candidates.filter(
+    (candidate) => candidate.decision === 'dispatch'
+  );
+
+  const previews = await Promise.all(
+    dispatchCandidates.map(async (candidate) => {
+      const item = runtime.database.repositories.mediaItemState.getByMediaKey(
+        candidate.mediaKey
+      );
+
+      if (!item) {
+        return null;
+      }
+
+      const preview = await planReleaseSelection({
+        database: runtime.database,
+        config: runtime.config,
+        clients: {
+          sonarr: runtime.clients.sonarr,
+          radarr: runtime.clients.radarr,
+        },
+        item,
+        app: candidate.app,
+        now: new Date(),
+      });
+
+      return [
+        candidate.mediaKey,
+        {
+          mode: preview.mode,
+          reason: preview.reason,
+          selectedReleaseTitle: preview.selectedRelease?.title ?? null,
+          selectedReleaseQuality: preview.selectedRelease?.qualityName ?? null,
+          selectedReleaseResolution: preview.selectedRelease?.qualityResolution ?? null,
+          selectedReleaseIndexer: preview.selectedRelease?.indexer ?? null,
+          upgradePriority: preview.upgradePriority,
+        } satisfies CandidateReleasePreview,
+      ] as const;
+    })
+  );
+
+  return new Map(
+    previews.filter(
+      (entry): entry is readonly [string, CandidateReleasePreview] => entry !== null
+    )
+  );
 };
 
 export const getRedactedConfig = async (): Promise<RedactedResolvedConfig> => {

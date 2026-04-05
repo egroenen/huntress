@@ -324,6 +324,7 @@ export const runManualFetch = async (mediaKey: string) => {
     return {
       accepted: false,
       runId: null,
+      reason: 'not-live',
     };
   }
 
@@ -377,6 +378,7 @@ export const runManualFetch = async (mediaKey: string) => {
     return {
       accepted: true,
       runId,
+      reason: null,
     };
   } catch (error) {
     runtime.database.repositories.runHistory.update({
@@ -408,6 +410,8 @@ export const runManualFetch = async (mediaKey: string) => {
     return {
       accepted: true,
       runId,
+      reason:
+        error instanceof Error ? error.message : 'Unknown manual fetch error',
     };
   }
 };

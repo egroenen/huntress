@@ -1,13 +1,18 @@
 import type { ReactNode } from 'react';
 
 import type { CandidateDecision } from '@/src/domain';
-import { getDashboardCandidateSnapshot } from '@/src/server/console-data';
+import {
+  getCandidateReleasePreviewMap,
+  getDashboardCandidateSnapshot,
+  type CandidateReleasePreview,
+} from '@/src/server/console-data';
 import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   CandidateSectionToggle,
   ConsoleShell,
   DataTable,
+  ManualFetchButton,
   MediaItemLink,
   ReasonCodeBadge,
   SectionCard,
@@ -29,6 +34,7 @@ type CandidateSort =
   | 'next_eligible_asc'
   | 'next_eligible_desc';
 
+type CandidateFilterApp = 'all' | 'sonarr' | 'radarr';
 type CandidateFilterDecision = 'all' | 'dispatch' | 'skip';
 type CandidateFilterWantedState = 'all' | 'missing' | 'cutoff_unmet' | 'ignored';
 
@@ -36,6 +42,7 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 interface CandidateFilters {
   query: string;
+  app: CandidateFilterApp;
   decision: CandidateFilterDecision;
   wantedState: CandidateFilterWantedState;
   sort: CandidateSort;
@@ -78,6 +85,12 @@ const parseDecisionFilter = (
   const normalized = parseStringParam(value);
 
   return normalized === 'dispatch' || normalized === 'skip' ? normalized : 'all';
+};
+
+const parseAppFilter = (value: string | string[] | undefined): CandidateFilterApp => {
+  const normalized = parseStringParam(value);
+
+  return normalized === 'sonarr' || normalized === 'radarr' ? normalized : 'all';
 };
 
 const parseWantedStateFilter = (
@@ -130,6 +143,10 @@ const buildCandidateParams = (
 
   if (filters.query) {
     params.set('q', filters.query);
+  }
+
+  if (filters.app !== 'all') {
+    params.set('app', filters.app);
   }
 
   if (filters.decision !== 'all') {
@@ -320,6 +337,10 @@ const filterCandidates = (
   const query = filters.query.trim().toLowerCase();
 
   return candidates.filter((candidate) => {
+    if (filters.app !== 'all' && candidate.app !== filters.app) {
+      return false;
+    }
+
     if (filters.decision !== 'all' && candidate.decision !== filters.decision) {
       return false;
     }
@@ -346,12 +367,59 @@ const filterCandidates = (
   });
 };
 
+const formatReleaseSelectionMode = (
+  preview: CandidateReleasePreview | undefined
+): { label: string; status: 'info' | 'success' | 'degraded' } => {
+  if (!preview) {
+    return { label: 'n/a', status: 'info' };
+  }
+
+  switch (preview.mode) {
+    case 'preferred_release':
+      return { label: 'Direct release', status: 'success' };
+    case 'good_enough_release':
+      return { label: 'Good enough', status: 'info' };
+    case 'fallback_then_upgrade':
+      return { label: 'Fallback + upgrade', status: 'degraded' };
+    case 'blind_search':
+    default:
+      return { label: 'Blind search', status: 'info' };
+  }
+};
+
+const renderReleasePreview = (preview: CandidateReleasePreview | undefined) => {
+  if (!preview) {
+    return 'n/a';
+  }
+
+  if (!preview.selectedReleaseTitle) {
+    return (
+      <div className="release-preview" title={preview.reason}>
+        <strong>No direct release selected</strong>
+        <small>{preview.reason}</small>
+      </div>
+    );
+  }
+
+  return (
+    <div className="release-preview" title={preview.reason}>
+      <strong>{preview.selectedReleaseTitle}</strong>
+      <small>
+        {[preview.selectedReleaseQuality, preview.selectedReleaseIndexer]
+          .filter(Boolean)
+          .join(' · ') || preview.reason}
+      </small>
+    </div>
+  );
+};
+
 export default async function CandidatesPage(props: { searchParams: SearchParams }) {
   const runtime = await requireAuthenticatedConsoleContext();
   const searchParams = await props.searchParams;
   const candidates = getDashboardCandidateSnapshot(runtime);
   const filters: CandidateFilters = {
     query: parseStringParam(searchParams.q).trim(),
+    app: parseAppFilter(searchParams.app),
     decision: parseDecisionFilter(searchParams.decision),
     wantedState: parseWantedStateFilter(searchParams.wantedState),
     sort: parseSort(searchParams.sort),
@@ -382,6 +450,12 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
     ...pagedCandidates.sonarr.map((candidate) => candidate.mediaKey),
     ...pagedCandidates.radarr.map((candidate) => candidate.mediaKey),
   ]);
+  const releasePreviewMap = await getCandidateReleasePreviewMap(runtime, [
+    ...pagedCandidates.sonarr,
+    ...pagedCandidates.radarr,
+  ]);
+  const visibleApps: Array<'sonarr' | 'radarr'> =
+    filters.app === 'all' ? ['sonarr', 'radarr'] : [filters.app];
 
   return (
     <ConsoleShell
@@ -407,6 +481,15 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
                 defaultValue={filters.query}
                 placeholder="Title, media key, reason code, or wanted state"
               />
+            </label>
+
+            <label className="candidate-filters__field">
+              <span>App</span>
+              <select name="app" defaultValue={filters.app}>
+                <option value="all">All apps</option>
+                <option value="sonarr">Sonarr only</option>
+                <option value="radarr">Radarr only</option>
+              </select>
             </label>
 
             <label className="candidate-filters__field">
@@ -453,7 +536,7 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
         </form>
       </SectionCard>
 
-      {(['sonarr', 'radarr'] as const).map((app) => (
+      {visibleApps.map((app) => (
         <SectionCard
           key={app}
           title={app === 'sonarr' ? 'Sonarr candidates' : 'Radarr candidates'}
@@ -500,55 +583,60 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
                   { key: 'mediaKey', label: 'Media key' },
                   { key: 'wantedState', label: 'Wanted state' },
                   { key: 'decision', label: 'Decision' },
+                  { key: 'dispatchPath', label: 'Dispatch path' },
+                  { key: 'releasePreview', label: 'Release preview' },
                   { key: 'reason', label: 'Reason code' },
                   { key: 'retryCount', label: 'Retries', align: 'right' },
                   { key: 'nextEligibleAt', label: 'Next eligible' },
                   { key: 'actions', label: 'Actions', align: 'right' },
                 ]}
-                rows={pagedCandidates[app].map((candidate) => ({
-                  title: (
-                    <MediaItemLink
-                      config={runtime.config}
-                      mediaItem={displayMediaItems.get(candidate.mediaKey) ?? null}
-                      fallbackTitle={candidate.title}
-                      className="external-item-link"
-                    />
-                  ),
-                  mediaKey: <code className="reason-code">{candidate.mediaKey}</code>,
-                  wantedState: candidate.wantedState,
-                  decision: (
-                    <StatusBadge
-                      status={candidate.decision === 'dispatch' ? 'success' : 'degraded'}
-                    >
-                      {candidate.decision}
-                    </StatusBadge>
-                  ),
-                  reason: <ReasonCodeBadge reasonCode={candidate.reasonCode} />,
-                  retryCount: candidate.retryCount,
-                  nextEligibleAt: formatTimestamp(candidate.nextEligibleAt),
-                  actions: (
-                    <form
-                      action="/api/actions/manual-fetch"
-                      method="post"
-                      className="table-inline-form"
-                    >
-                      <input
-                        type="hidden"
-                        name="csrfToken"
-                        value={runtime.csrfTokens.manualFetch}
+                rows={pagedCandidates[app].map((candidate) => {
+                  const releasePreview = releasePreviewMap.get(candidate.mediaKey);
+                  const dispatchPath = formatReleaseSelectionMode(releasePreview);
+
+                  return {
+                    title: (
+                      <MediaItemLink
+                        config={runtime.config}
+                        mediaItem={displayMediaItems.get(candidate.mediaKey) ?? null}
+                        fallbackTitle={candidate.title}
+                        className="external-item-link"
                       />
-                      <input type="hidden" name="mediaKey" value={candidate.mediaKey} />
-                      <button
-                        type="submit"
-                        className="candidate-action-button"
-                        title="Manually trigger a scoped search for this item now. This overrides normal cooldown and rolling search limits."
-                        aria-label={`Manual fetch ${candidate.title}`}
+                    ),
+                    mediaKey: <code className="reason-code">{candidate.mediaKey}</code>,
+                    wantedState: candidate.wantedState,
+                    decision: (
+                      <StatusBadge
+                        status={candidate.decision === 'dispatch' ? 'success' : 'degraded'}
                       >
-                        Fetch now
-                      </button>
-                    </form>
-                  ),
-                }))}
+                        {candidate.decision}
+                      </StatusBadge>
+                    ),
+                    dispatchPath: (
+                      <StatusBadge
+                        status={dispatchPath.status}
+                        {...(releasePreview?.reason
+                          ? { title: releasePreview.reason }
+                          : {})}
+                      >
+                        {dispatchPath.label}
+                      </StatusBadge>
+                    ),
+                    releasePreview: renderReleasePreview(releasePreview),
+                    reason: <ReasonCodeBadge reasonCode={candidate.reasonCode} />,
+                    retryCount: candidate.retryCount,
+                    nextEligibleAt: formatTimestamp(candidate.nextEligibleAt),
+                    actions: (
+                      <ManualFetchButton
+                        mediaKey={candidate.mediaKey}
+                        csrfToken={runtime.csrfTokens.manualFetch}
+                        label="Fetch now"
+                        title={candidate.title}
+                        liveEnabled={runtime.config.mode === 'live'}
+                      />
+                    ),
+                  };
+                })}
                 emptyMessage={`No ${formatServiceName(app)} candidates are currently available.`}
               />
             </div>

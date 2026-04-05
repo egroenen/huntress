@@ -599,6 +599,26 @@ test('executeManualFetch grabs a preferred Sonarr release when release selection
       response.end(
         JSON.stringify([
           {
+            guid: 'release-2160-blocked',
+            indexerId: 40,
+            indexer: 'Indexer Blocked',
+            title: 'Example.Show.S01E01.2160p.WEB.H265-BLOCKED',
+            downloadAllowed: true,
+            approved: false,
+            rejected: true,
+            rejections: ['WEBDL-2160p is not wanted in profile'],
+            quality: {
+              quality: {
+                name: 'WEB-2160p',
+                resolution: 2160,
+              },
+            },
+            customFormatScore: 90,
+            seeders: 120,
+            ageHours: 1,
+            languages: [{ name: 'English' }],
+          },
+          {
             guid: 'release-720',
             indexerId: 41,
             indexer: 'Indexer A',

@@ -9,6 +9,12 @@ export {
   type SearchDecision,
 } from './decision-engine';
 export {
+  planReleaseSelection,
+  type PlannedReleaseSelection,
+  type ReleaseSelectionApp,
+  type ReleaseSelectionMode,
+} from './release-selection';
+export {
   executeManualFetch,
   executeSearchDispatchRun,
   getSearchCandidatePreview,

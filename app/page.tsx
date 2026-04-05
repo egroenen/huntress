@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import {
+  getCandidateReleasePreviewMap,
   getDashboardCandidateSnapshot,
   probeDependencyHealth,
 } from '@/src/server/console-data';
@@ -59,6 +60,13 @@ interface DispatchSummary {
   dryRunDispatchPreviewCount: number;
   throttleReason: string | null;
   attemptsPersisted: number;
+  releaseSelectionSummary?: {
+    directGrabCount: number;
+    blindSearchCount: number;
+    fallbackUpgradeCount: number;
+    goodEnoughCount: number;
+    preferredReleaseCount: number;
+  };
 }
 
 interface RunSummaryShape {
@@ -121,6 +129,40 @@ const toRunSummaryShape = (
   return isRecord(summary) ? (summary as RunSummaryShape) : {};
 };
 
+const renderCandidateDispatchPath = (preview: {
+  mode: string;
+  reason: string;
+  selectedReleaseTitle: string | null;
+  selectedReleaseQuality: string | null;
+  selectedReleaseIndexer: string | null;
+} | null) => {
+  if (!preview) {
+    return <StatusBadge status="info">n/a</StatusBadge>;
+  }
+
+  const label =
+    preview.mode === 'preferred_release'
+      ? 'Direct release'
+      : preview.mode === 'good_enough_release'
+        ? 'Good enough'
+        : preview.mode === 'fallback_then_upgrade'
+          ? 'Fallback + upgrade'
+          : 'Blind search';
+
+  const status =
+    preview.mode === 'preferred_release'
+      ? 'success'
+      : preview.mode === 'fallback_then_upgrade'
+        ? 'degraded'
+        : 'info';
+
+  return (
+    <StatusBadge status={status} title={preview.reason}>
+      {label}
+    </StatusBadge>
+  );
+};
+
 export default async function HomePage() {
   const runtime = await requireAuthenticatedConsoleContext();
   const [dependencies, latestRun] = await Promise.all([
@@ -140,6 +182,10 @@ export default async function HomePage() {
       .map((torrent) => torrent.linkedMediaKey)
       .filter((mediaKey): mediaKey is string => mediaKey !== null),
   ]);
+  const candidatePreviewMap = await getCandidateReleasePreviewMap(
+    runtime,
+    candidates.all.slice(0, 8)
+  );
 
   const dispatchableCount = candidates.all.filter(
     (candidate) => candidate.decision === 'dispatch'
@@ -366,6 +412,22 @@ export default async function HomePage() {
                           ? `Throttled: ${latestRunSummary.dispatchSummary.throttleReason}`
                           : 'No throttle active'}
                     </p>
+                    {latestRunSummary.dispatchSummary.releaseSelectionSummary ? (
+                      <p>
+                        {latestRunSummary.dispatchSummary.releaseSelectionSummary.directGrabCount}{' '}
+                        direct grabs,{' '}
+                        {
+                          latestRunSummary.dispatchSummary.releaseSelectionSummary
+                            .fallbackUpgradeCount
+                        }{' '}
+                        fallback upgrades,{' '}
+                        {
+                          latestRunSummary.dispatchSummary.releaseSelectionSummary
+                            .blindSearchCount
+                        }{' '}
+                        blind searches
+                      </p>
+                    ) : null}
                   </article>
                 ) : null}
               </div>
@@ -403,6 +465,22 @@ export default async function HomePage() {
                           ? `Throttled: ${latestRunSummary.dispatchSummary.throttleReason}`
                           : 'No throttle active'}
                     </p>
+                    {latestRunSummary.dispatchSummary.releaseSelectionSummary ? (
+                      <p>
+                        {latestRunSummary.dispatchSummary.releaseSelectionSummary.directGrabCount}{' '}
+                        direct grabs,{' '}
+                        {
+                          latestRunSummary.dispatchSummary.releaseSelectionSummary
+                            .fallbackUpgradeCount
+                        }{' '}
+                        fallback upgrades,{' '}
+                        {
+                          latestRunSummary.dispatchSummary.releaseSelectionSummary
+                            .blindSearchCount
+                        }{' '}
+                        blind searches
+                      </p>
+                    ) : null}
                   </article>
                 ) : null}
               </div>
@@ -430,6 +508,8 @@ export default async function HomePage() {
             { key: 'app', label: 'App' },
             { key: 'title', label: 'Title' },
             { key: 'decision', label: 'Decision' },
+            { key: 'dispatchPath', label: 'Dispatch path' },
+            { key: 'releasePreview', label: 'Release preview' },
             { key: 'reason', label: 'Reason' },
             { key: 'nextEligibleAt', label: 'Next eligible' },
           ]}
@@ -454,6 +534,36 @@ export default async function HomePage() {
                 {candidate.decision}
               </StatusBadge>
             ),
+            dispatchPath: renderCandidateDispatchPath(
+              candidatePreviewMap.get(candidate.mediaKey) ?? null
+            ),
+            releasePreview: (() => {
+              const preview = candidatePreviewMap.get(candidate.mediaKey);
+
+              if (!preview) {
+                return 'n/a';
+              }
+
+              if (!preview.selectedReleaseTitle) {
+                return (
+                  <div className="release-preview" title={preview.reason}>
+                    <strong>No direct release selected</strong>
+                    <small>{preview.reason}</small>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="release-preview" title={preview.reason}>
+                  <strong>{preview.selectedReleaseTitle}</strong>
+                  <small>
+                    {[preview.selectedReleaseQuality, preview.selectedReleaseIndexer]
+                      .filter(Boolean)
+                      .join(' · ') || preview.reason}
+                  </small>
+                </div>
+              );
+            })(),
             reason: <ReasonCodeBadge reasonCode={candidate.reasonCode} />,
             nextEligibleAt: formatTimestamp(candidate.nextEligibleAt),
           }))}

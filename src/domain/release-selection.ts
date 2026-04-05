@@ -55,6 +55,27 @@ const hasEnglishLanguage = (release: ArrReleaseRecord): boolean => {
   return release.languages.some((language: string) => language.toLowerCase() === 'english');
 };
 
+const BLOCKING_ARR_REJECTION_PATTERNS: RegExp[] = [
+  /blocklist/i,
+  /not wanted in profile/i,
+  /quality profile does not allow upgrades/i,
+  /existing file meets cutoff/i,
+  /not an upgrade/i,
+  /wasn't requested/i,
+  /wrong episode/i,
+  /wrong movie/i,
+];
+
+const getBlockingArrRejections = (release: ArrReleaseRecord): string[] => {
+  if (!release.rejected || release.rejections.length === 0) {
+    return [];
+  }
+
+  return release.rejections.filter((rejection) =>
+    BLOCKING_ARR_REJECTION_PATTERNS.some((pattern) => pattern.test(rejection))
+  );
+};
+
 const meetsBaseEligibility = (
   release: ArrReleaseRecord,
   policy: ReleaseSelectionConfig
@@ -242,6 +263,7 @@ export const planReleaseSelection = async (input: {
 
   let filteredSuppressedCount = 0;
   let filteredUnsafeCount = 0;
+  let filteredByArrCount = 0;
   const eligibleReleases = releases.filter((release) => {
     if (isSuppressedRelease(release, suppressedFingerprints)) {
       filteredSuppressedCount += 1;
@@ -250,6 +272,11 @@ export const planReleaseSelection = async (input: {
 
     if (hasDangerousExecutableExtension(release.title)) {
       filteredUnsafeCount += 1;
+      return false;
+    }
+
+    if (getBlockingArrRejections(release).length > 0) {
+      filteredByArrCount += 1;
       return false;
     }
 
@@ -268,7 +295,7 @@ export const planReleaseSelection = async (input: {
   if (preferredRelease) {
     return {
       mode: 'preferred_release',
-      reason: `Selected preferred release at ${preferredRelease.qualityResolution ?? 0}p.`,
+      reason: `Selected preferred release at ${preferredRelease.qualityResolution ?? 0}p after Arr profile checks.`,
       selectedRelease: preferredRelease,
       availableReleaseCount: releases.length,
       eligibleReleaseCount: eligibleReleases.length,
@@ -284,7 +311,10 @@ export const planReleaseSelection = async (input: {
   if (!fallbackRelease) {
     return {
       mode: 'blind_search',
-      reason: 'No release candidate met the configured fallback floor.',
+      reason:
+        filteredByArrCount > 0
+          ? `No release candidate survived Arr rejection filters (${filteredByArrCount} blocked).`
+          : 'No release candidate met the configured fallback floor.',
       selectedRelease: null,
       availableReleaseCount: releases.length,
       eligibleReleaseCount: eligibleReleases.length,
@@ -298,7 +328,10 @@ export const planReleaseSelection = async (input: {
   if (policy.strategy === 'best_only') {
     return {
       mode: 'blind_search',
-      reason: 'No preferred release met the policy, so the dispatcher fell back to Arr search.',
+      reason:
+        filteredByArrCount > 0
+          ? 'No preferred release passed both policy and Arr profile filters, so the dispatcher fell back to Arr search.'
+          : 'No preferred release met the policy, so the dispatcher fell back to Arr search.',
       selectedRelease: null,
       availableReleaseCount: releases.length,
       eligibleReleaseCount: eligibleReleases.length,
@@ -312,7 +345,7 @@ export const planReleaseSelection = async (input: {
   if (policy.strategy === 'good_enough_now') {
     return {
       mode: 'good_enough_release',
-      reason: `Selected a good-enough release at ${fallbackRelease.qualityResolution ?? 0}p.`,
+      reason: `Selected a good-enough release at ${fallbackRelease.qualityResolution ?? 0}p after Arr profile checks.`,
       selectedRelease: fallbackRelease,
       availableReleaseCount: releases.length,
       eligibleReleaseCount: eligibleReleases.length,
@@ -325,7 +358,7 @@ export const planReleaseSelection = async (input: {
 
   return {
     mode: 'fallback_then_upgrade',
-    reason: `Selected a fallback release at ${fallbackRelease.qualityResolution ?? 0}p and marked it for aggressive upgrade retry.`,
+    reason: `Selected a fallback release at ${fallbackRelease.qualityResolution ?? 0}p after Arr profile checks and marked it for aggressive upgrade retry.`,
     selectedRelease: fallbackRelease,
     availableReleaseCount: releases.length,
     eligibleReleaseCount: eligibleReleases.length,
