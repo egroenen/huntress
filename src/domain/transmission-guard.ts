@@ -22,6 +22,7 @@ export type TransmissionGuardReason =
   | 'TX_STALLED_REMOVE'
   | 'TX_LOOP_REPEAT_RELEASE'
   | 'TX_DANGEROUS_DOWNLOAD_REMOVE'
+  | 'TX_NOT_UPGRADE_REMOVE'
   | 'TX_NO_ACTION';
 
 export interface TransmissionGuardRunSummary {
@@ -289,7 +290,41 @@ const isDangerousStatusMessage = (message: string): boolean => {
   );
 };
 
-const extractDangerousQueueMessage = (queueRecord: ArrQueueRecord): string | null => {
+const isNotUpgradeStatusMessage = (message: string): boolean => {
+  const normalized = message.toLowerCase();
+  return normalized.includes('not an upgrade for existing episode file');
+};
+
+const classifyBlockedQueueMessage = (
+  message: string
+): {
+  reason: TransmissionGuardReason;
+  permanent: boolean;
+} | null => {
+  if (isDangerousStatusMessage(message)) {
+    return {
+      reason: 'TX_DANGEROUS_DOWNLOAD_REMOVE',
+      permanent: true,
+    };
+  }
+
+  if (isNotUpgradeStatusMessage(message)) {
+    return {
+      reason: 'TX_NOT_UPGRADE_REMOVE',
+      permanent: true,
+    };
+  }
+
+  return null;
+};
+
+const extractBlockedQueueMessage = (
+  queueRecord: ArrQueueRecord
+): {
+  message: string;
+  reason: TransmissionGuardReason;
+  permanent: boolean;
+} | null => {
   if (queueRecord.trackedDownloadStatus !== 'warning') {
     return null;
   }
@@ -308,8 +343,14 @@ const extractDangerousQueueMessage = (queueRecord: ArrQueueRecord): string | nul
 
   for (const statusMessage of statusMessages) {
     for (const message of statusMessage.messages ?? []) {
-      if (isDangerousStatusMessage(message)) {
-        return message;
+      const classification = classifyBlockedQueueMessage(message);
+
+      if (classification) {
+        return {
+          message,
+          reason: classification.reason,
+          permanent: classification.permanent,
+        };
       }
     }
   }
@@ -357,7 +398,7 @@ const createReleaseSuppression = (input: {
   return true;
 };
 
-const handleDangerousSonarrQueueItems = async (input: {
+const handleBlockedSonarrQueueItems = async (input: {
   database: DatabaseContext;
   sonarrClient: SonarrApiClient | null;
   activityTracker?: ActivityTracker;
@@ -374,19 +415,25 @@ const handleDangerousSonarrQueueItems = async (input: {
   const nowIso = input.now.toISOString();
   const queueDownloadMap = getQueueDownloadMap(input.database);
   const queueDetails = await input.sonarrClient.getQueueDetails();
-  const dangerousItems = queueDetails
+  const blockedItems = queueDetails
     .map((record) => ({
       record,
-      dangerousMessage: extractDangerousQueueMessage(record),
+      blockedMessage: extractBlockedQueueMessage(record),
     }))
     .filter(
       (
         entry
-      ): entry is { record: ArrQueueRecord; dangerousMessage: string } =>
-        entry.dangerousMessage !== null
+      ): entry is {
+        record: ArrQueueRecord;
+        blockedMessage: {
+          message: string;
+          reason: TransmissionGuardReason;
+          permanent: boolean;
+        };
+      } => entry.blockedMessage !== null
     );
 
-  if (dangerousItems.length === 0) {
+  if (blockedItems.length === 0) {
     return {
       removedCount: 0,
       suppressionCount: 0,
@@ -396,18 +443,19 @@ const handleDangerousSonarrQueueItems = async (input: {
 
   input.activityTracker?.warn({
     source: 'transmission',
-    stage: 'dangerous_queue_detected',
-    message: `Found ${dangerousItems.length} dangerous Sonarr queue item${dangerousItems.length === 1 ? '' : 's'}`,
-    detail: 'Removing from queue/download client and permanently suppressing torrent fingerprints.',
+    stage: 'blocked_queue_detected',
+    message: `Found ${blockedItems.length} blocked Sonarr queue item${blockedItems.length === 1 ? '' : 's'}`,
+    detail:
+      'Removing from queue/download client and suppressing the exact torrent fingerprints.',
     progressCurrent: 0,
-    progressTotal: dangerousItems.length,
+    progressTotal: blockedItems.length,
   });
 
   let removedCount = 0;
   let suppressionCount = 0;
   let linkedCount = 0;
 
-  for (const [index, entry] of dangerousItems.entries()) {
+  for (const [index, entry] of blockedItems.entries()) {
     const queueRecord = entry.record;
     const normalizedDownloadId = queueRecord.downloadId
       ? normalizeDownloadId(queueRecord.downloadId)
@@ -421,11 +469,11 @@ const handleDangerousSonarrQueueItems = async (input: {
 
     input.activityTracker?.warn({
       source: 'transmission',
-      stage: 'dangerous_queue_remove',
-      message: `Removing dangerous Sonarr queue item ${index + 1} of ${dangerousItems.length}`,
-      detail: `${queueRecord.title} (${entry.dangerousMessage})`,
+      stage: 'blocked_queue_remove',
+      message: `Removing blocked Sonarr queue item ${index + 1} of ${blockedItems.length}`,
+      detail: `${queueRecord.title} (${entry.blockedMessage.message})`,
       progressCurrent: index + 1,
-      progressTotal: dangerousItems.length,
+      progressTotal: blockedItems.length,
     });
 
     await input.sonarrClient.removeQueueItem(queueRecord.id, {
@@ -441,7 +489,7 @@ const handleDangerousSonarrQueueItems = async (input: {
         status: 0,
         percentDone: 1,
         errorCode: null,
-        errorString: entry.dangerousMessage,
+        errorString: entry.blockedMessage.message,
         firstSeenAt:
           input.database.repositories.transmissionTorrentState.getByHash(
             normalizedDownloadId
@@ -449,7 +497,7 @@ const handleDangerousSonarrQueueItems = async (input: {
         lastSeenAt: nowIso,
         linkedMediaKey,
         removedAt: nowIso,
-        removalReason: 'TX_DANGEROUS_DOWNLOAD_REMOVE',
+        removalReason: entry.blockedMessage.reason,
         noProgressSince: null,
       });
     }
@@ -461,9 +509,11 @@ const handleDangerousSonarrQueueItems = async (input: {
         mediaKey: linkedMediaKey,
         fingerprintType: 'torrent_hash',
         fingerprintValue: normalizedDownloadId,
-        reason: 'TX_DANGEROUS_DOWNLOAD_REMOVE',
+        reason: entry.blockedMessage.reason,
         createdAt: nowIso,
-        expiresAt: PERMANENT_SUPPRESSION_EXPIRES_AT,
+        expiresAt: entry.blockedMessage.permanent
+          ? PERMANENT_SUPPRESSION_EXPIRES_AT
+          : nowIso,
       })
     ) {
       suppressionCount += 1;
@@ -475,24 +525,26 @@ const handleDangerousSonarrQueueItems = async (input: {
         mediaKey: linkedMediaKey,
         fingerprintType: 'release_title',
         fingerprintValue: normalizeFingerprint(queueRecord.title),
-        reason: 'TX_DANGEROUS_DOWNLOAD_REMOVE',
+        reason: entry.blockedMessage.reason,
         createdAt: nowIso,
-        expiresAt: PERMANENT_SUPPRESSION_EXPIRES_AT,
+        expiresAt: entry.blockedMessage.permanent
+          ? PERMANENT_SUPPRESSION_EXPIRES_AT
+          : nowIso,
       })
     ) {
       suppressionCount += 1;
     }
 
     logger.warn({
-      event: 'dangerous_sonarr_queue_item_removed',
+      event: 'blocked_sonarr_queue_item_removed',
       queueId: queueRecord.id,
       title: queueRecord.title,
       linkedMediaKey,
       downloadId: normalizedDownloadId,
-      reasonCode: 'TX_DANGEROUS_DOWNLOAD_REMOVE',
-      detail: entry.dangerousMessage,
+      reasonCode: entry.blockedMessage.reason,
+      detail: entry.blockedMessage.message,
     });
-    recordTransmissionRemoval('TX_DANGEROUS_DOWNLOAD_REMOVE');
+    recordTransmissionRemoval(entry.blockedMessage.reason);
     removedCount += 1;
   }
 
@@ -552,7 +604,7 @@ export const runTransmissionGuard = async (input: {
 }): Promise<TransmissionGuardRunSummary> => {
   const now = input.now ?? new Date();
   const nowIso = now.toISOString();
-  const dangerousQueueSummary = await handleDangerousSonarrQueueItems({
+  const dangerousQueueSummary = await handleBlockedSonarrQueueItems({
     database: input.database,
     sonarrClient: input.sonarrClient ?? null,
     now,

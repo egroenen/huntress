@@ -654,3 +654,133 @@ test('runTransmissionGuard removes dangerous Sonarr queue items and permanently 
     database.close();
   }
 });
+
+test('runTransmissionGuard removes Sonarr queue items that are not upgrades and permanently suppresses the torrent hash', async () => {
+  const removedQueueItems: Array<{
+    queueId: number;
+    options: {
+      removeFromClient: boolean;
+      blocklist: boolean;
+      skipRedownload: boolean;
+    };
+  }> = [];
+  const databasePath = await createDatabasePath();
+  const database = await initializeDatabase(databasePath);
+  const config = createResolvedConfig();
+
+  database.repositories.mediaItemState.upsert({
+    mediaKey: 'sonarr:episode:50451',
+    mediaType: 'sonarr_episode',
+    arrId: 50451,
+    parentArrId: 623,
+    title: 'How to Get Away with Murder - 5x08',
+    monitored: true,
+    releaseDate: '2026-04-05T00:00:00.000Z',
+    wantedState: 'cutoff_unmet',
+    inQueue: true,
+    retryCount: 0,
+    lastSearchAt: null,
+    lastGrabAt: null,
+    nextEligibleAt: null,
+    suppressedUntil: null,
+    suppressionReason: null,
+    lastSeenAt: '2026-04-05T01:00:00.000Z',
+    stateHash: 'sonarr-episode-upgrade-state',
+  });
+  database.repositories.serviceState.set({
+    key: 'arr_queue_download_map:sonarr',
+    value: {
+      a8135fbec6588a7ca1f25cfaada47cec501dfe78: 'sonarr:episode:50451',
+    },
+    updatedAt: '2026-04-05T01:00:00.000Z',
+  });
+
+  const sonarrClient = {
+    async getQueueDetails() {
+      return [
+        {
+          id: 456,
+          title:
+            'www.UIndex.org - How.to.Get.Away.with.Murder.S05E08.I.Want.to.Love.You.Until.the.Day.I.Die.720p.HEVC.x265-MeGusta',
+          status: 'completed',
+          trackedDownloadState: 'importPending',
+          trackedDownloadStatus: 'warning',
+          protocol: 'torrent',
+          downloadId: 'A8135FBEC6588A7CA1F25CFAADA47CEC501DFE78',
+          estimatedCompletionTime: null,
+          payload: {
+            statusMessages: [
+              {
+                title:
+                  'www.UIndex.org - How.to.Get.Away.with.Murder.S05E08.I.Want.to.Love.You.Until.the.Day.I.Die.720p.HEVC.x265-MeGusta',
+                messages: [
+                  'Not an upgrade for existing episode file(s). Existing quality: HDTV-1080p. New Quality HDTV-720p.',
+                ],
+              },
+            ],
+          },
+        },
+      ];
+    },
+    async removeQueueItem(
+      queueId: number,
+      options: {
+        removeFromClient: boolean;
+        blocklist: boolean;
+        skipRedownload: boolean;
+      }
+    ) {
+      removedQueueItems.push({ queueId, options });
+    },
+  } as unknown as SonarrApiClient;
+
+  try {
+    const summary = await runTransmissionGuard({
+      database,
+      config,
+      client: null,
+      sonarrClient,
+      now: new Date('2026-04-05T01:05:00.000Z'),
+    });
+
+    const suppressions = database.repositories.releaseSuppressions.listActive(
+      '2026-04-05T01:05:00.000Z'
+    );
+    const hashSuppression = suppressions.find(
+      (suppression) => suppression.fingerprintType === 'torrent_hash'
+    );
+    const titleSuppression = suppressions.find(
+      (suppression) => suppression.fingerprintType === 'release_title'
+    );
+    const torrentState =
+      database.repositories.transmissionTorrentState.getByHash(
+        'a8135fbec6588a7ca1f25cfaada47cec501dfe78'
+      );
+
+    assert.equal(summary.observedCount, 0);
+    assert.equal(summary.removedCount, 1);
+    assert.equal(summary.suppressionCount, 2);
+    assert.equal(summary.linkedCount, 1);
+    assert.deepEqual(removedQueueItems, [
+      {
+        queueId: 456,
+        options: {
+          removeFromClient: true,
+          blocklist: true,
+          skipRedownload: true,
+        },
+      },
+    ]);
+    assert.equal(hashSuppression?.reason, 'TX_NOT_UPGRADE_REMOVE');
+    assert.equal(hashSuppression?.expiresAt, '9999-12-31T23:59:59.999Z');
+    assert.equal(
+      hashSuppression?.fingerprintValue,
+      'a8135fbec6588a7ca1f25cfaada47cec501dfe78'
+    );
+    assert.equal(titleSuppression?.reason, 'TX_NOT_UPGRADE_REMOVE');
+    assert.equal(torrentState?.removalReason, 'TX_NOT_UPGRADE_REMOVE');
+    assert.equal(torrentState?.linkedMediaKey, 'sonarr:episode:50451');
+  } finally {
+    database.close();
+  }
+});
