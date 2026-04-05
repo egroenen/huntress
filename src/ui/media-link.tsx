@@ -6,6 +6,29 @@ const buildAppUrl = (baseUrl: string, path: string): string => {
   return new URL(path.replace(/^\//, ''), normalizedBaseUrl).toString();
 };
 
+const slugify = (value: string): string => {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+};
+
+const deriveSonarrSeriesSlug = (title: string): string | null => {
+  const fromDelimitedTitle = title.includes(' - ')
+    ? title.split(' - ')[0] ?? title
+    : title;
+  const strippedEpisodeSuffix = fromDelimitedTitle
+    .replace(/\sS\d{1,2}\s?E\d{1,2}.*$/i, '')
+    .replace(/\s\d{1,2}x\d{1,2}.*$/i, '')
+    .trim();
+  const slug = slugify(strippedEpisodeSuffix);
+
+  return slug.length > 0 ? slug : null;
+};
+
 const getMediaItemHref = (
   config: ResolvedConfig,
   mediaItem: MediaItemStateRecord | null
@@ -15,13 +38,17 @@ const getMediaItemHref = (
   }
 
   if (mediaItem.mediaType === 'sonarr_episode') {
-    const seriesId = mediaItem.parentArrId;
+    const derivedSlug = deriveSonarrSeriesSlug(mediaItem.title);
 
-    if (seriesId === null) {
-      return null;
+    if (derivedSlug) {
+      return buildAppUrl(config.instances.sonarr.url, `series/${derivedSlug}`);
     }
 
-    return buildAppUrl(config.instances.sonarr.url, `series/${seriesId}`);
+    if (mediaItem.parentArrId !== null) {
+      return buildAppUrl(config.instances.sonarr.url, `series/${mediaItem.parentArrId}`);
+    }
+
+    return null;
   }
 
   if (mediaItem.mediaType === 'radarr_movie') {
