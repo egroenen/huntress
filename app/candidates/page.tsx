@@ -13,6 +13,7 @@ import {
   SectionCard,
   StatusBadge,
 } from '@/src/ui';
+import { formatServiceName } from '@/src/ui/formatters';
 
 export const dynamic = 'force-dynamic';
 
@@ -456,7 +457,7 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
         <SectionCard
           key={app}
           title={app === 'sonarr' ? 'Sonarr candidates' : 'Radarr candidates'}
-          subtitle={`Separate policy evaluation for ${app}. Showing ${pagedCandidates[app].length} of ${filteredCandidates[app].length} matching candidates.`}
+          subtitle={`Separate policy evaluation for ${formatServiceName(app)}. Showing ${pagedCandidates[app].length} of ${filteredCandidates[app].length} matching candidates.`}
           actions={
             app === 'sonarr'
               ? renderPagination({

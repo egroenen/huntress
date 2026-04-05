@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import type { SchedulerCoordinatorStatus } from '@/src/scheduler';
-import { formatDisplayMode } from './formatters';
+import { formatDisplayMode, formatRunTypeLabel } from './formatters';
 
 type NavPath =
   | '/'
@@ -191,7 +191,6 @@ export const ConsoleShell = ({
         <div className="console-brand">
           <BrandMark />
           <div>
-            <p className="console-brand__eyebrow">edarr</p>
             <h1 className="console-brand__title">Operator Console</h1>
           </div>
         </div>
@@ -263,10 +262,10 @@ export const ConsoleShell = ({
               {schedulerStatus.activeRun ? (
                 <StatusBadge
                   status="running"
-                  title={`A ${schedulerStatus.activeRun.runType.replace('_', ' ')} is currently active. Open Status to watch detailed progress or use Recover run if it is stuck.`}
-                  ariaLabel={`${schedulerStatus.activeRun.runType.replace('_', ' ')} run active`}
+                  title={`A ${formatRunTypeLabel(schedulerStatus.activeRun.runType)} is currently active. Open Status to watch detailed progress or use Recover run if it is stuck.`}
+                  ariaLabel={`${formatRunTypeLabel(schedulerStatus.activeRun.runType)} run active`}
                 >
-                  {schedulerStatus.activeRun.runType.replace('_', ' ')} running
+                  {formatRunTypeLabel(schedulerStatus.activeRun.runType)} running
                 </StatusBadge>
               ) : null}
             </div>

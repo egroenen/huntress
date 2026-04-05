@@ -408,39 +408,33 @@ const renderSyncSection = (summary: RunSummaryShape) => {
       title="Sync summary"
       subtitle={`Arr state snapshot taken at ${formatTimestamp(summary.syncSummary?.syncedAt ?? null)}.`}
     >
-      <DataTable
-        columns={[
-          { key: 'app', label: 'App' },
-          { key: 'status', label: 'Status' },
-          { key: 'missing', label: 'Missing' },
-          { key: 'cutoff', label: 'Cutoff unmet' },
-          { key: 'queue', label: 'Queue' },
-          { key: 'pages', label: 'Pages fetched' },
-          { key: 'upserted', label: 'Upserted' },
-          { key: 'ignored', label: 'Ignored' },
-        ]}
-        rows={rows.map((row) => ({
-          app: formatServiceName(row.app),
+        <DataTable
+          columns={[
+            { key: 'app', label: 'App' },
+            { key: 'status', label: 'Status' },
+            { key: 'missing', label: 'Missing' },
+            { key: 'cutoff', label: 'Cutoff unmet' },
+            { key: 'queue', label: 'Queue' },
+            { key: 'missingPages', label: 'Missing pages' },
+            { key: 'cutoffPages', label: 'Cutoff pages' },
+            { key: 'upserted', label: 'Upserted' },
+            { key: 'ignored', label: 'Ignored' },
+          ]}
+          rows={rows.map((row) => ({
+            app: formatServiceName(row.app),
           status: (
             <StatusBadge status={row.status === 'synced' ? 'success' : 'degraded'}>
               {row.status}
             </StatusBadge>
-          ),
-          missing: row.missingCount,
-          cutoff: row.cutoffCount,
-          queue: row.queueCount,
-          pages: (
-            <div>
-              <strong>Missing:</strong> {row.missingPagesFetched} /{' '}
-              {row.missingTotalPages}
-              <span className="secondary-value">
-                <strong>Cutoff:</strong> {row.cutoffPagesFetched} / {row.cutoffTotalPages}
-              </span>
-            </div>
-          ),
-          upserted: row.upsertedCount,
-          ignored: row.ignoredCount,
-        }))}
+            ),
+            missing: row.missingCount,
+            cutoff: row.cutoffCount,
+            queue: row.queueCount,
+            missingPages: `${row.missingPagesFetched} / ${row.missingTotalPages}`,
+            cutoffPages: `${row.cutoffPagesFetched} / ${row.cutoffTotalPages}`,
+            upserted: row.upsertedCount,
+            ignored: row.ignoredCount,
+          }))}
         emptyMessage="No Arr sync summary is available for this run."
       />
     </SectionCard>

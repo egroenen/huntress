@@ -24,7 +24,13 @@ export const formatServiceName = (value: string): string => {
   }
 };
 
-export const formatRunTypeLabel = (value: string): string => value.replaceAll('_', ' ');
+export const formatRunTypeLabel = (value: string): string =>
+  value
+    .replaceAll('_', ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => `${part[0]?.toUpperCase() ?? ''}${part.slice(1)}`)
+    .join(' ');
 
 export const formatShortRunId = (value: string | null): string => {
   if (!value) {
