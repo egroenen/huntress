@@ -152,29 +152,27 @@ const BrandMark = () => {
       focusable="false"
     >
       <defs>
-        <linearGradient id="edarr-brand-surface" x1="0%" x2="100%" y1="0%" y2="100%">
-          <stop offset="0%" stopColor="#47c8e7" />
-          <stop offset="100%" stopColor="#1a7fb2" />
+        <linearGradient id="edarr-brand-lens" x1="0%" x2="100%" y1="0%" y2="100%">
+          <stop offset="0%" stopColor="#5ad5ef" />
+          <stop offset="100%" stopColor="#1786b3" />
         </linearGradient>
-        <linearGradient id="edarr-brand-accent" x1="0%" x2="100%" y1="0%" y2="100%">
-          <stop offset="0%" stopColor="#ffd66c" />
-          <stop offset="100%" stopColor="#dc971d" />
+        <linearGradient id="edarr-brand-core" x1="0%" x2="100%" y1="0%" y2="100%">
+          <stop offset="0%" stopColor="#ffd86e" />
+          <stop offset="100%" stopColor="#e2a321" />
         </linearGradient>
       </defs>
-      <circle cx="32" cy="32" r="24" fill="#142131" />
-      <circle
-        cx="32"
-        cy="32"
-        r="21"
-        fill="none"
-        stroke="url(#edarr-brand-surface)"
-        strokeWidth="6"
+      <circle cx="28" cy="28" r="18" fill="none" stroke="url(#edarr-brand-lens)" strokeWidth="7" />
+      <path
+        d="M40.5 40.5L53 53"
+        stroke="url(#edarr-brand-lens)"
+        strokeWidth="7"
+        strokeLinecap="round"
       />
       <path
-        d="M22 20h14l-7 9h8L26 44l4-10h-8z"
-        fill="url(#edarr-brand-accent)"
+        d="M23.5 18.5h11l-5.5 7.5h6.5L24.5 39l3.5-9H21z"
+        fill="url(#edarr-brand-core)"
       />
-      <circle cx="32" cy="32" r="4" fill="#142131" opacity="0.95" />
+      <circle cx="28" cy="28" r="4.5" fill="#142131" opacity="0.92" />
     </svg>
   );
 };
