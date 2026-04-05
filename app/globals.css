@@ -578,6 +578,13 @@ select {
   line-height: 1.4;
 }
 
+.truncated-secondary-value {
+  max-width: 28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .linked-media-cell strong,
 .suppression-title strong {
   display: block;

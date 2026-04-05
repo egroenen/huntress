@@ -131,6 +131,14 @@ const formatFingerprintValue = (type: string, value: string): string => {
   return trimmedValue;
 };
 
+const truncateValue = (value: string, maxLength = 88): string => {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, maxLength - 1)}…`;
+};
+
 export default async function SuppressionsPage(props: { searchParams: SearchParams }) {
   const runtime = await requireAuthenticatedConsoleContext();
   const searchParams = await props.searchParams;
@@ -253,10 +261,16 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
                 title={`${suppression.fingerprintType}: ${suppression.fingerprintValue}`}
               >
                 <strong>{formatFingerprintType(suppression.fingerprintType)}</strong>
-                <span className="secondary-value">
-                  {formatFingerprintValue(
+                <span
+                  className="secondary-value truncated-secondary-value"
+                  title={formatFingerprintValue(
                     suppression.fingerprintType,
                     suppression.fingerprintValue
+                  )}
+                >
+                  {formatFingerprintValue(
+                    suppression.fingerprintType,
+                    truncateValue(suppression.fingerprintValue)
                   )}
                 </span>
               </div>

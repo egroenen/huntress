@@ -9,7 +9,11 @@ import {
   StatsGrid,
   StatusBadge,
 } from '@/src/ui';
-import { formatServiceName, formatShortRunId } from '@/src/ui/formatters';
+import {
+  formatRunTypeLabel,
+  formatServiceName,
+  formatShortRunId,
+} from '@/src/ui/formatters';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,7 +77,7 @@ export default async function StatusPage() {
       <StatsGrid>
         <StatCard
           label="Active run"
-          value={activeRun?.runType.replace('_', ' ') ?? 'idle'}
+          value={activeRun ? formatRunTypeLabel(activeRun.runType) : 'idle'}
           tone={activeRun ? (activeRun.overrun ? 'danger' : 'success') : 'default'}
           detail={
             activeRun
@@ -170,7 +174,9 @@ export default async function StatusPage() {
           </div>
           <div className="activity-panel__meta">
             <span>Updated {formatTimestamp(current?.occurredAt ?? null)}</span>
-            <span>Run {current?.runId ?? 'n/a'}</span>
+            <span title={current?.runId ?? undefined}>
+              Run {formatShortRunId(current?.runId ?? null)}
+            </span>
             <span>
               Progress{' '}
               {formatProgress(
