@@ -172,6 +172,43 @@ test('scheduled cadence triggers scheduled runs', async () => {
   }
 });
 
+test('scheduled and manual live runs stay non-live when live mode is disabled', async () => {
+  const databasePath = await createDatabasePath();
+  const database = await initializeDatabase(databasePath);
+  const seen: Array<{ runType: string; liveDispatchAllowed: boolean }> = [];
+
+  const coordinator = createSchedulerCoordinator({
+    database,
+    cadenceMs: 5_000,
+    startupGracePeriodMs: 0,
+    maxRunDurationMs: 5 * 60_000,
+    lockTtlMs: 60_000,
+    isLiveModeEnabled: () => false,
+    async executeRun(context) {
+      seen.push({
+        runType: context.runType,
+        liveDispatchAllowed: context.liveDispatchAllowed,
+      });
+
+      return {
+        status: 'success',
+      };
+    },
+  });
+
+  try {
+    await coordinator.runManual('manual_live');
+    await coordinator.runScheduledCycle();
+
+    assert.deepEqual(seen, [
+      { runType: 'manual_live', liveDispatchAllowed: false },
+      { runType: 'scheduled', liveDispatchAllowed: false },
+    ]);
+  } finally {
+    database.close();
+  }
+});
+
 test('failed runs mark run history as failed and release the scheduler lock', async () => {
   const databasePath = await createDatabasePath();
   const database = await initializeDatabase(databasePath);

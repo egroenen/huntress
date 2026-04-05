@@ -58,6 +58,7 @@ export interface SchedulerCoordinatorOptions {
   startupGracePeriodMs: number;
   maxRunDurationMs: number;
   lockTtlMs: number;
+  isLiveModeEnabled?: () => boolean;
   executeRun: (context: RunExecutionContext) => Promise<RunExecutionResult>;
   now?: () => Date;
   createInterval?: (callback: () => void, delay: number) => unknown;
@@ -209,6 +210,7 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
     options.clearScheduledInterval ??
     ((handle: unknown) => clearInterval(handle as NodeJS.Timeout));
   const startedAt = now();
+  const isLiveModeEnabled = options.isLiveModeEnabled ?? (() => true);
   let intervalHandle: unknown = null;
   let nextScheduledRunAt: Date | null = null;
 
@@ -274,7 +276,7 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
         startupGraceActive,
         liveDispatchAllowed:
           runType === 'manual_live' || runType === 'scheduled'
-            ? !startupGraceActive
+            ? !startupGraceActive && isLiveModeEnabled()
             : false,
         activity: activityTracker,
       });

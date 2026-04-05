@@ -163,6 +163,7 @@ const buildRuntimeCore = async () => {
       resolved.config.scheduler.cycleEveryMs,
       15 * 60_000
     ),
+    isLiveModeEnabled: () => createRuntimeState().config.mode === 'live',
     async executeRun(context) {
       const activityTracker = context.activity;
       const baseRuntimeState = createRuntimeState();
@@ -306,6 +307,20 @@ export const recoverActiveRun = async (reason?: string) => {
 
 export const runManualFetch = async (mediaKey: string) => {
   const runtime = await getRuntimeContext();
+
+  if (runtime.config.mode !== 'live') {
+    logger.warn({
+      event: 'manual_fetch_rejected',
+      mediaKey,
+      reason: 'dry_run_mode',
+    });
+
+    return {
+      accepted: false,
+      runId: null,
+    };
+  }
+
   const startedAt = new Date();
   const startedAtIso = startedAt.toISOString();
   const runId = `manual_fetch_${randomUUID()}`;
