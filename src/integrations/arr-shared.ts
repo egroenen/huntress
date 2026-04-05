@@ -5,6 +5,7 @@ import type {
   ArrCommandResponse,
   ArrQueueDeleteOptions,
   ArrQueueRecord,
+  ArrReleaseRecord,
   ArrWantedPageResult,
   ArrSystemStatus,
   RadarrMovieRecord,
@@ -42,6 +43,54 @@ const arrCommandResponseSchema = z
     status: z.string().nullable().optional(),
   })
   .passthrough();
+
+const arrReleaseSchema = z
+  .object({
+    guid: z.string(),
+    indexerId: z.number().int().positive(),
+    indexer: z.string().nullable().optional(),
+    title: z.string(),
+    downloadAllowed: z.boolean().nullable().optional(),
+    approved: z.boolean().nullable().optional(),
+    rejected: z.boolean().nullable().optional(),
+    rejections: z.array(z.string()).nullable().optional(),
+    protocol: z.string().nullable().optional(),
+    quality: z
+      .object({
+        quality: z
+          .object({
+            name: z.string().nullable().optional(),
+            resolution: z.number().int().nullable().optional(),
+          })
+          .passthrough()
+          .nullable()
+          .optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+    qualityWeight: z.number().nullable().optional(),
+    customFormatScore: z.number().nullable().optional(),
+    size: z.number().nullable().optional(),
+    ageHours: z.number().nullable().optional(),
+    seeders: z.number().int().nullable().optional(),
+    leechers: z.number().int().nullable().optional(),
+    languages: z
+      .array(
+        z
+          .object({
+            name: z.string().nullable().optional(),
+          })
+          .passthrough()
+      )
+      .nullable()
+      .optional(),
+    infoUrl: z.string().nullable().optional(),
+    infoHash: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+const arrReleaseResponseSchema = z.array(arrReleaseSchema);
 
 const sonarrWantedItemSchema = z
   .object({
@@ -184,6 +233,36 @@ const buildExternalPath = (prefix: 'series' | 'movie', slug: string | null): str
   const trimmedSlug = slug.trim();
 
   return trimmedSlug.length > 0 ? `${prefix}/${trimmedSlug}` : null;
+};
+
+const toArrReleaseRecord = (entry: z.infer<typeof arrReleaseSchema>): ArrReleaseRecord => {
+  return {
+    guid: entry.guid,
+    guidUrl: entry.guid,
+    indexerId: entry.indexerId,
+    indexer: entry.indexer ?? null,
+    title: entry.title,
+    downloadAllowed: entry.downloadAllowed ?? false,
+    approved: entry.approved ?? false,
+    rejected: entry.rejected ?? false,
+    rejections: entry.rejections ?? [],
+    protocol: entry.protocol ?? null,
+    qualityName: entry.quality?.quality?.name ?? null,
+    qualityResolution: entry.quality?.quality?.resolution ?? null,
+    qualityWeight: entry.qualityWeight ?? null,
+    customFormatScore: entry.customFormatScore ?? 0,
+    size: entry.size ?? null,
+    ageHours: entry.ageHours ?? null,
+    seeders: entry.seeders ?? null,
+    leechers: entry.leechers ?? null,
+    languages:
+      entry.languages
+        ?.map((language) => language.name?.trim() ?? null)
+        .filter((name): name is string => Boolean(name)) ?? [],
+    infoUrl: entry.infoUrl ?? null,
+    infoHash: entry.infoHash?.trim() || null,
+    payload: entry,
+  };
 };
 
 const formatEpisodeCode = (
@@ -415,6 +494,42 @@ export const fetchArrQueue = async (
     estimatedCompletionTime: entry.estimatedCompletionTime ?? null,
     payload: entry,
   }));
+};
+
+export const fetchArrReleases = async (
+  options: ArrClientOptions,
+  input: { episodeId?: number; movieId?: number }
+): Promise<ArrReleaseRecord[]> => {
+  const endpoint = new URL(joinUrl(options.baseUrl, '/api/v3/release'));
+
+  if (input.episodeId) {
+    endpoint.searchParams.set('episodeId', String(input.episodeId));
+  }
+
+  if (input.movieId) {
+    endpoint.searchParams.set('movieId', String(input.movieId));
+  }
+
+  if (options.serviceName) {
+    reportActivity(options, {
+      source: options.serviceName,
+      stage: 'release_candidates',
+      message: `Requesting ${options.serviceName} release candidates`,
+      detail: endpoint.pathname + endpoint.search,
+      metadata: {
+        episodeId: input.episodeId ?? null,
+        movieId: input.movieId ?? null,
+      },
+    });
+  }
+
+  const result = await requestJson(
+    endpoint.toString(),
+    arrReleaseResponseSchema,
+    createRequestOptions(options)
+  );
+
+  return result.map((entry) => toArrReleaseRecord(entry));
 };
 
 export const fetchSonarrSeries = async (
@@ -649,5 +764,55 @@ export const dispatchArrCommand = async (
     id: result.id ?? null,
     name: result.name ?? null,
     status: result.status ?? null,
+  };
+};
+
+export const grabArrRelease = async (
+  options: ArrClientOptions,
+  input: { guid: string; indexerId: number }
+): Promise<ArrCommandResponse> => {
+  if (options.serviceName) {
+    reportActivity(options, {
+      source: options.serviceName,
+      stage: 'release_grab',
+      message: `Submitting ${options.serviceName} release grab`,
+      detail: `Indexer ${input.indexerId}`,
+      metadata: {
+        indexerId: input.indexerId,
+      },
+    });
+  }
+
+  const result = await requestJson(
+    joinUrl(options.baseUrl, '/api/v3/release'),
+    z.unknown(),
+    {
+      ...createRequestOptions(options),
+      method: 'POST',
+      body: JSON.stringify({
+        guid: input.guid,
+        indexerId: input.indexerId,
+      }),
+      headers: {
+        ...createArrHeaders(options.apiKey),
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (typeof result === 'object' && result !== null) {
+    const record = result as Record<string, unknown>;
+
+    return {
+      id: typeof record.id === 'number' ? record.id : null,
+      name: typeof record.name === 'string' ? record.name : 'ReleaseGrab',
+      status: typeof record.status === 'string' ? record.status : 'queued',
+    };
+  }
+
+  return {
+    id: null,
+    name: 'ReleaseGrab',
+    status: 'queued',
   };
 };

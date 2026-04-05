@@ -2,6 +2,7 @@ import type {
   ArrCommandResponse,
   ArrQueueDeleteOptions,
   ArrQueueRecord,
+  ArrReleaseRecord,
   ArrSystemStatus,
   ArrWantedPageResult,
   ArrWantedRecord,
@@ -12,11 +13,13 @@ import {
   deleteArrQueueItem,
   dispatchArrCommand,
   fetchArrQueue,
+  fetchArrReleases,
   fetchSonarrEpisode,
   fetchSonarrSeries,
   fetchArrSystemStatus,
   fetchSonarrWantedPage,
   fetchSonarrWanted,
+  grabArrRelease,
   type ArrClientOptions,
 } from './arr-shared';
 
@@ -46,6 +49,12 @@ export const createSonarrClient = (options: SonarrClient) => {
     },
     getQueueDetails(): Promise<ArrQueueRecord[]> {
       return fetchArrQueue(clientOptions);
+    },
+    listEpisodeReleases(episodeId: number): Promise<ArrReleaseRecord[]> {
+      return fetchArrReleases(clientOptions, { episodeId });
+    },
+    grabRelease(guid: string, indexerId: number): Promise<ArrCommandResponse> {
+      return grabArrRelease(clientOptions, { guid, indexerId });
     },
     getSeries(seriesId: number): Promise<SonarrSeriesRecord> {
       return fetchSonarrSeries(clientOptions, seriesId);

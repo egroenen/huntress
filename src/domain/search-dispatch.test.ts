@@ -114,6 +114,7 @@ const createResolvedConfig = (): ResolvedConfig => {
         recentReleaseWindowDays: 30,
         excludeUnreleased: true,
         excludeUnmonitored: true,
+        releaseSelection: undefined,
       },
       radarr: {
         maxSearchesPerCycle: 3,
@@ -122,6 +123,7 @@ const createResolvedConfig = (): ResolvedConfig => {
         recentReleaseWindowDays: 30,
         excludeUnreleased: true,
         excludeUnmonitored: true,
+        releaseSelection: undefined,
       },
     },
     transmissionGuard: {
@@ -579,6 +581,269 @@ test('executeManualFetch bypasses normal cooldown and rolling-rate limits', asyn
     assert.equal(attempts[0]?.reasonCode, 'MANUAL_OVERRIDE_FETCH');
     assert.equal(updatedItem?.lastSearchAt, '2026-04-04T12:00:00.000Z');
     assert.deepEqual(commandBodies, [{ name: 'EpisodeSearch', episodeIds: [101] }]);
+  } finally {
+    database.close();
+    await server.close();
+  }
+});
+
+test('executeManualFetch grabs a preferred Sonarr release when release selection is enabled', async () => {
+  const requestBodies: Array<Record<string, unknown>> = [];
+  let commandPosts = 0;
+  const server = await startJsonServer((request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+
+    if (request.method === 'GET' && url.pathname === '/api/v3/release') {
+      assert.equal(url.searchParams.get('episodeId'), '101');
+      response.end(
+        JSON.stringify([
+          {
+            guid: 'release-720',
+            indexerId: 41,
+            indexer: 'Indexer A',
+            title: 'Example.Show.S01E01.720p.WEB.H264-GROUP',
+            downloadAllowed: true,
+            approved: false,
+            rejected: true,
+            rejections: ['Quality profile rejected'],
+            quality: {
+              quality: {
+                name: 'WEB-720p',
+                resolution: 720,
+              },
+            },
+            customFormatScore: 10,
+            seeders: 30,
+            ageHours: 4,
+            languages: [{ name: 'English' }],
+          },
+          {
+            guid: 'release-1080',
+            indexerId: 42,
+            indexer: 'Indexer B',
+            title: 'Example.Show.S01E01.1080p.WEB.H264-BEST',
+            downloadAllowed: true,
+            approved: false,
+            rejected: true,
+            rejections: ['Quality profile rejected'],
+            quality: {
+              quality: {
+                name: 'WEB-1080p',
+                resolution: 1080,
+              },
+            },
+            customFormatScore: 50,
+            seeders: 80,
+            ageHours: 2,
+            languages: [{ name: 'English' }],
+          },
+        ])
+      );
+      return;
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/v3/release') {
+      let body = '';
+      request.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+      request.on('end', () => {
+        requestBodies.push(JSON.parse(body) as Record<string, unknown>);
+        response.end(JSON.stringify({ id: 501, name: 'ReleaseGrab', status: 'queued' }));
+      });
+      return;
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/v3/command') {
+      commandPosts += 1;
+      response.end(JSON.stringify({ id: 999, name: 'EpisodeSearch', status: 'queued' }));
+      return;
+    }
+
+    response.statusCode = 404;
+    response.end(JSON.stringify({ message: 'not found' }));
+  });
+
+  const databasePath = await createDatabasePath();
+  const database = await seedEligibleItems(databasePath);
+  const config = createResolvedConfig();
+  config.policies.sonarr.releaseSelection = {
+    enabled: true,
+    strategy: 'best_only',
+    preferredMinResolution: 1080,
+    fallbackMinResolution: 720,
+    minimumSeeders: 1,
+    minimumCustomFormatScore: 0,
+    requireEnglish: true,
+    upgradeRetryAfterFallbackMs: 30 * 60_000,
+  };
+
+  database.repositories.runHistory.create(
+    createRunHistoryRecord('manual-fetch-release', 'manual_live')
+  );
+
+  try {
+    const summary = await executeManualFetch({
+      database,
+      config,
+      clients: {
+        sonarr: createSonarrClient({
+          baseUrl: server.url,
+          apiKey: 'sonarr-key',
+        }),
+        radarr: createRadarrClient({
+          baseUrl: server.url,
+          apiKey: 'radarr-key',
+        }),
+      },
+      runId: 'manual-fetch-release',
+      mediaKey: 'sonarr:episode:101',
+      now: new Date('2026-04-04T12:00:00.000Z'),
+    });
+
+    const attempts =
+      database.repositories.searchAttempts.listByRunId('manual-fetch-release');
+
+    assert.equal(commandPosts, 0);
+    assert.equal(summary.dispatchCount, 1);
+    assert.equal(summary.summary.dispatchKind, 'release_grab');
+    assert.deepEqual(requestBodies, [{ guid: 'release-1080', indexerId: 42 }]);
+    assert.equal(attempts[0]?.outcome, 'accepted:release:preferred_release');
+    assert.equal(
+      (summary.summary.releaseSelection as { mode: string }).mode,
+      'preferred_release'
+    );
+    assert.equal(
+      (summary.summary.releaseSelection as { selectedReleaseTitle: string }).selectedReleaseTitle,
+      'Example.Show.S01E01.1080p.WEB.H264-BEST'
+    );
+    assert.equal(
+      (summary.summary.releaseSelection as { selectedReleaseResolution: number })
+        .selectedReleaseResolution,
+      1080
+    );
+    assert.equal(
+      (summary.summary.releaseSelection as { selectedReleaseIndexer: string })
+        .selectedReleaseIndexer,
+      'Indexer B'
+    );
+    assert.equal(
+      (summary.summary.releaseSelection as { upgradePriority: boolean }).upgradePriority,
+      false
+    );
+    assert.match(
+      (summary.summary.releaseSelection as { reason: string }).reason,
+      /Selected preferred release/
+    );
+  } finally {
+    database.close();
+    await server.close();
+  }
+});
+
+test('executeManualFetch can take a fallback release and shorten the retry window for upgrades', async () => {
+  const requestBodies: Array<Record<string, unknown>> = [];
+  const server = await startJsonServer((request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+
+    if (request.method === 'GET' && url.pathname === '/api/v3/release') {
+      assert.equal(url.searchParams.get('episodeId'), '101');
+      response.end(
+        JSON.stringify([
+          {
+            guid: 'release-720',
+            indexerId: 44,
+            indexer: 'Indexer Fallback',
+            title: 'Example.Show.S01E01.720p.WEB.H264-FALLBACK',
+            downloadAllowed: true,
+            approved: false,
+            rejected: true,
+            rejections: ['Quality profile rejected'],
+            quality: {
+              quality: {
+                name: 'WEB-720p',
+                resolution: 720,
+              },
+            },
+            customFormatScore: 5,
+            seeders: 12,
+            ageHours: 1,
+            languages: [{ name: 'English' }],
+          },
+        ])
+      );
+      return;
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/v3/release') {
+      let body = '';
+      request.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+      request.on('end', () => {
+        requestBodies.push(JSON.parse(body) as Record<string, unknown>);
+        response.end(JSON.stringify({ id: 777, name: 'ReleaseGrab', status: 'queued' }));
+      });
+      return;
+    }
+
+    response.statusCode = 404;
+    response.end(JSON.stringify({ message: 'not found' }));
+  });
+
+  const databasePath = await createDatabasePath();
+  const database = await seedEligibleItems(databasePath);
+  const config = createResolvedConfig();
+  config.policies.sonarr.releaseSelection = {
+    enabled: true,
+    strategy: 'fallback_then_upgrade',
+    preferredMinResolution: 1080,
+    fallbackMinResolution: 720,
+    minimumSeeders: 1,
+    minimumCustomFormatScore: 0,
+    requireEnglish: true,
+    upgradeRetryAfterFallbackMs: 30 * 60_000,
+  };
+
+  database.repositories.runHistory.create(
+    createRunHistoryRecord('manual-fetch-fallback', 'manual_live')
+  );
+
+  try {
+    const summary = await executeManualFetch({
+      database,
+      config,
+      clients: {
+        sonarr: createSonarrClient({
+          baseUrl: server.url,
+          apiKey: 'sonarr-key',
+        }),
+        radarr: createRadarrClient({
+          baseUrl: server.url,
+          apiKey: 'radarr-key',
+        }),
+      },
+      runId: 'manual-fetch-fallback',
+      mediaKey: 'sonarr:episode:101',
+      now: new Date('2026-04-04T12:00:00.000Z'),
+    });
+
+    const item = database.repositories.mediaItemState.getByMediaKey('sonarr:episode:101');
+    const nextEligibleAt = item?.nextEligibleAt ? new Date(item.nextEligibleAt).getTime() : null;
+
+    assert.equal(summary.summary.dispatchKind, 'release_grab');
+    assert.deepEqual(requestBodies, [{ guid: 'release-720', indexerId: 44 }]);
+    assert.equal(
+      (summary.summary.releaseSelection as { mode: string }).mode,
+      'fallback_then_upgrade'
+    );
+    assert.equal(
+      (summary.summary.releaseSelection as { upgradePriority: boolean }).upgradePriority,
+      true
+    );
+    assert.equal(nextEligibleAt, new Date('2026-04-04T12:30:00.000Z').getTime());
   } finally {
     database.close();
     await server.close();

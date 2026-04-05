@@ -47,6 +47,15 @@ policies:
     recent_release_window_days: 30
     exclude_unreleased: true
     exclude_unmonitored: true
+    release_selection:
+      enabled: true
+      strategy: 'fallback_then_upgrade'
+      preferred_min_resolution: 1080
+      fallback_min_resolution: 720
+      minimum_seeders: 1
+      minimum_custom_format_score: 0
+      require_english: false
+      upgrade_retry_after_fallback: '30m'
   radarr:
     max_searches_per_cycle: 3
     missing_retry_intervals: ['24h', '72h', '168h', '336h']
@@ -54,6 +63,15 @@ policies:
     recent_release_window_days: 30
     exclude_unreleased: true
     exclude_unmonitored: true
+    release_selection:
+      enabled: true
+      strategy: 'fallback_then_upgrade'
+      preferred_min_resolution: 1080
+      fallback_min_resolution: 720
+      minimum_seeders: 1
+      minimum_custom_format_score: 0
+      require_english: false
+      upgrade_retry_after_fallback: '30m'
 
 transmission_guard:
   enabled: true

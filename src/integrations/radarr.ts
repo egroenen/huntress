@@ -2,6 +2,7 @@ import type {
   ArrCommandResponse,
   ArrQueueDeleteOptions,
   ArrQueueRecord,
+  ArrReleaseRecord,
   ArrSystemStatus,
   ArrWantedPageResult,
   ArrWantedRecord,
@@ -11,10 +12,12 @@ import {
   deleteArrQueueItem,
   dispatchArrCommand,
   fetchArrQueue,
+  fetchArrReleases,
   fetchArrSystemStatus,
   fetchRadarrMovie,
   fetchRadarrWantedPage,
   fetchRadarrWanted,
+  grabArrRelease,
   type ArrClientOptions,
 } from './arr-shared';
 
@@ -44,6 +47,12 @@ export const createRadarrClient = (options: RadarrClient) => {
     },
     getQueueDetails(): Promise<ArrQueueRecord[]> {
       return fetchArrQueue(clientOptions);
+    },
+    listMovieReleases(movieId: number): Promise<ArrReleaseRecord[]> {
+      return fetchArrReleases(clientOptions, { movieId });
+    },
+    grabRelease(guid: string, indexerId: number): Promise<ArrCommandResponse> {
+      return grabArrRelease(clientOptions, { guid, indexerId });
     },
     getMovie(movieId: number): Promise<RadarrMovieRecord> {
       return fetchRadarrMovie(clientOptions, movieId);

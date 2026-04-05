@@ -20,6 +20,7 @@ import {
   type CandidateDecision,
   type ReasonCode,
 } from './decision-engine';
+import { planReleaseSelection, type PlannedReleaseSelection } from './release-selection';
 
 export interface SearchDispatchClients {
   sonarr: SonarrApiClient | null;
@@ -68,6 +69,16 @@ interface RuntimeThrottleState {
   dispatchedSince15m: number;
   dispatchedSince1h: number;
   dispatchedSince24h: number;
+}
+
+interface DispatchExecutionResult {
+  command: {
+    id: number | null;
+    name: string | null;
+    status: string | null;
+  };
+  dispatchKind: 'search_command' | 'release_grab';
+  releaseSelection: PlannedReleaseSelection | null;
 }
 
 const MINUTE_MS = 60_000;
@@ -202,12 +213,17 @@ const updateMediaItemAfterDispatch = (
   database: DatabaseContext,
   config: ResolvedConfig,
   item: MediaItemStateRecord,
-  dispatchedAtIso: string
+  dispatchedAtIso: string,
+  options?: {
+    overrideRetryIntervalMs?: number | null;
+  }
 ): void => {
   const policy =
     item.mediaType === 'sonarr_episode' ? config.policies.sonarr : config.policies.radarr;
   const nextRetryCount = item.retryCount + 1;
-  const retryIntervalMs = getRetryIntervalMs(policy, item.wantedState, item.retryCount);
+  const retryIntervalMs =
+    options?.overrideRetryIntervalMs ??
+    getRetryIntervalMs(policy, item.wantedState, item.retryCount);
 
   database.repositories.mediaItemState.upsert({
     ...item,
@@ -236,6 +252,68 @@ const dispatchCandidate = async (
   }
 
   return clients.radarr.searchMovie(item.arrId);
+};
+
+const grabSelectedRelease = async (
+  clients: SearchDispatchClients,
+  item: MediaItemStateRecord,
+  selection: PlannedReleaseSelection
+) => {
+  if (!selection.selectedRelease) {
+    throw new Error('No selected release was provided');
+  }
+
+  if (item.mediaType === 'sonarr_episode') {
+    if (!clients.sonarr) {
+      throw new Error('Sonarr is not configured');
+    }
+
+    return clients.sonarr.grabRelease(
+      selection.selectedRelease.guid,
+      selection.selectedRelease.indexerId
+    );
+  }
+
+  if (!clients.radarr) {
+    throw new Error('Radarr is not configured');
+  }
+
+  return clients.radarr.grabRelease(
+    selection.selectedRelease.guid,
+    selection.selectedRelease.indexerId
+  );
+};
+
+const dispatchWithOptionalReleaseSelection = async (input: {
+  database: DatabaseContext;
+  config: ResolvedConfig;
+  clients: SearchDispatchClients;
+  item: MediaItemStateRecord;
+  now: Date;
+}): Promise<DispatchExecutionResult> => {
+  const app = getDecisionAppFromItem(input.item);
+  const releaseSelection = await planReleaseSelection({
+    database: input.database,
+    config: input.config,
+    clients: input.clients,
+    item: input.item,
+    app,
+    now: input.now,
+  });
+
+  if (releaseSelection.selectedRelease) {
+    return {
+      command: await grabSelectedRelease(input.clients, input.item, releaseSelection),
+      dispatchKind: 'release_grab',
+      releaseSelection,
+    };
+  }
+
+  return {
+    command: await dispatchCandidate(input.clients, input.item),
+    dispatchKind: 'search_command',
+    releaseSelection,
+  };
 };
 
 const getDecisionAppFromItem = (
@@ -268,7 +346,15 @@ export const executeManualFetch = async (
   });
 
   try {
-    const command = await dispatchCandidate(input.clients, item);
+    const dispatchResult = await dispatchWithOptionalReleaseSelection({
+      database: input.database,
+      config: input.config,
+      clients: input.clients,
+      item,
+      now: attemptAt,
+    });
+    const command = dispatchResult.command;
+    const releaseSelection = dispatchResult.releaseSelection;
 
     logger.info({
       event: 'search_dispatched',
@@ -280,6 +366,9 @@ export const executeManualFetch = async (
       reasonCode: 'MANUAL_OVERRIDE_FETCH',
       arrCommandId: command.id,
       manualOverride: true,
+      dispatchKind: dispatchResult.dispatchKind,
+      releaseSelectionMode: releaseSelection?.mode ?? 'blind_search',
+      selectedReleaseTitle: releaseSelection?.selectedRelease?.title ?? null,
     });
     recordSearchDispatch({
       app,
@@ -298,18 +387,30 @@ export const executeManualFetch = async (
         arrCommandId: command.id,
         attemptedAt: attemptAtIso,
         completedAt: attemptAtIso,
-        outcome: 'accepted',
+        outcome:
+          dispatchResult.dispatchKind === 'release_grab'
+            ? `accepted:release:${releaseSelection?.mode ?? 'preferred_release'}`
+            : 'accepted',
       })
     );
     input.database.repositories.searchAttempts.insertMany(attempts);
-    updateMediaItemAfterDispatch(input.database, input.config, item, attemptAtIso);
+    updateMediaItemAfterDispatch(input.database, input.config, item, attemptAtIso, {
+      overrideRetryIntervalMs: releaseSelection?.upgradePriority
+        ? input.config.policies[app].releaseSelection?.upgradeRetryAfterFallbackMs ?? null
+        : null,
+    });
     updateSearchRateMetrics(getSearchRateSnapshot(input.database, input.config, attemptAt));
 
     input.activityTracker?.info({
       source: app,
       stage: 'manual_dispatch_complete',
       message: `Queued manual ${app} search for ${item.title}`,
-      detail: command.id ? `Command ${command.id}` : null,
+      detail:
+        dispatchResult.dispatchKind === 'release_grab'
+          ? releaseSelection?.selectedRelease?.title ?? null
+          : command.id
+            ? `Command ${command.id}`
+            : null,
       progressCurrent: 1,
       progressTotal: 1,
     });
@@ -326,6 +427,19 @@ export const executeManualFetch = async (
         app,
         manualOverride: true,
         arrCommandId: command.id,
+        dispatchKind: dispatchResult.dispatchKind,
+        releaseSelection: releaseSelection
+          ? {
+              mode: releaseSelection.mode,
+              reason: releaseSelection.reason,
+              selectedReleaseTitle: releaseSelection.selectedRelease?.title ?? null,
+              selectedReleaseQuality: releaseSelection.selectedRelease?.qualityName ?? null,
+              selectedReleaseResolution:
+                releaseSelection.selectedRelease?.qualityResolution ?? null,
+              selectedReleaseIndexer: releaseSelection.selectedRelease?.indexer ?? null,
+              upgradePriority: releaseSelection.upgradePriority,
+            }
+          : null,
       },
     };
   } catch (error) {
@@ -428,6 +542,26 @@ export const executeSearchDispatchRun = async (
   let errorCount = 0;
   let dryRunDispatchPreviewCount = 0;
   let throttleReason: ReasonCode | null = null;
+  const releaseSelectionSummary = {
+    directGrabCount: 0,
+    blindSearchCount: 0,
+    fallbackUpgradeCount: 0,
+    goodEnoughCount: 0,
+    preferredReleaseCount: 0,
+    selections: [] as Array<{
+      mediaKey: string;
+      title: string;
+      app: string;
+      mode: PlannedReleaseSelection['mode'];
+      reason: string;
+      selectedReleaseTitle: string | null;
+      selectedReleaseQuality: string | null;
+      selectedReleaseResolution: number | null;
+      selectedReleaseIndexer: string | null;
+      selectedReleaseGuid: string | null;
+      upgradePriority: boolean;
+    }>,
+  };
 
   input.activityTracker?.info({
     source: 'dispatch',
@@ -596,7 +730,15 @@ export const executeSearchDispatchRun = async (
         progressCurrent: dispatchCount + 1,
         progressTotal: dispatchableCount,
       });
-      const command = await dispatchCandidate(input.clients, item);
+      const dispatchResult = await dispatchWithOptionalReleaseSelection({
+        database: input.database,
+        config: input.config,
+        clients: input.clients,
+        item,
+        now: new Date(attemptAtIso),
+      });
+      const command = dispatchResult.command;
+      const releaseSelection = dispatchResult.releaseSelection;
       logger.info({
         event: 'search_dispatched',
         runId: input.runId,
@@ -606,6 +748,9 @@ export const executeSearchDispatchRun = async (
         wantedState: decision.wantedState,
         reasonCode: decision.reasonCode,
         arrCommandId: command.id,
+        dispatchKind: dispatchResult.dispatchKind,
+        releaseSelectionMode: releaseSelection?.mode ?? 'blind_search',
+        selectedReleaseTitle: releaseSelection?.selectedRelease?.title ?? null,
       });
       recordSearchDispatch({
         app: decision.app,
@@ -624,18 +769,62 @@ export const executeSearchDispatchRun = async (
           arrCommandId: command.id,
           attemptedAt: attemptAtIso,
           completedAt: attemptAtIso,
-          outcome: 'accepted',
+          outcome:
+            dispatchResult.dispatchKind === 'release_grab'
+              ? `accepted:release:${releaseSelection?.mode ?? 'preferred_release'}`
+              : 'accepted',
         })
       );
 
-      updateMediaItemAfterDispatch(input.database, input.config, item, attemptAtIso);
+      if (releaseSelection) {
+        releaseSelectionSummary.selections.push({
+          mediaKey: decision.mediaKey,
+          title: decision.title,
+          app: decision.app,
+          mode: releaseSelection.mode,
+          reason: releaseSelection.reason,
+          selectedReleaseTitle: releaseSelection.selectedRelease?.title ?? null,
+          selectedReleaseQuality: releaseSelection.selectedRelease?.qualityName ?? null,
+          selectedReleaseResolution:
+            releaseSelection.selectedRelease?.qualityResolution ?? null,
+          selectedReleaseIndexer: releaseSelection.selectedRelease?.indexer ?? null,
+          selectedReleaseGuid: releaseSelection.selectedRelease?.guidUrl ?? null,
+          upgradePriority: releaseSelection.upgradePriority,
+        });
+
+        if (releaseSelection.mode === 'preferred_release') {
+          releaseSelectionSummary.preferredReleaseCount += 1;
+        } else if (releaseSelection.mode === 'good_enough_release') {
+          releaseSelectionSummary.goodEnoughCount += 1;
+        } else if (releaseSelection.mode === 'fallback_then_upgrade') {
+          releaseSelectionSummary.fallbackUpgradeCount += 1;
+        }
+      }
+
+      if (dispatchResult.dispatchKind === 'release_grab') {
+        releaseSelectionSummary.directGrabCount += 1;
+      } else {
+        releaseSelectionSummary.blindSearchCount += 1;
+      }
+
+      updateMediaItemAfterDispatch(input.database, input.config, item, attemptAtIso, {
+        overrideRetryIntervalMs: releaseSelection?.upgradePriority
+          ? input.config.policies[decision.app].releaseSelection?.upgradeRetryAfterFallbackMs ??
+            null
+          : null,
+      });
       updateThrottleStateAfterDispatch(throttleState, attemptAtIso);
       dispatchCount += 1;
       input.activityTracker?.info({
         source: decision.app,
         stage: 'dispatch_complete',
         message: `Queued ${decision.app} search for ${decision.title}`,
-        detail: command.id ? `Command ${command.id}` : null,
+        detail:
+          dispatchResult.dispatchKind === 'release_grab'
+            ? releaseSelection?.selectedRelease?.title ?? null
+            : command.id
+              ? `Command ${command.id}`
+              : null,
         progressCurrent: dispatchCount,
         progressTotal: dispatchableCount,
       });
@@ -706,6 +895,7 @@ export const executeSearchDispatchRun = async (
       dryRunDispatchPreviewCount,
       throttleReason,
       attemptsPersisted: attempts.length,
+      releaseSelectionSummary,
     },
   };
 };

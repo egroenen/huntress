@@ -60,6 +60,26 @@ interface DispatchSummary {
   dryRunDispatchPreviewCount: number;
   throttleReason: string | null;
   attemptsPersisted: number;
+  releaseSelectionSummary?: {
+    directGrabCount: number;
+    blindSearchCount: number;
+    fallbackUpgradeCount: number;
+    goodEnoughCount: number;
+    preferredReleaseCount: number;
+    selections: Array<{
+      mediaKey: string;
+      title: string;
+      app: string;
+      mode: string;
+      reason: string;
+      selectedReleaseTitle: string | null;
+      selectedReleaseQuality: string | null;
+      selectedReleaseResolution: number | null;
+      selectedReleaseIndexer: string | null;
+      selectedReleaseGuid: string | null;
+      upgradePriority: boolean;
+    }>;
+  };
 }
 
 interface RunSummaryShape {
@@ -388,10 +408,67 @@ const renderManualFetchSection = (
           <strong>{summary.arrCommandId ?? 'n/a'}</strong>
         </div>
         <div>
+          <span className="console-meta__label">Dispatch kind</span>
+          <strong>
+            {typeof (summary as Record<string, unknown>).dispatchKind === 'string'
+              ? String((summary as Record<string, unknown>).dispatchKind).replaceAll('_', ' ')
+              : 'n/a'}
+          </strong>
+        </div>
+        <div>
           <span className="console-meta__label">Error</span>
           <strong>{summary.error?.message ?? 'none'}</strong>
         </div>
       </div>
+      {(summary as Record<string, unknown>).releaseSelection &&
+      typeof (summary as Record<string, unknown>).releaseSelection === 'object' ? (
+        <div className="latest-run__summary">
+          <div>
+            <span className="console-meta__label">Selection mode</span>
+            <strong>
+              {String(
+                ((summary as Record<string, unknown>).releaseSelection as Record<
+                  string,
+                  unknown
+                >).mode ?? 'n/a'
+              ).replaceAll('_', ' ')}
+            </strong>
+          </div>
+          <div>
+            <span className="console-meta__label">Selected release</span>
+            <strong>
+              {String(
+                ((summary as Record<string, unknown>).releaseSelection as Record<
+                  string,
+                  unknown
+                >).selectedReleaseTitle ?? 'none'
+              )}
+            </strong>
+          </div>
+          <div>
+            <span className="console-meta__label">Quality</span>
+            <strong>
+              {String(
+                ((summary as Record<string, unknown>).releaseSelection as Record<
+                  string,
+                  unknown
+                >).selectedReleaseQuality ?? 'n/a'
+              )}
+            </strong>
+          </div>
+          <div>
+            <span className="console-meta__label">Upgrade priority</span>
+            <strong>
+              {((summary as Record<string, unknown>).releaseSelection as Record<
+                string,
+                unknown
+              >).upgradePriority
+                ? 'Yes'
+                : 'No'}
+            </strong>
+          </div>
+        </div>
+      ) : null}
     </SectionCard>
   );
 };
@@ -504,7 +581,57 @@ const renderDispatchSection = (summary: RunSummaryShape) => {
           value={summary.dispatchSummary.throttleReason ?? 'none'}
           tone={summary.dispatchSummary.throttleReason ? 'warn' : 'default'}
         />
+        <StatCard
+          label="Direct release grabs"
+          value={summary.dispatchSummary.releaseSelectionSummary?.directGrabCount ?? 0}
+          tone={
+            (summary.dispatchSummary.releaseSelectionSummary?.directGrabCount ?? 0) > 0
+              ? 'success'
+              : 'default'
+          }
+        />
+        <StatCard
+          label="Fallback upgrade grabs"
+          value={
+            summary.dispatchSummary.releaseSelectionSummary?.fallbackUpgradeCount ?? 0
+          }
+          tone={
+            (summary.dispatchSummary.releaseSelectionSummary?.fallbackUpgradeCount ?? 0) >
+            0
+              ? 'warn'
+              : 'default'
+          }
+        />
       </StatsGrid>
+      {summary.dispatchSummary.releaseSelectionSummary?.selections?.length ? (
+        <DataTable
+          columns={[
+            { key: 'app', label: 'App' },
+            { key: 'title', label: 'Item' },
+            { key: 'mode', label: 'Selection mode' },
+            { key: 'release', label: 'Selected release' },
+            { key: 'quality', label: 'Quality' },
+            { key: 'reason', label: 'Reason' },
+          ]}
+          rows={summary.dispatchSummary.releaseSelectionSummary.selections
+            .slice(0, 10)
+            .map((selection) => ({
+              app: formatServiceName(selection.app),
+              title: selection.title,
+              mode: selection.mode.replaceAll('_', ' '),
+              release: selection.selectedReleaseTitle ?? 'Blind Arr search',
+              quality:
+                selection.selectedReleaseQuality && selection.selectedReleaseResolution
+                  ? `${selection.selectedReleaseQuality} · ${selection.selectedReleaseResolution}p`
+                  : selection.selectedReleaseQuality ??
+                    (selection.selectedReleaseResolution
+                      ? `${selection.selectedReleaseResolution}p`
+                      : 'n/a'),
+              reason: selection.reason,
+            }))}
+          emptyMessage="No release-selection actions were recorded."
+        />
+      ) : null}
     </SectionCard>
   );
 };

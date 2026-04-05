@@ -37,6 +37,31 @@ export interface ArrCommandResponse {
   status: string | null;
 }
 
+export interface ArrReleaseRecord {
+  guid: string;
+  indexerId: number;
+  indexer: string | null;
+  title: string;
+  downloadAllowed: boolean;
+  approved: boolean;
+  rejected: boolean;
+  rejections: string[];
+  protocol: string | null;
+  qualityName: string | null;
+  qualityResolution: number | null;
+  qualityWeight: number | null;
+  customFormatScore: number;
+  size: number | null;
+  ageHours: number | null;
+  seeders: number | null;
+  leechers: number | null;
+  languages: string[];
+  infoUrl: string | null;
+  guidUrl: string;
+  infoHash: string | null;
+  payload: unknown;
+}
+
 export interface ArrQueueRecord {
   id: number;
   title: string;

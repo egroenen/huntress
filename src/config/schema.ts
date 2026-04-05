@@ -7,6 +7,22 @@ const durationStringSchema = z
   .regex(durationPattern, 'Expected a duration like 30m, 24h, or 7d');
 
 const loggingLevelSchema = z.enum(['trace', 'debug', 'info', 'warn', 'error']);
+const releaseSelectionStrategySchema = z.enum([
+  'best_only',
+  'good_enough_now',
+  'fallback_then_upgrade',
+]);
+
+const rawReleaseSelectionSchema = z.object({
+  enabled: z.boolean().default(false),
+  strategy: releaseSelectionStrategySchema.default('best_only'),
+  preferred_min_resolution: z.number().int().nonnegative().default(1080),
+  fallback_min_resolution: z.number().int().nonnegative().default(720),
+  minimum_seeders: z.number().int().nonnegative().default(1),
+  minimum_custom_format_score: z.number().int().default(0),
+  require_english: z.boolean().default(false),
+  upgrade_retry_after_fallback: durationStringSchema.default('30m'),
+});
 
 export const rawConfigSchema = z.object({
   server: z.object({
@@ -61,6 +77,7 @@ export const rawConfigSchema = z.object({
       recent_release_window_days: z.number().int().nonnegative(),
       exclude_unreleased: z.boolean(),
       exclude_unmonitored: z.boolean(),
+      release_selection: rawReleaseSelectionSchema.optional(),
     }),
     radarr: z.object({
       max_searches_per_cycle: z.number().int().positive(),
@@ -69,6 +86,7 @@ export const rawConfigSchema = z.object({
       recent_release_window_days: z.number().int().nonnegative(),
       exclude_unreleased: z.boolean(),
       exclude_unmonitored: z.boolean(),
+      release_selection: rawReleaseSelectionSchema.optional(),
     }),
   }),
   transmission_guard: z.object({
@@ -103,6 +121,18 @@ export const resolvedSearchPolicySchema = z.object({
   recentReleaseWindowDays: z.number().int().nonnegative(),
   excludeUnreleased: z.boolean(),
   excludeUnmonitored: z.boolean(),
+  releaseSelection: z
+    .object({
+      enabled: z.boolean(),
+      strategy: releaseSelectionStrategySchema,
+      preferredMinResolution: z.number().int().nonnegative(),
+      fallbackMinResolution: z.number().int().nonnegative(),
+      minimumSeeders: z.number().int().nonnegative(),
+      minimumCustomFormatScore: z.number().int(),
+      requireEnglish: z.boolean(),
+      upgradeRetryAfterFallbackMs: z.number().int().positive(),
+    })
+    .optional(),
 });
 
 export const resolvedConfigSchema = z

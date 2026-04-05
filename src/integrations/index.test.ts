@@ -155,6 +155,50 @@ test('Sonarr client probes system status and normalizes wanted/queue responses',
       return;
     }
 
+    if (url.pathname === '/api/v3/release' && request.method === 'GET') {
+      assert.equal(url.searchParams.get('episodeId'), '101');
+      response.end(
+        JSON.stringify([
+          {
+            guid: 'sonarr-release-guid',
+            indexerId: 6,
+            indexer: 'Indexer A',
+            title: 'Example.Series.S01E01.1080p.WEB.H264-GROUP',
+            downloadAllowed: true,
+            approved: false,
+            rejected: true,
+            rejections: ['Quality profile rejected'],
+            quality: {
+              quality: {
+                name: 'WEB-1080p',
+                resolution: 1080,
+              },
+            },
+            customFormatScore: 10,
+            seeders: 20,
+            languages: [{ name: 'English' }],
+            infoHash: 'ABC123',
+          },
+        ])
+      );
+      return;
+    }
+
+    if (url.pathname === '/api/v3/release' && request.method === 'POST') {
+      let body = '';
+      request.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+      request.on('end', () => {
+        assert.deepEqual(JSON.parse(body), {
+          guid: 'sonarr-release-guid',
+          indexerId: 6,
+        });
+        response.end(JSON.stringify({ id: 77, name: 'ReleaseGrab', status: 'queued' }));
+      });
+      return;
+    }
+
     if (url.pathname === '/api/v3/series/8') {
       response.end(
         JSON.stringify({
@@ -187,12 +231,14 @@ test('Sonarr client probes system status and normalizes wanted/queue responses',
       wantedPageSize: 50,
     });
 
-    const [status, missing, cutoff, queue, series] = await Promise.all([
+    const [status, missing, cutoff, queue, series, releases, grab] = await Promise.all([
       client.probeSystemStatus(),
       client.getWantedMissing(),
       client.getWantedCutoff(),
       client.getQueueDetails(),
       client.getSeries(8),
+      client.listEpisodeReleases(101),
+      client.grabRelease('sonarr-release-guid', 6),
     ]);
     await client.removeQueueItem(1, {
       removeFromClient: true,
@@ -207,6 +253,9 @@ test('Sonarr client probes system status and normalizes wanted/queue responses',
     assert.equal(cutoff[0]?.qualityCutoffNotMet, true);
     assert.equal(queue[0]?.downloadId, 'dl-1');
     assert.equal(series.titleSlug, 'example-series');
+    assert.equal(releases[0]?.qualityResolution, 1080);
+    assert.equal(releases[0]?.infoHash, 'ABC123');
+    assert.equal(grab.id, 77);
     assert.deepEqual(observedDeleteRequests, [
       {
         pathname: '/api/v3/queue/1',
@@ -312,6 +361,49 @@ test('Radarr client normalizes wanted movie responses', async () => {
       return;
     }
 
+    if (url.pathname === '/api/v3/release' && request.method === 'GET') {
+      assert.equal(url.searchParams.get('movieId'), '78');
+      response.end(
+        JSON.stringify([
+          {
+            guid: 'radarr-release-guid',
+            indexerId: 4,
+            indexer: 'Indexer B',
+            title: 'Movie.One.2026.1080p.BluRay.x264-GROUP',
+            downloadAllowed: true,
+            approved: false,
+            rejected: true,
+            rejections: ['Quality profile rejected'],
+            quality: {
+              quality: {
+                name: 'Bluray-1080p',
+                resolution: 1080,
+              },
+            },
+            customFormatScore: 20,
+            seeders: 15,
+            languages: [{ name: 'English' }],
+          },
+        ])
+      );
+      return;
+    }
+
+    if (url.pathname === '/api/v3/release' && request.method === 'POST') {
+      let body = '';
+      request.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+      request.on('end', () => {
+        assert.deepEqual(JSON.parse(body), {
+          guid: 'radarr-release-guid',
+          indexerId: 4,
+        });
+        response.end(JSON.stringify({ id: 88, name: 'ReleaseGrab', status: 'queued' }));
+      });
+      return;
+    }
+
     if (url.pathname === '/api/v3/queue/details') {
       response.end(JSON.stringify([]));
       return;
@@ -338,10 +430,12 @@ test('Radarr client normalizes wanted movie responses', async () => {
       wantedPageSize: 50,
     });
 
-    const [missing, cutoff, movie] = await Promise.all([
+    const [missing, cutoff, movie, releases, grab] = await Promise.all([
       client.getWantedMissing(),
       client.getWantedCutoff(),
       client.getMovie(77),
+      client.listMovieReleases(78),
+      client.grabRelease('radarr-release-guid', 4),
     ]);
     await client.removeQueueItem(7, {
       removeFromClient: true,
@@ -355,6 +449,8 @@ test('Radarr client normalizes wanted movie responses', async () => {
     assert.equal(missing[0]?.releaseDate, '2024-02-03T00:00:00Z');
     assert.equal(cutoff[0]?.qualityCutoffNotMet, false);
     assert.equal(movie.titleSlug, '1142921');
+    assert.equal(releases[0]?.qualityName, 'Bluray-1080p');
+    assert.equal(grab.id, 88);
     assert.deepEqual(observedDeleteRequests, [
       {
         pathname: '/api/v3/queue/7',

@@ -74,6 +74,20 @@ const resolveSearchPolicy = (policy: RawConfig['policies']['sonarr']) => {
     recentReleaseWindowDays: policy.recent_release_window_days,
     excludeUnreleased: policy.exclude_unreleased,
     excludeUnmonitored: policy.exclude_unmonitored,
+    releaseSelection: policy.release_selection
+      ? {
+          enabled: policy.release_selection.enabled,
+          strategy: policy.release_selection.strategy,
+          preferredMinResolution: policy.release_selection.preferred_min_resolution,
+          fallbackMinResolution: policy.release_selection.fallback_min_resolution,
+          minimumSeeders: policy.release_selection.minimum_seeders,
+          minimumCustomFormatScore: policy.release_selection.minimum_custom_format_score,
+          requireEnglish: policy.release_selection.require_english,
+          upgradeRetryAfterFallbackMs: durationToMs(
+            policy.release_selection.upgrade_retry_after_fallback
+          ),
+        }
+      : undefined,
   };
 };
 

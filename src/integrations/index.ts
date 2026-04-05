@@ -5,6 +5,7 @@ export { createSonarrClient, type SonarrApiClient } from './sonarr';
 export { createTransmissionClient, type TransmissionApiClient } from './transmission';
 export type {
   ArrCommandResponse,
+  ArrReleaseRecord,
   ArrQueueRecord,
   ArrSystemStatus,
   ArrWantedPageResult,
