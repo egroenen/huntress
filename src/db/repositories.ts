@@ -38,6 +38,7 @@ export interface MediaItemStateRecord {
   mediaType: string;
   arrId: number;
   parentArrId: number | null;
+  externalPath: string | null;
   title: string;
   monitored: boolean;
   releaseDate: string | null;
@@ -178,6 +179,7 @@ interface MediaItemStateRow {
   media_type: string;
   arr_id: number;
   parent_arr_id: number | null;
+  external_path: string | null;
   title: string;
   monitored: number;
   release_date: string | null;
@@ -214,6 +216,7 @@ const toMediaItemStateRecord = (row: MediaItemStateRow): MediaItemStateRecord =>
     mediaType: row.media_type,
     arrId: row.arr_id,
     parentArrId: row.parent_arr_id,
+    externalPath: row.external_path,
     title: row.title,
     monitored: toBoolean(row.monitored),
     releaseDate: row.release_date,
@@ -568,12 +571,12 @@ export const createRepositories = (database: SqliteDatabase) => {
         .prepare(
           `
             INSERT INTO media_item_state (
-              media_key, media_type, arr_id, parent_arr_id, title, monitored, release_date, wanted_state,
+              media_key, media_type, arr_id, parent_arr_id, external_path, title, monitored, release_date, wanted_state,
               in_queue, retry_count, last_search_at, last_grab_at, next_eligible_at, suppressed_until,
               suppression_reason, last_seen_at, state_hash
             )
             VALUES (
-              @media_key, @media_type, @arr_id, @parent_arr_id, @title, @monitored, @release_date, @wanted_state,
+              @media_key, @media_type, @arr_id, @parent_arr_id, @external_path, @title, @monitored, @release_date, @wanted_state,
               @in_queue, @retry_count, @last_search_at, @last_grab_at, @next_eligible_at, @suppressed_until,
               @suppression_reason, @last_seen_at, @state_hash
             )
@@ -581,6 +584,7 @@ export const createRepositories = (database: SqliteDatabase) => {
               media_type = excluded.media_type,
               arr_id = excluded.arr_id,
               parent_arr_id = excluded.parent_arr_id,
+              external_path = excluded.external_path,
               title = excluded.title,
               monitored = excluded.monitored,
               release_date = excluded.release_date,
@@ -601,6 +605,7 @@ export const createRepositories = (database: SqliteDatabase) => {
           media_type: record.mediaType,
           arr_id: record.arrId,
           parent_arr_id: record.parentArrId,
+          external_path: record.externalPath,
           title: record.title,
           monitored: fromBoolean(record.monitored),
           release_date: record.releaseDate,

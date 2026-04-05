@@ -63,7 +63,7 @@ test('initializeDatabase creates the schema on an empty database', async () => {
       ]
     );
 
-    assert.equal(database.appliedMigrations.length, 3);
+    assert.equal(database.appliedMigrations.length, 4);
   } finally {
     database.close();
   }
@@ -74,7 +74,7 @@ test('initializeDatabase does not reapply migrations on a second startup', async
   const firstDatabase = await initializeDatabase(databasePath);
 
   try {
-    assert.equal(firstDatabase.appliedMigrations.length, 3);
+    assert.equal(firstDatabase.appliedMigrations.length, 4);
   } finally {
     firstDatabase.close();
   }
@@ -90,7 +90,7 @@ test('initializeDatabase does not reapply migrations on a second startup', async
       .get();
 
     assert.equal(secondDatabase.appliedMigrations.length, 0);
-    assert.equal(row?.total, 3);
+    assert.equal(row?.total, 4);
   } finally {
     secondDatabase.close();
   }
@@ -121,6 +121,7 @@ test('repositories can write and read core records', async () => {
       mediaType: 'radarr_movie',
       arrId: 1,
       parentArrId: null,
+      externalPath: 'movie/example-movie',
       title: 'Example Movie',
       monitored: true,
       releaseDate: '2026-04-01',
@@ -174,6 +175,7 @@ test('repositories can write and read core records', async () => {
     assert.equal(database.repositories.appUsers.count(), 1);
     assert.equal(user?.username, 'admin');
     assert.equal(mediaItem?.title, 'Example Movie');
+    assert.equal(mediaItem?.externalPath, 'movie/example-movie');
     assert.equal(database.repositories.mediaItemState.count(), 1);
     assert.equal(coverage[0]?.pageNumber, 4);
     assert.equal(activity[0]?.message, 'Starting sync');
@@ -207,6 +209,7 @@ test('database state persists cleanly across restart boundaries', async () => {
       mediaType: 'sonarr_episode',
       arrId: 123,
       parentArrId: 12,
+      externalPath: 'series/restart-proof-show',
       title: 'Restart Proof Episode',
       monitored: true,
       releaseDate: '2026-04-01T00:00:00.000Z',

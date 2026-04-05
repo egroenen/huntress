@@ -23,6 +23,7 @@ const createItem = (
     mediaType: 'sonarr_episode',
     arrId: 1,
     parentArrId: 10,
+    externalPath: 'series/example-show',
     title: 'Example Item',
     monitored: true,
     releaseDate: '2026-03-20T00:00:00.000Z',

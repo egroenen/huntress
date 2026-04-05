@@ -23,6 +23,7 @@ interface PersistableSnapshot {
   mediaType: MediaType;
   arrId: number;
   parentArrId: number | null;
+  externalPath: string | null;
   title: string;
   monitored: boolean;
   releaseDate: string | null;
@@ -112,6 +113,7 @@ const buildSnapshot = (
     mediaType: app === 'sonarr' ? SONARR_MEDIA_TYPE : RADARR_MEDIA_TYPE,
     arrId: record.itemId,
     parentArrId: record.parentId,
+    externalPath: record.externalPath,
     title: record.title,
     monitored: record.monitored,
     releaseDate: record.releaseDate,
@@ -195,6 +197,7 @@ const buildPersistedRecord = (
     mediaType: snapshot.mediaType,
     arrId: snapshot.arrId,
     parentArrId: snapshot.parentArrId,
+    externalPath: snapshot.externalPath ?? currentRecord?.externalPath ?? null,
     title: snapshot.title,
     monitored: snapshot.monitored,
     releaseDate: snapshot.releaseDate,
@@ -209,6 +212,7 @@ const buildPersistedRecord = (
     lastSeenAt: syncedAt,
     stateHash: getSnapshotStateHash({
       ...snapshot,
+      externalPath: snapshot.externalPath ?? currentRecord?.externalPath ?? null,
       wantedState: snapshot.wantedState,
       inQueue,
     }),
@@ -230,6 +234,7 @@ const buildIgnoredRecord = (
       mediaType: currentRecord.mediaType as MediaType,
       arrId: currentRecord.arrId,
       parentArrId: currentRecord.parentArrId,
+      externalPath: currentRecord.externalPath,
       title: currentRecord.title,
       monitored: currentRecord.monitored,
       releaseDate: currentRecord.releaseDate,
@@ -237,6 +242,133 @@ const buildIgnoredRecord = (
       inQueue,
     }),
   };
+};
+
+const buildCurrentRecordMap = (
+  database: DatabaseContext,
+  mediaKeys: Iterable<string>
+): Map<string, MediaItemStateRecord> => {
+  const records = new Map<string, MediaItemStateRecord>();
+
+  for (const mediaKey of mediaKeys) {
+    const record = database.repositories.mediaItemState.getByMediaKey(mediaKey);
+
+    if (record) {
+      records.set(mediaKey, record);
+    }
+  }
+
+  return records;
+};
+
+const ensureSonarrSeriesTitle = (title: string, seriesTitle: string): string => {
+  return title.startsWith(`${seriesTitle} - `) ? title : `${seriesTitle} - ${title}`;
+};
+
+const enrichSonarrWantedRecords = async (input: {
+  records: ArrWantedRecord[];
+  currentRecords: Map<string, MediaItemStateRecord>;
+  resolveSeries: (seriesId: number) => Promise<{ title: string; titleSlug: string | null }>;
+  activityTracker?: ActivityTracker;
+}): Promise<ArrWantedRecord[]> => {
+  const missingSeriesIds = Array.from(
+    new Set(
+      input.records.flatMap((record) => {
+        if (record.parentId === null) {
+          return [];
+        }
+
+        const currentRecord = input.currentRecords.get(buildMediaKey('sonarr', record.itemId));
+        const hasKnownPath =
+          record.externalPath !== null || currentRecord?.externalPath != null;
+
+        return hasKnownPath ? [] : [record.parentId];
+      })
+    )
+  );
+
+  const seriesDetails = new Map<number, { title: string; titleSlug: string | null }>();
+
+  await Promise.all(
+    missingSeriesIds.map(async (seriesId) => {
+      try {
+        const series = await input.resolveSeries(seriesId);
+        seriesDetails.set(seriesId, series);
+      } catch (error) {
+        input.activityTracker?.warn({
+          source: 'sonarr',
+          stage: 'link_metadata',
+          message: `Failed to resolve Sonarr series path for ${seriesId}`,
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
+    })
+  );
+
+  return input.records.map((record) => {
+    const currentRecord = input.currentRecords.get(buildMediaKey('sonarr', record.itemId));
+    const series = record.parentId !== null ? seriesDetails.get(record.parentId) : undefined;
+    const externalPath =
+      record.externalPath ??
+      currentRecord?.externalPath ??
+      (series?.titleSlug ? `series/${series.titleSlug}` : null);
+
+    return {
+      ...record,
+      externalPath,
+      title: series ? ensureSonarrSeriesTitle(record.title, series.title) : record.title,
+    };
+  });
+};
+
+const enrichRadarrWantedRecords = async (input: {
+  records: ArrWantedRecord[];
+  currentRecords: Map<string, MediaItemStateRecord>;
+  resolveMovie: (movieId: number) => Promise<{ titleSlug: string | null }>;
+  activityTracker?: ActivityTracker;
+}): Promise<ArrWantedRecord[]> => {
+  const missingMovieIds = Array.from(
+    new Set(
+      input.records.flatMap((record) => {
+        const currentRecord = input.currentRecords.get(buildMediaKey('radarr', record.itemId));
+        const hasKnownPath =
+          record.externalPath !== null || currentRecord?.externalPath != null;
+
+        return hasKnownPath ? [] : [record.itemId];
+      })
+    )
+  );
+
+  const moviePaths = new Map<number, string | null>();
+
+  await Promise.all(
+    missingMovieIds.map(async (movieId) => {
+      try {
+        const movie = await input.resolveMovie(movieId);
+        moviePaths.set(movieId, movie.titleSlug ? `movie/${movie.titleSlug}` : null);
+      } catch (error) {
+        input.activityTracker?.warn({
+          source: 'radarr',
+          stage: 'link_metadata',
+          message: `Failed to resolve Radarr movie path for ${movieId}`,
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
+    })
+  );
+
+  return input.records.map((record) => {
+    const currentRecord = input.currentRecords.get(buildMediaKey('radarr', record.itemId));
+
+    return {
+      ...record,
+      externalPath:
+        record.externalPath ??
+        currentRecord?.externalPath ??
+        moviePaths.get(record.itemId) ??
+        null,
+    };
+  });
 };
 
 const DEFAULT_SYNC_COVERAGE_CONFIG: SyncCoverageConfig = {
@@ -464,6 +596,10 @@ const syncAppState = async (input: {
   getWantedMissingPage?: (page: number) => Promise<ArrWantedPageResult>;
   getWantedCutoffPage?: (page: number) => Promise<ArrWantedPageResult>;
   getQueueDetails?: () => Promise<ArrQueueRecord[]>;
+  resolveSonarrSeries?: (
+    seriesId: number
+  ) => Promise<{ title: string; titleSlug: string | null }>;
+  resolveRadarrMovie?: (movieId: number) => Promise<{ titleSlug: string | null }>;
   syncedAt: string;
   syncConfig: SyncCoverageConfig;
   activityTracker?: ActivityTracker;
@@ -521,8 +657,42 @@ const syncAppState = async (input: {
     }),
     input.getQueueDetails(),
   ]);
-  const missing = missingResult.records;
-  const cutoff = cutoffResult.records;
+  const currentRecords = buildCurrentRecordMap(input.database, [
+    ...missingResult.records.map((record) => buildMediaKey(input.app, record.itemId)),
+    ...cutoffResult.records.map((record) => buildMediaKey(input.app, record.itemId)),
+  ]);
+  const missing =
+    input.app === 'sonarr' && input.resolveSonarrSeries
+      ? await enrichSonarrWantedRecords({
+          records: missingResult.records,
+          currentRecords,
+          resolveSeries: input.resolveSonarrSeries,
+          ...(input.activityTracker ? { activityTracker: input.activityTracker } : {}),
+        })
+      : input.app === 'radarr' && input.resolveRadarrMovie
+        ? await enrichRadarrWantedRecords({
+            records: missingResult.records,
+            currentRecords,
+            resolveMovie: input.resolveRadarrMovie,
+            ...(input.activityTracker ? { activityTracker: input.activityTracker } : {}),
+          })
+        : missingResult.records;
+  const cutoff =
+    input.app === 'sonarr' && input.resolveSonarrSeries
+      ? await enrichSonarrWantedRecords({
+          records: cutoffResult.records,
+          currentRecords,
+          resolveSeries: input.resolveSonarrSeries,
+          ...(input.activityTracker ? { activityTracker: input.activityTracker } : {}),
+        })
+      : input.app === 'radarr' && input.resolveRadarrMovie
+        ? await enrichRadarrWantedRecords({
+            records: cutoffResult.records,
+            currentRecords,
+            resolveMovie: input.resolveRadarrMovie,
+            ...(input.activityTracker ? { activityTracker: input.activityTracker } : {}),
+          })
+        : cutoffResult.records;
 
   const wantedSnapshots = mergeWantedSnapshots(input.app, missing, cutoff);
   const queuedMediaKeys = new Set(
@@ -631,6 +801,7 @@ export const syncArrState = async (input: {
             getWantedCutoffPage: (page: number) =>
               sonarrClient.getWantedCutoffPage(page),
             getQueueDetails: () => sonarrClient.getQueueDetails(),
+            resolveSonarrSeries: (seriesId: number) => sonarrClient.getSeries(seriesId),
           }
         : {}),
       syncedAt,
@@ -648,6 +819,7 @@ export const syncArrState = async (input: {
             getWantedCutoffPage: (page: number) =>
               radarrClient.getWantedCutoffPage(page),
             getQueueDetails: () => radarrClient.getQueueDetails(),
+            resolveRadarrMovie: (movieId: number) => radarrClient.getMovie(movieId),
           }
         : {}),
       syncedAt,

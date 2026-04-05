@@ -5,12 +5,14 @@ import type {
   ArrSystemStatus,
   ArrWantedPageResult,
   ArrWantedRecord,
+  RadarrMovieRecord,
 } from './types';
 import {
   deleteArrQueueItem,
   dispatchArrCommand,
   fetchArrQueue,
   fetchArrSystemStatus,
+  fetchRadarrMovie,
   fetchRadarrWantedPage,
   fetchRadarrWanted,
   type ArrClientOptions,
@@ -42,6 +44,9 @@ export const createRadarrClient = (options: RadarrClient) => {
     },
     getQueueDetails(): Promise<ArrQueueRecord[]> {
       return fetchArrQueue(clientOptions);
+    },
+    getMovie(movieId: number): Promise<RadarrMovieRecord> {
+      return fetchRadarrMovie(clientOptions, movieId);
     },
     removeQueueItem(
       queueId: number,

@@ -14,6 +14,7 @@ export interface ArrWantedRecord {
   itemType: 'episode' | 'movie';
   itemId: number;
   parentId: number | null;
+  externalPath: string | null;
   title: string;
   monitored: boolean;
   hasFile: boolean | null;
@@ -52,6 +53,18 @@ export interface ArrQueueDeleteOptions {
   removeFromClient: boolean;
   blocklist: boolean;
   skipRedownload: boolean;
+}
+
+export interface SonarrSeriesRecord {
+  id: number;
+  title: string;
+  titleSlug: string | null;
+}
+
+export interface RadarrMovieRecord {
+  id: number;
+  title: string;
+  titleSlug: string | null;
 }
 
 export interface ProwlarrHealthRecord {

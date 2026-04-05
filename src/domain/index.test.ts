@@ -102,6 +102,17 @@ test('syncArrState persists wanted state and queue status for Sonarr and Radarr'
       return;
     }
 
+    if (url.pathname === '/sonarr/api/v3/series/55') {
+      response.end(
+        JSON.stringify({
+          id: 55,
+          title: 'Example Show',
+          titleSlug: 'example-show',
+        })
+      );
+      return;
+    }
+
     if (url.pathname === '/radarr/api/v3/wanted/missing') {
       response.end(
         JSON.stringify([
@@ -140,6 +151,28 @@ test('syncArrState persists wanted state and queue status for Sonarr and Radarr'
             movieId: 202,
           },
         ])
+      );
+      return;
+    }
+
+    if (url.pathname === '/radarr/api/v3/movie/201') {
+      response.end(
+        JSON.stringify({
+          id: 201,
+          title: 'Example Movie',
+          titleSlug: '1142921',
+        })
+      );
+      return;
+    }
+
+    if (url.pathname === '/radarr/api/v3/movie/202') {
+      response.end(
+        JSON.stringify({
+          id: 202,
+          title: 'Upgrade Movie',
+          titleSlug: 'upgrade-movie-2026',
+        })
       );
       return;
     }
@@ -183,13 +216,17 @@ test('syncArrState persists wanted state and queue status for Sonarr and Radarr'
 
     assert.equal(sonarrMissing?.wantedState, 'missing');
     assert.equal(sonarrMissing?.inQueue, true);
+    assert.equal(sonarrMissing?.externalPath, 'series/example-show');
     assert.equal(sonarrCutoff?.wantedState, 'cutoff_unmet');
     assert.equal(sonarrCutoff?.inQueue, false);
+    assert.equal(sonarrCutoff?.externalPath, 'series/example-show');
 
     assert.equal(radarrMissing?.wantedState, 'missing');
     assert.equal(radarrMissing?.inQueue, false);
+    assert.equal(radarrMissing?.externalPath, 'movie/1142921');
     assert.equal(radarrCutoff?.wantedState, 'cutoff_unmet');
     assert.equal(radarrCutoff?.inQueue, true);
+    assert.equal(radarrCutoff?.externalPath, 'movie/upgrade-movie-2026');
   } finally {
     database.close();
     await server.close();
@@ -244,6 +281,17 @@ test('syncArrState preserves retry history and marks disappeared items as ignore
       return;
     }
 
+    if (url.pathname === '/sonarr/api/v3/series/55') {
+      response.end(
+        JSON.stringify({
+          id: 55,
+          title: 'Example Show',
+          titleSlug: 'example-show',
+        })
+      );
+      return;
+    }
+
     if (url.pathname === '/radarr/api/v3/wanted/missing') {
       response.end(JSON.stringify([]));
       return;
@@ -271,6 +319,17 @@ test('syncArrState preserves retry history and marks disappeared items as ignore
 
     if (url.pathname === '/radarr/api/v3/queue/details') {
       response.end(JSON.stringify([]));
+      return;
+    }
+
+    if (url.pathname === '/radarr/api/v3/movie/202') {
+      response.end(
+        JSON.stringify({
+          id: 202,
+          title: 'Upgrade Movie',
+          titleSlug: 'upgrade-movie-2026',
+        })
+      );
       return;
     }
 
@@ -302,6 +361,7 @@ test('syncArrState preserves retry history and marks disappeared items as ignore
       mediaType: 'sonarr_episode',
       arrId: 101,
       parentArrId: 55,
+      externalPath: 'series/example-show',
       title: 'Example Show - Old Title',
       monitored: true,
       releaseDate: '2026-03-30T00:00:00Z',
@@ -341,6 +401,7 @@ test('syncArrState preserves retry history and marks disappeared items as ignore
 
     assert.equal(summary.radarr.ignoredCount, 1);
     assert.equal(sonarrRecord?.title, 'Example Show - Renamed Episode');
+    assert.equal(sonarrRecord?.externalPath, 'series/example-show');
     assert.equal(sonarrRecord?.retryCount, 3);
     assert.equal(sonarrRecord?.lastSearchAt, '2026-04-01T00:00:00.000Z');
     assert.equal(disappearedRadarrRecord?.wantedState, 'ignored');

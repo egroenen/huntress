@@ -193,4 +193,12 @@ export const migrations: MigrationDefinition[] = [
       ON wanted_page_coverage(app, collection_kind, last_fetched_at ASC, page_number ASC);
     `,
   },
+  {
+    version: '0004_media_item_external_path',
+    description: 'Store app-facing Sonarr and Radarr item paths',
+    sql: `
+      ALTER TABLE media_item_state
+      ADD COLUMN external_path TEXT;
+    `,
+  },
 ];

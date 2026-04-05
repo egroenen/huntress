@@ -155,6 +155,17 @@ test('Sonarr client probes system status and normalizes wanted/queue responses',
       return;
     }
 
+    if (url.pathname === '/api/v3/series/8') {
+      response.end(
+        JSON.stringify({
+          id: 8,
+          title: 'Example Series',
+          titleSlug: 'example-series',
+        })
+      );
+      return;
+    }
+
     if (url.pathname === '/api/v3/queue/1' && request.method === 'DELETE') {
       observedDeleteRequests.push({
         pathname: url.pathname,
@@ -176,11 +187,12 @@ test('Sonarr client probes system status and normalizes wanted/queue responses',
       wantedPageSize: 50,
     });
 
-    const [status, missing, cutoff, queue] = await Promise.all([
+    const [status, missing, cutoff, queue, series] = await Promise.all([
       client.probeSystemStatus(),
       client.getWantedMissing(),
       client.getWantedCutoff(),
       client.getQueueDetails(),
+      client.getSeries(8),
     ]);
     await client.removeQueueItem(1, {
       removeFromClient: true,
@@ -190,9 +202,11 @@ test('Sonarr client probes system status and normalizes wanted/queue responses',
 
     assert.equal(status.appName, 'Sonarr');
     assert.equal(missing[0]?.title, 'Example Series - Pilot');
+    assert.equal(missing[0]?.externalPath, null);
     assert.equal(cutoff.length, 2);
     assert.equal(cutoff[0]?.qualityCutoffNotMet, true);
     assert.equal(queue[0]?.downloadId, 'dl-1');
+    assert.equal(series.titleSlug, 'example-series');
     assert.deepEqual(observedDeleteRequests, [
       {
         pathname: '/api/v3/queue/1',
@@ -237,6 +251,7 @@ test('Radarr client normalizes wanted movie responses', async () => {
             {
               id: 79,
               title: 'Movie Three',
+              titleSlug: 'movie-three',
               monitored: true,
               hasFile: false,
               digitalRelease: '2024-02-05T00:00:00Z',
@@ -258,6 +273,7 @@ test('Radarr client normalizes wanted movie responses', async () => {
             {
               id: 77,
               title: 'Movie One',
+              titleSlug: '1142921',
               monitored: true,
               hasFile: false,
               digitalRelease: '2024-02-03T00:00:00Z',
@@ -275,11 +291,23 @@ test('Radarr client normalizes wanted movie responses', async () => {
           {
             id: 78,
             title: 'Movie Two',
+            titleSlug: 'movie-two',
             monitored: true,
             qualityCutoffNotMet: false,
             physicalRelease: '2024-02-04T00:00:00Z',
           },
         ])
+      );
+      return;
+    }
+
+    if (url.pathname === '/api/v3/movie/77') {
+      response.end(
+        JSON.stringify({
+          id: 77,
+          title: 'Movie One',
+          titleSlug: '1142921',
+        })
       );
       return;
     }
@@ -310,8 +338,11 @@ test('Radarr client normalizes wanted movie responses', async () => {
       wantedPageSize: 50,
     });
 
-    const missing = await client.getWantedMissing();
-    const cutoff = await client.getWantedCutoff();
+    const [missing, cutoff, movie] = await Promise.all([
+      client.getWantedMissing(),
+      client.getWantedCutoff(),
+      client.getMovie(77),
+    ]);
     await client.removeQueueItem(7, {
       removeFromClient: true,
       blocklist: true,
@@ -320,8 +351,10 @@ test('Radarr client normalizes wanted movie responses', async () => {
 
     assert.equal(missing.length, 2);
     assert.equal(missing[0]?.itemType, 'movie');
+    assert.equal(missing[0]?.externalPath, 'movie/1142921');
     assert.equal(missing[0]?.releaseDate, '2024-02-03T00:00:00Z');
     assert.equal(cutoff[0]?.qualityCutoffNotMet, false);
+    assert.equal(movie.titleSlug, '1142921');
     assert.deepEqual(observedDeleteRequests, [
       {
         pathname: '/api/v3/queue/7',

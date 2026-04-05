@@ -7,6 +7,8 @@ import type {
   ArrQueueRecord,
   ArrWantedPageResult,
   ArrSystemStatus,
+  RadarrMovieRecord,
+  SonarrSeriesRecord,
   ArrWantedRecord,
 } from './types';
 
@@ -51,6 +53,7 @@ const sonarrWantedItemSchema = z
     series: z
       .object({
         title: z.string().optional(),
+        titleSlug: z.string().nullable().optional(),
       })
       .passthrough()
       .optional(),
@@ -61,12 +64,29 @@ const radarrWantedItemSchema = z
   .object({
     id: z.number(),
     title: z.string(),
+    titleSlug: z.string().nullable().optional(),
     monitored: z.boolean(),
     hasFile: z.boolean().nullable().optional(),
     qualityCutoffNotMet: z.boolean().nullable().optional(),
     inCinemas: z.string().nullable().optional(),
     physicalRelease: z.string().nullable().optional(),
     digitalRelease: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+const sonarrSeriesSchema = z
+  .object({
+    id: z.number(),
+    title: z.string(),
+    titleSlug: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+const radarrMovieSchema = z
+  .object({
+    id: z.number(),
+    title: z.string(),
+    titleSlug: z.string().nullable().optional(),
   })
   .passthrough();
 
@@ -143,6 +163,16 @@ const buildPagedEndpoint = (
   }
 
   return endpoint.toString();
+};
+
+const buildExternalPath = (prefix: 'series' | 'movie', slug: string | null): string | null => {
+  if (!slug) {
+    return null;
+  }
+
+  const trimmedSlug = slug.trim();
+
+  return trimmedSlug.length > 0 ? `${prefix}/${trimmedSlug}` : null;
 };
 
 interface ArrPaginatedResponse<TItem> {
@@ -345,6 +375,40 @@ export const fetchArrQueue = async (
   }));
 };
 
+export const fetchSonarrSeries = async (
+  options: ArrClientOptions,
+  seriesId: number
+): Promise<SonarrSeriesRecord> => {
+  const result = await requestJson(
+    joinUrl(options.baseUrl, `/api/v3/series/${seriesId}`),
+    sonarrSeriesSchema,
+    createRequestOptions(options)
+  );
+
+  return {
+    id: result.id,
+    title: result.title,
+    titleSlug: result.titleSlug ?? null,
+  };
+};
+
+export const fetchRadarrMovie = async (
+  options: ArrClientOptions,
+  movieId: number
+): Promise<RadarrMovieRecord> => {
+  const result = await requestJson(
+    joinUrl(options.baseUrl, `/api/v3/movie/${movieId}`),
+    radarrMovieSchema,
+    createRequestOptions(options)
+  );
+
+  return {
+    id: result.id,
+    title: result.title,
+    titleSlug: result.titleSlug ?? null,
+  };
+};
+
 export const deleteArrQueueItem = async (
   options: ArrClientOptions,
   queueId: number,
@@ -398,6 +462,7 @@ export const fetchSonarrWanted = async (
     itemType: 'episode',
     itemId: entry.id,
     parentId: entry.seriesId,
+    externalPath: buildExternalPath('series', entry.series?.titleSlug ?? null),
     title: entry.series?.title ? `${entry.series.title} - ${entry.title}` : entry.title,
     monitored: entry.monitored,
     hasFile: entry.hasFile ?? null,
@@ -423,6 +488,7 @@ export const fetchRadarrWanted = async (
     itemType: 'movie',
     itemId: entry.id,
     parentId: null,
+    externalPath: buildExternalPath('movie', entry.titleSlug ?? null),
     title: entry.title,
     monitored: entry.monitored,
     hasFile: entry.hasFile ?? null,
@@ -455,6 +521,7 @@ export const fetchSonarrWantedPage = async (
       itemType: 'episode',
       itemId: entry.id,
       parentId: entry.seriesId,
+      externalPath: buildExternalPath('series', entry.series?.titleSlug ?? null),
       title: entry.series?.title ? `${entry.series.title} - ${entry.title}` : entry.title,
       monitored: entry.monitored,
       hasFile: entry.hasFile ?? null,
@@ -488,6 +555,7 @@ export const fetchRadarrWantedPage = async (
       itemType: 'movie',
       itemId: entry.id,
       parentId: null,
+      externalPath: buildExternalPath('movie', entry.titleSlug ?? null),
       title: entry.title,
       monitored: entry.monitored,
       hasFile: entry.hasFile ?? null,
