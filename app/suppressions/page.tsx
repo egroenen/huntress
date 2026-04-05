@@ -222,16 +222,14 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
           rows={pagedSuppressions.map((suppression) => ({
             title: (
               <div className="suppression-title" title={suppression.mediaKey}>
-                <strong>
-                  <MediaItemLink
-                    config={runtime.config}
-                    mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
-                      suppression.mediaKey
-                    )}
-                    fallbackTitle={resolveTitle(suppression.mediaKey) ?? 'Unknown title'}
-                    className="external-item-link"
-                  />
-                </strong>
+                <MediaItemLink
+                  config={runtime.config}
+                  mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
+                    suppression.mediaKey
+                  )}
+                  fallbackTitle={resolveTitle(suppression.mediaKey) ?? 'Unknown title'}
+                  className="external-item-link"
+                />
                 <span className="secondary-value">
                   <code>{suppression.mediaKey}</code>
                 </span>

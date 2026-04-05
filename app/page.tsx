@@ -499,16 +499,14 @@ export default async function HomePage() {
             name: torrent.name,
             linkedMediaKey: torrent.linkedMediaKey ? (
               <div className="linked-media-cell" title={torrent.linkedMediaKey}>
-                <strong>
-                  <MediaItemLink
-                    config={runtime.config}
-                    mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
-                      torrent.linkedMediaKey
-                    )}
-                    fallbackTitle="Linked item"
-                    className="external-item-link"
-                  />
-                </strong>
+                <MediaItemLink
+                  config={runtime.config}
+                  mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
+                    torrent.linkedMediaKey
+                  )}
+                  fallbackTitle="Linked item"
+                  className="external-item-link"
+                />
                 <span className="secondary-value">
                   <code>{torrent.linkedMediaKey}</code>
                 </span>

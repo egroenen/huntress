@@ -736,6 +736,19 @@ select {
   text-decoration: underline;
 }
 
+.external-item-link__content {
+  display: inline-grid;
+  gap: 0.18rem;
+}
+
+.external-item-link__primary {
+  display: block;
+}
+
+.external-item-link .secondary-value {
+  font-weight: 500;
+}
+
 .stat-card-link {
   display: block;
 }

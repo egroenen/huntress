@@ -698,18 +698,14 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
               progress: `${Math.round(torrent.percentDone * 100)}%`,
               linkedMediaKey: torrent.linkedMediaKey ? (
                 <div className="linked-media-cell" title={torrent.linkedMediaKey}>
-                  <strong>
-                    <MediaItemLink
-                      config={runtime.config}
-                      mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
-                        torrent.linkedMediaKey
-                      )}
-                      fallbackTitle={
-                        resolveTitle(torrent.linkedMediaKey) ?? 'Linked item'
-                      }
-                      className="external-item-link"
-                    />
-                  </strong>
+                  <MediaItemLink
+                    config={runtime.config}
+                    mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
+                      torrent.linkedMediaKey
+                    )}
+                    fallbackTitle={resolveTitle(torrent.linkedMediaKey) ?? 'Linked item'}
+                    className="external-item-link"
+                  />
                   <span className="secondary-value">
                     <code>{torrent.linkedMediaKey}</code>
                   </span>

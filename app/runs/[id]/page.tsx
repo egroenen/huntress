@@ -363,14 +363,12 @@ const renderManualFetchSection = (
       <div className="latest-run__summary">
         <div>
           <span className="console-meta__label">Title</span>
-          <strong>
-            <MediaItemLink
-              config={config}
-              mediaItem={mediaItem}
-              fallbackTitle={summary.title ?? 'Unknown title'}
-              className="external-item-link"
-            />
-          </strong>
+          <MediaItemLink
+            config={config}
+            mediaItem={mediaItem}
+            fallbackTitle={summary.title ?? 'Unknown title'}
+            className="external-item-link"
+          />
         </div>
         <div>
           <span className="console-meta__label">Media key</span>
