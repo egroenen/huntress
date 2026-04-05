@@ -35,6 +35,27 @@ export interface PersistedSearchSafetyOverrides {
   };
 }
 
+type ReleaseSelectionStrategy =
+  | 'best_only'
+  | 'good_enough_now'
+  | 'fallback_then_upgrade';
+
+export interface PersistedReleaseSelectionOverride {
+  enabled: boolean;
+  strategy: ReleaseSelectionStrategy;
+  preferredMinResolution: number;
+  fallbackMinResolution: number;
+  minimumSeeders: number;
+  minimumCustomFormatScore: number;
+  requireEnglish: boolean;
+  upgradeRetryAfterFallbackMs: number;
+}
+
+export interface PersistedReleaseSelectionOverrides {
+  sonarr: PersistedReleaseSelectionOverride;
+  radarr: PersistedReleaseSelectionOverride;
+}
+
 type SecretSource = 'env' | 'persisted' | 'generated' | 'missing' | 'none';
 type UrlSource = 'persisted' | 'config';
 
@@ -56,6 +77,7 @@ export interface ResolvedRuntimeConfig {
 const GENERATED_SESSION_SECRET_KEY = 'generated_session_secret';
 const PERSISTED_CONNECTION_SETTINGS_KEY = 'connection_settings';
 const PERSISTED_SEARCH_SAFETY_OVERRIDES_KEY = 'search_safety_overrides';
+const PERSISTED_RELEASE_SELECTION_OVERRIDES_KEY = 'release_selection_overrides';
 
 const trimToNull = (value: string | null | undefined): string | null => {
   const normalized = value?.trim();
@@ -89,6 +111,16 @@ const getPersistedSearchSafetyOverrides = (
   return (
     database.repositories.serviceState.get<PersistedSearchSafetyOverrides>(
       PERSISTED_SEARCH_SAFETY_OVERRIDES_KEY
+    )?.value ?? null
+  );
+};
+
+const getPersistedReleaseSelectionOverrides = (
+  database: DatabaseContext
+): PersistedReleaseSelectionOverrides | null => {
+  return (
+    database.repositories.serviceState.get<PersistedReleaseSelectionOverrides>(
+      PERSISTED_RELEASE_SELECTION_OVERRIDES_KEY
     )?.value ?? null
   );
 };
@@ -184,6 +216,31 @@ const createDefaultSearchSafetyOverrides = (): PersistedSearchSafetyOverrides =>
   };
 };
 
+const createDefaultReleaseSelectionOverride = (
+  policy: ResolvedConfig['policies']['sonarr']
+): PersistedReleaseSelectionOverride => {
+  return {
+    enabled: policy.releaseSelection?.enabled ?? false,
+    strategy: policy.releaseSelection?.strategy ?? 'best_only',
+    preferredMinResolution: policy.releaseSelection?.preferredMinResolution ?? 1080,
+    fallbackMinResolution: policy.releaseSelection?.fallbackMinResolution ?? 720,
+    minimumSeeders: policy.releaseSelection?.minimumSeeders ?? 1,
+    minimumCustomFormatScore: policy.releaseSelection?.minimumCustomFormatScore ?? 0,
+    requireEnglish: policy.releaseSelection?.requireEnglish ?? false,
+    upgradeRetryAfterFallbackMs:
+      policy.releaseSelection?.upgradeRetryAfterFallbackMs ?? 30 * 60_000,
+  };
+};
+
+const createDefaultReleaseSelectionOverrides = (
+  config: ResolvedConfig
+): PersistedReleaseSelectionOverrides => {
+  return {
+    sonarr: createDefaultReleaseSelectionOverride(config.policies.sonarr),
+    radarr: createDefaultReleaseSelectionOverride(config.policies.radarr),
+  };
+};
+
 const normalizePersistedSearchSafetyOverrides = (
   overrides: PersistedSearchSafetyOverrides | null
 ): PersistedSearchSafetyOverrides => {
@@ -193,6 +250,57 @@ const normalizePersistedSearchSafetyOverrides = (
       per1h: positiveIntOrNull(overrides?.rollingSearchLimits.per1h),
       per24h: positiveIntOrNull(overrides?.rollingSearchLimits.per24h),
     },
+  };
+};
+
+const normalizeReleaseSelectionOverride = (
+  override: PersistedReleaseSelectionOverride | null | undefined,
+  fallback: PersistedReleaseSelectionOverride
+): PersistedReleaseSelectionOverride => {
+  const strategy = override?.strategy;
+  const validStrategy: ReleaseSelectionStrategy =
+    strategy === 'best_only' ||
+    strategy === 'good_enough_now' ||
+    strategy === 'fallback_then_upgrade'
+      ? strategy
+      : fallback.strategy;
+
+  return {
+    enabled:
+      typeof override?.enabled === 'boolean' ? override.enabled : fallback.enabled,
+    strategy: validStrategy,
+    preferredMinResolution:
+      positiveIntOrNull(override?.preferredMinResolution) ??
+      fallback.preferredMinResolution,
+    fallbackMinResolution:
+      positiveIntOrNull(override?.fallbackMinResolution) ??
+      fallback.fallbackMinResolution,
+    minimumSeeders:
+      positiveIntOrNull(override?.minimumSeeders) ?? fallback.minimumSeeders,
+    minimumCustomFormatScore:
+      typeof override?.minimumCustomFormatScore === 'number' &&
+      Number.isInteger(override.minimumCustomFormatScore)
+        ? override.minimumCustomFormatScore
+        : fallback.minimumCustomFormatScore,
+    requireEnglish:
+      typeof override?.requireEnglish === 'boolean'
+        ? override.requireEnglish
+        : fallback.requireEnglish,
+    upgradeRetryAfterFallbackMs:
+      positiveIntOrNull(override?.upgradeRetryAfterFallbackMs) ??
+      fallback.upgradeRetryAfterFallbackMs,
+  };
+};
+
+const normalizePersistedReleaseSelectionOverrides = (
+  overrides: PersistedReleaseSelectionOverrides | null,
+  config: ResolvedConfig
+): PersistedReleaseSelectionOverrides => {
+  const defaults = createDefaultReleaseSelectionOverrides(config);
+
+  return {
+    sonarr: normalizeReleaseSelectionOverride(overrides?.sonarr, defaults.sonarr),
+    radarr: normalizeReleaseSelectionOverride(overrides?.radarr, defaults.radarr),
   };
 };
 
@@ -207,6 +315,24 @@ const ensurePersistedSearchSafetyOverrides = (
   if (!existing) {
     database.repositories.serviceState.set({
       key: PERSISTED_SEARCH_SAFETY_OVERRIDES_KEY,
+      value: normalized,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  return normalized;
+};
+
+const ensurePersistedReleaseSelectionOverrides = (
+  database: DatabaseContext,
+  config: ResolvedConfig
+): PersistedReleaseSelectionOverrides => {
+  const existing = getPersistedReleaseSelectionOverrides(database);
+  const normalized = normalizePersistedReleaseSelectionOverrides(existing, config);
+
+  if (!existing) {
+    database.repositories.serviceState.set({
+      key: PERSISTED_RELEASE_SELECTION_OVERRIDES_KEY,
       value: normalized,
       updatedAt: new Date().toISOString(),
     });
@@ -303,6 +429,22 @@ export const savePersistedSearchSafetyOverrides = (
   return normalized;
 };
 
+export const savePersistedReleaseSelectionOverrides = (
+  database: DatabaseContext,
+  config: ResolvedConfig,
+  overrides: PersistedReleaseSelectionOverrides
+): PersistedReleaseSelectionOverrides => {
+  const normalized = normalizePersistedReleaseSelectionOverrides(overrides, config);
+
+  database.repositories.serviceState.set({
+    key: PERSISTED_RELEASE_SELECTION_OVERRIDES_KEY,
+    value: normalized,
+    updatedAt: new Date().toISOString(),
+  });
+
+  return normalized;
+};
+
 export const resolveRuntimeConfig = (
   loadedConfig: LoadedConfig,
   database: DatabaseContext
@@ -313,6 +455,10 @@ export const resolveRuntimeConfig = (
   );
   const persistedSearchSafetyOverrides =
     ensurePersistedSearchSafetyOverrides(database);
+  const persistedReleaseSelectionOverrides = ensurePersistedReleaseSelectionOverrides(
+    database,
+    loadedConfig.config
+  );
   const sessionSecret =
     trimToNull(loadedConfig.config.auth.sessionSecret) ??
     getOrCreateGeneratedSessionSecret(database);
@@ -379,6 +525,16 @@ export const resolveRuntimeConfig = (
         per24h:
           persistedSearchSafetyOverrides.rollingSearchLimits.per24h ??
           loadedConfig.config.safety.rollingSearchLimits.per24h,
+      },
+    },
+    policies: {
+      sonarr: {
+        ...loadedConfig.config.policies.sonarr,
+        releaseSelection: persistedReleaseSelectionOverrides.sonarr,
+      },
+      radarr: {
+        ...loadedConfig.config.policies.radarr,
+        releaseSelection: persistedReleaseSelectionOverrides.radarr,
       },
     },
   };
@@ -522,4 +678,11 @@ export const buildSearchSafetyOverridesFromConfig = (
         config.safety.rollingSearchLimits.per24h,
     },
   };
+};
+
+export const buildReleaseSelectionOverridesFromConfig = (
+  config: ResolvedConfig,
+  database: DatabaseContext
+): PersistedReleaseSelectionOverrides => {
+  return ensurePersistedReleaseSelectionOverrides(database, config);
 };

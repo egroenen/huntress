@@ -3,6 +3,7 @@ import 'server-only';
 import type {
   PersistedConnectionSettings,
   ConfigurableServiceName,
+  PersistedReleaseSelectionOverrides,
   PersistedSearchSafetyOverrides,
 } from './runtime-config';
 
@@ -72,6 +73,67 @@ export const parseSearchSafetyOverridesForm = (
       per1h: readPositiveInteger(formData, 'rollingLimit1h'),
       per24h: readPositiveInteger(formData, 'rollingLimit24h'),
     },
+  };
+};
+
+export const parseReleaseSelectionOverridesForm = (
+  formData: FormData
+): PersistedReleaseSelectionOverrides => {
+  const readStrategy = (
+    key: string
+  ): PersistedReleaseSelectionOverrides['sonarr']['strategy'] => {
+    const value = formData.get(key);
+
+    if (
+      value === 'best_only' ||
+      value === 'good_enough_now' ||
+      value === 'fallback_then_upgrade'
+    ) {
+      return value;
+    }
+
+    throw new Error(`${key} must be a valid release selection strategy`);
+  };
+
+  const buildAppOverride = (
+    prefix: 'sonarr' | 'radarr'
+  ): PersistedReleaseSelectionOverrides['sonarr'] => ({
+    enabled: readCheckbox(formData, `${prefix}ReleaseSelectionEnabled`),
+    strategy: readStrategy(`${prefix}ReleaseSelectionStrategy`),
+    preferredMinResolution: readPositiveInteger(
+      formData,
+      `${prefix}PreferredMinResolution`
+    )!,
+    fallbackMinResolution: readPositiveInteger(
+      formData,
+      `${prefix}FallbackMinResolution`
+    )!,
+    minimumSeeders: readPositiveInteger(formData, `${prefix}MinimumSeeders`)!,
+    minimumCustomFormatScore: (() => {
+      const value = formData.get(`${prefix}MinimumCustomFormatScore`);
+
+      if (typeof value !== 'string') {
+        throw new Error(`${prefix}MinimumCustomFormatScore is required`);
+      }
+
+      const normalized = value.trim();
+      const parsed = Number.parseInt(normalized, 10);
+
+      if (!Number.isInteger(parsed)) {
+        throw new Error(`${prefix}MinimumCustomFormatScore must be a whole number`);
+      }
+
+      return parsed;
+    })(),
+    requireEnglish: readCheckbox(formData, `${prefix}RequireEnglish`),
+    upgradeRetryAfterFallbackMs:
+      readPositiveInteger(formData, `${prefix}UpgradeRetryAfterFallbackMinutes`)! *
+      60_000,
+  });
+
+  return {
+    sonarr: buildAppOverride('sonarr'),
+    radarr: buildAppOverride('radarr'),
   };
 };
 

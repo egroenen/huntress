@@ -2,6 +2,7 @@ import { getRedactedConfig } from '@/src/server/console-data';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   buildConnectionSettingsFromConfig,
+  buildReleaseSelectionOverridesFromConfig,
   buildSearchSafetyOverridesFromConfig,
 } from '@/src/server/runtime-config';
 import { ConsoleShell, SectionCard, StatusBadge } from '@/src/ui';
@@ -23,6 +24,10 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
     typeof searchParams.status === 'string' ? searchParams.status : undefined;
   const connectionSettings = buildConnectionSettingsFromConfig(runtime.config);
   const searchSafetyOverrides = buildSearchSafetyOverridesFromConfig(
+    runtime.config,
+    runtime.database
+  );
+  const releaseSelectionOverrides = buildReleaseSelectionOverridesFromConfig(
     runtime.config,
     runtime.database
   );
@@ -124,6 +129,96 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
               Disable this to use incremental randomized page coverage instead of a
               full wanted-page walk.
             </p>
+            <div className="settings-form__subsection">
+              <h5>Release selection policy</h5>
+              <label className="settings-form__checkbox">
+                <input
+                  type="checkbox"
+                  name="sonarrReleaseSelectionEnabled"
+                  defaultChecked={releaseSelectionOverrides.sonarr.enabled}
+                />
+                <span>Enable release-aware grabbing before blind search</span>
+              </label>
+              <label>
+                <span>Strategy</span>
+                <select
+                  name="sonarrReleaseSelectionStrategy"
+                  defaultValue={releaseSelectionOverrides.sonarr.strategy}
+                >
+                  <option value="best_only">Best only</option>
+                  <option value="good_enough_now">Good enough now</option>
+                  <option value="fallback_then_upgrade">Fallback then upgrade</option>
+                </select>
+              </label>
+              <label>
+                <span>Preferred minimum resolution</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  name="sonarrPreferredMinResolution"
+                  defaultValue={
+                    releaseSelectionOverrides.sonarr.preferredMinResolution
+                  }
+                />
+              </label>
+              <label>
+                <span>Fallback minimum resolution</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  name="sonarrFallbackMinResolution"
+                  defaultValue={
+                    releaseSelectionOverrides.sonarr.fallbackMinResolution
+                  }
+                />
+              </label>
+              <label>
+                <span>Minimum seeders</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  name="sonarrMinimumSeeders"
+                  defaultValue={releaseSelectionOverrides.sonarr.minimumSeeders}
+                />
+              </label>
+              <label>
+                <span>Minimum custom format score</span>
+                <input
+                  type="number"
+                  step="1"
+                  name="sonarrMinimumCustomFormatScore"
+                  defaultValue={
+                    releaseSelectionOverrides.sonarr.minimumCustomFormatScore
+                  }
+                />
+              </label>
+              <label className="settings-form__checkbox">
+                <input
+                  type="checkbox"
+                  name="sonarrRequireEnglish"
+                  defaultChecked={releaseSelectionOverrides.sonarr.requireEnglish}
+                />
+                <span>Require English-language releases</span>
+              </label>
+              <label>
+                <span>Upgrade retry after fallback (minutes)</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  name="sonarrUpgradeRetryAfterFallbackMinutes"
+                  defaultValue={
+                    Math.round(
+                      releaseSelectionOverrides.sonarr.upgradeRetryAfterFallbackMs /
+                        60_000
+                    )
+                  }
+                />
+              </label>
+            </div>
           </section>
 
           <section className="settings-form__section">
@@ -167,6 +262,96 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
               Disable this to use incremental randomized page coverage instead of a
               full wanted-page walk.
             </p>
+            <div className="settings-form__subsection">
+              <h5>Release selection policy</h5>
+              <label className="settings-form__checkbox">
+                <input
+                  type="checkbox"
+                  name="radarrReleaseSelectionEnabled"
+                  defaultChecked={releaseSelectionOverrides.radarr.enabled}
+                />
+                <span>Enable release-aware grabbing before blind search</span>
+              </label>
+              <label>
+                <span>Strategy</span>
+                <select
+                  name="radarrReleaseSelectionStrategy"
+                  defaultValue={releaseSelectionOverrides.radarr.strategy}
+                >
+                  <option value="best_only">Best only</option>
+                  <option value="good_enough_now">Good enough now</option>
+                  <option value="fallback_then_upgrade">Fallback then upgrade</option>
+                </select>
+              </label>
+              <label>
+                <span>Preferred minimum resolution</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  name="radarrPreferredMinResolution"
+                  defaultValue={
+                    releaseSelectionOverrides.radarr.preferredMinResolution
+                  }
+                />
+              </label>
+              <label>
+                <span>Fallback minimum resolution</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  name="radarrFallbackMinResolution"
+                  defaultValue={
+                    releaseSelectionOverrides.radarr.fallbackMinResolution
+                  }
+                />
+              </label>
+              <label>
+                <span>Minimum seeders</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  name="radarrMinimumSeeders"
+                  defaultValue={releaseSelectionOverrides.radarr.minimumSeeders}
+                />
+              </label>
+              <label>
+                <span>Minimum custom format score</span>
+                <input
+                  type="number"
+                  step="1"
+                  name="radarrMinimumCustomFormatScore"
+                  defaultValue={
+                    releaseSelectionOverrides.radarr.minimumCustomFormatScore
+                  }
+                />
+              </label>
+              <label className="settings-form__checkbox">
+                <input
+                  type="checkbox"
+                  name="radarrRequireEnglish"
+                  defaultChecked={releaseSelectionOverrides.radarr.requireEnglish}
+                />
+                <span>Require English-language releases</span>
+              </label>
+              <label>
+                <span>Upgrade retry after fallback (minutes)</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  name="radarrUpgradeRetryAfterFallbackMinutes"
+                  defaultValue={
+                    Math.round(
+                      releaseSelectionOverrides.radarr.upgradeRetryAfterFallbackMs /
+                        60_000
+                    )
+                  }
+                />
+              </label>
+            </div>
           </section>
 
           <section className="settings-form__section">
@@ -288,7 +473,7 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
               name="csrfToken"
               value={runtime.csrfTokens.saveSettings}
             >
-              Save connection settings
+              Save settings
             </button>
           </div>
         </form>

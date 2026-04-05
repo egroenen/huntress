@@ -2,10 +2,12 @@ import { NextResponse } from 'next/server';
 
 import {
   savePersistedConnectionSettings,
+  savePersistedReleaseSelectionOverrides,
   savePersistedSearchSafetyOverrides,
 } from '@/src/server/runtime-config';
 import {
   parseConnectionSettingsForm,
+  parseReleaseSelectionOverridesForm,
   parseSearchSafetyOverridesForm,
 } from '@/src/server/settings-form';
 import { authenticateConsoleAction } from '@/src/server/require-action';
@@ -33,9 +35,16 @@ export async function POST(request: Request) {
     );
     const nextSettings = parseConnectionSettingsForm(formData);
     const nextOverrides = parseSearchSafetyOverridesForm(formData);
+    const nextReleaseSelectionOverrides =
+      parseReleaseSelectionOverridesForm(formData);
 
     savePersistedConnectionSettings(runtime.database, nextSettings);
     savePersistedSearchSafetyOverrides(runtime.database, nextOverrides);
+    savePersistedReleaseSelectionOverrides(
+      runtime.database,
+      runtime.config,
+      nextReleaseSelectionOverrides
+    );
 
     return buildRedirect(request, {
       notice: 'saved',

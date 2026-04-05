@@ -966,6 +966,20 @@ select {
   padding: 1rem;
 }
 
+.settings-form__subsection {
+  display: grid;
+  gap: 0.85rem;
+  border-top: 1px solid #d9e3ee;
+  margin-top: 0.25rem;
+  padding-top: 1rem;
+}
+
+.settings-form__subsection h5 {
+  margin: 0;
+  color: #243142;
+  font-size: 0.98rem;
+}
+
 .settings-form__hint {
   margin: -0.2rem 0 0.1rem;
   color: var(--content-muted);
@@ -1006,7 +1020,8 @@ select {
   text-transform: uppercase;
 }
 
-.settings-form__section input {
+.settings-form__section input,
+.settings-form__section select {
   border: 1px solid #d9e3ee;
   border-radius: 8px;
   background: #fff;

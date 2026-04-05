@@ -10,6 +10,7 @@ import { initializeDatabase } from '@/src/db';
 import {
   resolveRuntimeConfig,
   savePersistedConnectionSettings,
+  savePersistedReleaseSelectionOverrides,
   savePersistedSearchSafetyOverrides,
 } from './runtime-config';
 
@@ -274,6 +275,67 @@ test('resolveRuntimeConfig applies persisted per-app wanted page fetch settings'
 
     assert.equal(resolved.config.instances.sonarr.fetchAllWantedPages, true);
     assert.equal(resolved.config.instances.radarr.fetchAllWantedPages, false);
+  } finally {
+    database.close();
+  }
+});
+
+test('resolveRuntimeConfig applies persisted per-app release selection overrides', async () => {
+  const configPath = await createConfigFile(baseConfig);
+  const databasePath = await createDatabasePath();
+  const database = await initializeDatabase(databasePath);
+
+  try {
+    const loadedConfig = await loadConfig({
+      argv: ['--config', configPath],
+      env: {},
+    });
+
+    savePersistedReleaseSelectionOverrides(database, loadedConfig.config, {
+      sonarr: {
+        enabled: true,
+        strategy: 'fallback_then_upgrade',
+        preferredMinResolution: 1080,
+        fallbackMinResolution: 720,
+        minimumSeeders: 3,
+        minimumCustomFormatScore: 5,
+        requireEnglish: true,
+        upgradeRetryAfterFallbackMs: 45 * 60_000,
+      },
+      radarr: {
+        enabled: true,
+        strategy: 'good_enough_now',
+        preferredMinResolution: 2160,
+        fallbackMinResolution: 1080,
+        minimumSeeders: 2,
+        minimumCustomFormatScore: 10,
+        requireEnglish: false,
+        upgradeRetryAfterFallbackMs: 90 * 60_000,
+      },
+    });
+
+    const resolved = resolveRuntimeConfig(loadedConfig, database);
+
+    assert.deepEqual(resolved.config.policies.sonarr.releaseSelection, {
+      enabled: true,
+      strategy: 'fallback_then_upgrade',
+      preferredMinResolution: 1080,
+      fallbackMinResolution: 720,
+      minimumSeeders: 3,
+      minimumCustomFormatScore: 5,
+      requireEnglish: true,
+      upgradeRetryAfterFallbackMs: 45 * 60_000,
+    });
+    assert.deepEqual(resolved.config.policies.radarr.releaseSelection, {
+      enabled: true,
+      strategy: 'good_enough_now',
+      preferredMinResolution: 2160,
+      fallbackMinResolution: 1080,
+      minimumSeeders: 2,
+      minimumCustomFormatScore: 10,
+      requireEnglish: false,
+      upgradeRetryAfterFallbackMs: 90 * 60_000,
+    });
   } finally {
     database.close();
   }
