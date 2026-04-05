@@ -131,11 +131,13 @@ const resolveConfig = (
         url: rawConfig.instances.sonarr.url,
         apiKey: resolveOptionalEnv(rawConfig.instances.sonarr.api_key_env, env),
         apiKeyEnv: rawConfig.instances.sonarr.api_key_env,
+        fetchAllWantedPages: rawConfig.instances.sonarr.fetch_all_wanted_pages,
       },
       radarr: {
         url: rawConfig.instances.radarr.url,
         apiKey: resolveOptionalEnv(rawConfig.instances.radarr.api_key_env, env),
         apiKeyEnv: rawConfig.instances.radarr.api_key_env,
+        fetchAllWantedPages: rawConfig.instances.radarr.fetch_all_wanted_pages,
       },
       prowlarr: {
         url: rawConfig.instances.prowlarr.url,

@@ -26,10 +26,12 @@ export const rawConfigSchema = z.object({
     sonarr: z.object({
       url: z.string().url(),
       api_key_env: z.string().min(1).optional().default('SONARR_API_KEY'),
+      fetch_all_wanted_pages: z.boolean().default(false),
     }),
     radarr: z.object({
       url: z.string().url(),
       api_key_env: z.string().min(1).optional().default('RADARR_API_KEY'),
+      fetch_all_wanted_pages: z.boolean().default(false),
     }),
     prowlarr: z.object({
       url: z.string().url(),
@@ -125,11 +127,13 @@ export const resolvedConfigSchema = z
         url: z.string().url(),
         apiKey: z.string().min(1).nullable(),
         apiKeyEnv: z.string().min(1),
+        fetchAllWantedPages: z.boolean(),
       }),
       radarr: z.object({
         url: z.string().url(),
         apiKey: z.string().min(1).nullable(),
         apiKeyEnv: z.string().min(1),
+        fetchAllWantedPages: z.boolean(),
       }),
       prowlarr: z.object({
         url: z.string().url(),

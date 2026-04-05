@@ -10,6 +10,10 @@ interface PersistedArrConnectionSettings {
   apiKey: string | null;
 }
 
+interface PersistedWantedFetchConnectionSettings extends PersistedArrConnectionSettings {
+  fetchAllWantedPages: boolean;
+}
+
 interface PersistedTransmissionConnectionSettings {
   url: string | null;
   username: string | null;
@@ -17,8 +21,8 @@ interface PersistedTransmissionConnectionSettings {
 }
 
 export interface PersistedConnectionSettings {
-  sonarr: PersistedArrConnectionSettings;
-  radarr: PersistedArrConnectionSettings;
+  sonarr: PersistedWantedFetchConnectionSettings;
+  radarr: PersistedWantedFetchConnectionSettings;
   prowlarr: PersistedArrConnectionSettings;
   transmission: PersistedTransmissionConnectionSettings;
 }
@@ -96,10 +100,12 @@ const createDefaultConnectionSettings = (
     sonarr: {
       url: config.instances.sonarr.url,
       apiKey: null,
+      fetchAllWantedPages: config.instances.sonarr.fetchAllWantedPages,
     },
     radarr: {
       url: config.instances.radarr.url,
       apiKey: null,
+      fetchAllWantedPages: config.instances.radarr.fetchAllWantedPages,
     },
     prowlarr: {
       url: config.instances.prowlarr.url,
@@ -121,10 +127,18 @@ const normalizePersistedConnectionSettings = (
     sonarr: {
       url: trimToNull(settings.sonarr.url) ?? config.instances.sonarr.url,
       apiKey: trimToNull(settings.sonarr.apiKey),
+      fetchAllWantedPages:
+        typeof settings.sonarr.fetchAllWantedPages === 'boolean'
+          ? settings.sonarr.fetchAllWantedPages
+          : config.instances.sonarr.fetchAllWantedPages,
     },
     radarr: {
       url: trimToNull(settings.radarr.url) ?? config.instances.radarr.url,
       apiKey: trimToNull(settings.radarr.apiKey),
+      fetchAllWantedPages:
+        typeof settings.radarr.fetchAllWantedPages === 'boolean'
+          ? settings.radarr.fetchAllWantedPages
+          : config.instances.radarr.fetchAllWantedPages,
     },
     prowlarr: {
       url: trimToNull(settings.prowlarr.url) ?? config.instances.prowlarr.url,
@@ -247,10 +261,12 @@ export const savePersistedConnectionSettings = (
     sonarr: {
       url: trimToNull(settings.sonarr.url),
       apiKey: trimToNull(settings.sonarr.apiKey),
+      fetchAllWantedPages: settings.sonarr.fetchAllWantedPages,
     },
     radarr: {
       url: trimToNull(settings.radarr.url),
       apiKey: trimToNull(settings.radarr.apiKey),
+      fetchAllWantedPages: settings.radarr.fetchAllWantedPages,
     },
     prowlarr: {
       url: trimToNull(settings.prowlarr.url),
@@ -328,11 +344,13 @@ export const resolveRuntimeConfig = (
         ...loadedConfig.config.instances.sonarr,
         url: persistedConnections.sonarr.url ?? loadedConfig.config.instances.sonarr.url,
         apiKey: sonarrApiKey,
+        fetchAllWantedPages: persistedConnections.sonarr.fetchAllWantedPages,
       },
       radarr: {
         ...loadedConfig.config.instances.radarr,
         url: persistedConnections.radarr.url ?? loadedConfig.config.instances.radarr.url,
         apiKey: radarrApiKey,
+        fetchAllWantedPages: persistedConnections.radarr.fetchAllWantedPages,
       },
       prowlarr: {
         ...loadedConfig.config.instances.prowlarr,
@@ -466,10 +484,12 @@ export const buildConnectionSettingsFromConfig = (
     sonarr: {
       url: config.instances.sonarr.url,
       apiKey: config.instances.sonarr.apiKey,
+      fetchAllWantedPages: config.instances.sonarr.fetchAllWantedPages,
     },
     radarr: {
       url: config.instances.radarr.url,
       apiKey: config.instances.radarr.apiKey,
+      fetchAllWantedPages: config.instances.radarr.fetchAllWantedPages,
     },
     prowlarr: {
       url: config.instances.prowlarr.url,

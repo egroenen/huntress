@@ -16,9 +16,11 @@ instances:
   sonarr:
     url: 'http://sonarr:8989'
     api_key_env: 'SONARR_API_KEY'
+    fetch_all_wanted_pages: false
   radarr:
     url: 'http://radarr:7878'
     api_key_env: 'RADARR_API_KEY'
+    fetch_all_wanted_pages: false
   prowlarr:
     url: 'http://prowlarr:9696'
     api_key_env: 'PROWLARR_API_KEY'

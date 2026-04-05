@@ -62,6 +62,8 @@ interface SyncCoverageConfig {
   wantedPageSize: number;
   fullScanPageThreshold: number;
   maxWantedPagesPerCollection: number;
+  sonarrFetchAllPages: boolean;
+  radarrFetchAllPages: boolean;
 }
 
 const buildQueueDownloadMapStateKey = (app: ArrAppName): string =>
@@ -375,6 +377,8 @@ const DEFAULT_SYNC_COVERAGE_CONFIG: SyncCoverageConfig = {
   wantedPageSize: 50,
   fullScanPageThreshold: 20,
   maxWantedPagesPerCollection: 4,
+  sonarrFetchAllPages: false,
+  radarrFetchAllPages: false,
 };
 
 const buildCoverageTieBreaker = (
@@ -399,6 +403,19 @@ const selectWantedPages = (input: {
   pages: number[];
   reason: string;
 } => {
+  const forceFullScan =
+    input.app === 'sonarr'
+      ? input.config.sonarrFetchAllPages
+      : input.config.radarrFetchAllPages;
+
+  if (forceFullScan) {
+    return {
+      mode: 'full',
+      pages: Array.from({ length: input.totalPages }, (_, index) => index + 1),
+      reason: `Fetch-all-pages is enabled for ${input.app}.`,
+    };
+  }
+
   if (input.totalPages <= 1) {
     return {
       mode: 'full',

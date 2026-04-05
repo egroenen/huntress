@@ -21,9 +21,11 @@ instances:
   sonarr:
     url: "http://sonarr:8989"
     api_key_env: "SONARR_API_KEY"
+    fetch_all_wanted_pages: false
   radarr:
     url: "http://radarr:7878"
     api_key_env: "RADARR_API_KEY"
+    fetch_all_wanted_pages: false
   prowlarr:
     url: "http://prowlarr:9696"
     api_key_env: "PROWLARR_API_KEY"
@@ -104,6 +106,8 @@ test('loadConfig resolves a valid config file and redacts secrets', async () => 
   assert.equal(config.sync.wantedPageSize, 50);
   assert.equal(config.sync.fullScanPageThreshold, 20);
   assert.equal(config.sync.maxWantedPagesPerCollection, 4);
+  assert.equal(config.instances.sonarr.fetchAllWantedPages, false);
+  assert.equal(config.instances.radarr.fetchAllWantedPages, false);
   assert.equal(config.instances.sonarr.apiKey, 'sonarr-key');
   assert.equal(config.safety.rollingSearchLimits.per15m, 4);
   assert.equal(redactedConfig.instances.sonarr.apiKey, '[redacted]');

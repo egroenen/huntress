@@ -978,6 +978,26 @@ select {
   gap: 0.35rem;
 }
 
+.settings-form__checkbox {
+  display: flex !important;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.settings-form__checkbox input[type='checkbox'] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+}
+
+.settings-form__checkbox span {
+  color: #243142 !important;
+  font-size: 0.95rem !important;
+  font-weight: 600 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+}
+
 .settings-form__section span {
   color: var(--content-muted);
   font-size: 0.75rem;

@@ -111,6 +111,18 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
                 defaultValue={connectionSettings.sonarr.apiKey ?? ''}
               />
             </label>
+            <label className="settings-form__checkbox">
+              <input
+                type="checkbox"
+                name="sonarrFetchAllPages"
+                defaultChecked={connectionSettings.sonarr.fetchAllWantedPages}
+              />
+              <span>Fetch all wanted pages on each sync</span>
+            </label>
+            <p className="settings-form__hint">
+              Disable this to use incremental randomized page coverage instead of a
+              full wanted-page walk.
+            </p>
           </section>
 
           <section className="settings-form__section">
@@ -142,6 +154,18 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
                 defaultValue={connectionSettings.radarr.apiKey ?? ''}
               />
             </label>
+            <label className="settings-form__checkbox">
+              <input
+                type="checkbox"
+                name="radarrFetchAllPages"
+                defaultChecked={connectionSettings.radarr.fetchAllWantedPages}
+              />
+              <span>Fetch all wanted pages on each sync</span>
+            </label>
+            <p className="settings-form__hint">
+              Disable this to use incremental randomized page coverage instead of a
+              full wanted-page walk.
+            </p>
           </section>
 
           <section className="settings-form__section">

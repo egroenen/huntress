@@ -95,11 +95,13 @@ const createResolvedConfig = (): ResolvedConfig => {
         url: 'http://sonarr:8989',
         apiKey: 'sonarr-key',
         apiKeyEnv: 'SONARR_API_KEY',
+        fetchAllWantedPages: false,
       },
       radarr: {
         url: 'http://radarr:7878',
         apiKey: 'radarr-key',
         apiKeyEnv: 'RADARR_API_KEY',
+        fetchAllWantedPages: false,
       },
       prowlarr: {
         url: 'http://prowlarr:9696',

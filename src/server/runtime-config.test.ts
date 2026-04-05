@@ -28,9 +28,11 @@ instances:
   sonarr:
     url: "http://sonarr:8989"
     api_key_env: "SONARR_API_KEY"
+    fetch_all_wanted_pages: false
   radarr:
     url: "http://radarr:7878"
     api_key_env: "RADARR_API_KEY"
+    fetch_all_wanted_pages: false
   prowlarr:
     url: "http://prowlarr:9696"
     api_key_env: "PROWLARR_API_KEY"
@@ -129,10 +131,12 @@ test('resolveRuntimeConfig prefers persisted connection settings when env secret
       sonarr: {
         url: 'http://nas.lan:8989',
         apiKey: 'persisted-sonarr-key',
+        fetchAllWantedPages: true,
       },
       radarr: {
         url: 'http://nas.lan:7878',
         apiKey: 'persisted-radarr-key',
+        fetchAllWantedPages: false,
       },
       prowlarr: {
         url: 'http://nas.lan:9696',
@@ -173,10 +177,12 @@ test('resolveRuntimeConfig treats a URL-only transmission setup as configured', 
       sonarr: {
         url: 'http://nas.lan:8989',
         apiKey: 'persisted-sonarr-key',
+        fetchAllWantedPages: false,
       },
       radarr: {
         url: 'http://nas.lan:7878',
         apiKey: 'persisted-radarr-key',
+        fetchAllWantedPages: false,
       },
       prowlarr: {
         url: 'http://nas.lan:9696',
@@ -226,6 +232,48 @@ test('resolveRuntimeConfig applies persisted rolling search limit overrides', as
     assert.equal(resolved.config.safety.rollingSearchLimits.per15m, 2);
     assert.equal(resolved.config.safety.rollingSearchLimits.per1h, 6);
     assert.equal(resolved.config.safety.rollingSearchLimits.per24h, 18);
+  } finally {
+    database.close();
+  }
+});
+
+test('resolveRuntimeConfig applies persisted per-app wanted page fetch settings', async () => {
+  const configPath = await createConfigFile(baseConfig);
+  const databasePath = await createDatabasePath();
+  const database = await initializeDatabase(databasePath);
+
+  try {
+    const loadedConfig = await loadConfig({
+      argv: ['--config', configPath],
+      env: {},
+    });
+
+    savePersistedConnectionSettings(database, {
+      sonarr: {
+        url: 'http://nas.lan:8989',
+        apiKey: 'persisted-sonarr-key',
+        fetchAllWantedPages: true,
+      },
+      radarr: {
+        url: 'http://nas.lan:7878',
+        apiKey: 'persisted-radarr-key',
+        fetchAllWantedPages: false,
+      },
+      prowlarr: {
+        url: 'http://nas.lan:9696',
+        apiKey: 'persisted-prowlarr-key',
+      },
+      transmission: {
+        url: 'http://nas.lan:9091/transmission/rpc',
+        username: null,
+        password: null,
+      },
+    });
+
+    const resolved = resolveRuntimeConfig(loadedConfig, database);
+
+    assert.equal(resolved.config.instances.sonarr.fetchAllWantedPages, true);
+    assert.equal(resolved.config.instances.radarr.fetchAllWantedPages, false);
   } finally {
     database.close();
   }

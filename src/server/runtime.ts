@@ -185,7 +185,11 @@ const buildRuntimeCore = async () => {
           sonarr: runtimeState.clients.sonarr,
           radarr: runtimeState.clients.radarr,
         },
-        syncConfig: runtimeState.config.sync,
+        syncConfig: {
+          ...runtimeState.config.sync,
+          sonarrFetchAllPages: runtimeState.config.instances.sonarr.fetchAllWantedPages,
+          radarrFetchAllPages: runtimeState.config.instances.radarr.fetchAllWantedPages,
+        },
         activityTracker,
       });
 

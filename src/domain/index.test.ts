@@ -480,6 +480,8 @@ test('syncArrState incrementally expands wanted page coverage for large collecti
       wantedPageSize: 50,
       fullScanPageThreshold: 2,
       maxWantedPagesPerCollection: 3,
+      sonarrFetchAllPages: false,
+      radarrFetchAllPages: false,
     };
 
     const firstSummary = await syncArrState({
@@ -691,11 +693,13 @@ test('sync and dispatch work together in a mocked end-to-end cycle', async () =>
             url: `${server.url}/sonarr`,
             apiKey: 'sonarr-key',
             apiKeyEnv: 'SONARR_API_KEY',
+            fetchAllWantedPages: false,
           },
           radarr: {
             url: `${server.url}/radarr`,
             apiKey: 'radarr-key',
             apiKeyEnv: 'RADARR_API_KEY',
+            fetchAllWantedPages: false,
           },
           prowlarr: {
             url: 'http://prowlarr:9696',
@@ -784,6 +788,101 @@ test('sync and dispatch work together in a mocked end-to-end cycle', async () =>
         ['radarr:movie:201', 'skip', 'skipped'],
       ]
     );
+  } finally {
+    database.close();
+    await server.close();
+  }
+});
+
+test('syncArrState can fetch every Sonarr wanted page when enabled per app', async () => {
+  const requestedMissingPages: number[] = [];
+  const server = await startJsonServer((request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+
+    if (url.pathname === '/sonarr/api/v3/wanted/missing') {
+      const page = Number(url.searchParams.get('page') ?? '1');
+      requestedMissingPages.push(page);
+      response.end(
+        JSON.stringify({
+          page,
+          pageSize: 50,
+          totalPages: 6,
+          totalRecords: 300,
+          records: [
+            {
+              id: 200 + page,
+              seriesId: 99,
+              title: `Episode ${page}`,
+              monitored: true,
+              airDateUtc: `2026-03-0${page}T00:00:00Z`,
+              series: { title: 'Fetch All Show' },
+            },
+          ],
+        })
+      );
+      return;
+    }
+
+    if (url.pathname === '/sonarr/api/v3/wanted/cutoff') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    if (url.pathname === '/sonarr/api/v3/queue/details') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    if (url.pathname === '/radarr/api/v3/wanted/missing') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    if (url.pathname === '/radarr/api/v3/wanted/cutoff') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    if (url.pathname === '/radarr/api/v3/queue/details') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    response.statusCode = 404;
+    response.end(JSON.stringify({ error: 'not found' }));
+  });
+
+  const databasePath = await createDatabasePath();
+  const database = await initializeDatabase(databasePath);
+
+  try {
+    const summary = await syncArrState({
+      database,
+      clients: {
+        sonarr: createSonarrClient({
+          baseUrl: `${server.url}/sonarr`,
+          apiKey: 'sonarr-key',
+          wantedPageSize: 50,
+        }),
+        radarr: createRadarrClient({
+          baseUrl: `${server.url}/radarr`,
+          apiKey: 'radarr-key',
+          wantedPageSize: 50,
+        }),
+      },
+      syncConfig: {
+        wantedPageSize: 50,
+        fullScanPageThreshold: 2,
+        maxWantedPagesPerCollection: 3,
+        sonarrFetchAllPages: true,
+        radarrFetchAllPages: false,
+      },
+      now: new Date('2026-04-04T12:00:00.000Z'),
+    });
+
+    assert.equal(summary.sonarr.missingPagesFetched, 6);
+    assert.deepEqual(requestedMissingPages, [1, 2, 3, 4, 5, 6]);
   } finally {
     database.close();
     await server.close();

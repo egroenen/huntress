@@ -11,6 +11,10 @@ const readString = (formData: FormData, key: string): string | null => {
   return typeof value === 'string' ? value.trim() || null : null;
 };
 
+const readCheckbox = (formData: FormData, key: string): boolean => {
+  return formData.get(key) === 'on';
+};
+
 export const parseConnectionSettingsForm = (
   formData: FormData
 ): PersistedConnectionSettings => {
@@ -18,10 +22,12 @@ export const parseConnectionSettingsForm = (
     sonarr: {
       url: readString(formData, 'sonarrUrl'),
       apiKey: readString(formData, 'sonarrApiKey'),
+      fetchAllWantedPages: readCheckbox(formData, 'sonarrFetchAllPages'),
     },
     radarr: {
       url: readString(formData, 'radarrUrl'),
       apiKey: readString(formData, 'radarrApiKey'),
+      fetchAllWantedPages: readCheckbox(formData, 'radarrFetchAllPages'),
     },
     prowlarr: {
       url: readString(formData, 'prowlarrUrl'),
