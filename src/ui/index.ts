@@ -12,3 +12,4 @@ export {
   type DependencyHealthCard,
 } from './operator-console';
 export { ConfirmButton } from './confirm-button';
+export { MediaItemLink } from './media-link';

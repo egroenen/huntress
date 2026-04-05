@@ -10,6 +10,7 @@ import {
   ConsoleShell,
   DataTable,
   DependencyHealthGrid,
+  MediaItemLink,
   ReasonCodeBadge,
   SectionCard,
   StatCard,
@@ -431,7 +432,16 @@ export default async function HomePage() {
                 {candidate.app}
               </span>
             ),
-            title: candidate.title,
+            title: (
+              <MediaItemLink
+                config={runtime.config}
+                mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
+                  candidate.mediaKey
+                )}
+                fallbackTitle={candidate.title}
+                className="external-item-link"
+              />
+            ),
             decision: (
               <StatusBadge
                 status={candidate.decision === 'dispatch' ? 'success' : 'degraded'}
@@ -490,9 +500,14 @@ export default async function HomePage() {
             linkedMediaKey: torrent.linkedMediaKey ? (
               <div className="linked-media-cell" title={torrent.linkedMediaKey}>
                 <strong>
-                  {runtime.database.repositories.mediaItemState.getByMediaKey(
-                    torrent.linkedMediaKey
-                  )?.title ?? 'Linked item'}
+                  <MediaItemLink
+                    config={runtime.config}
+                    mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
+                      torrent.linkedMediaKey
+                    )}
+                    fallbackTitle="Linked item"
+                    className="external-item-link"
+                  />
                 </strong>
                 <span className="secondary-value">
                   <code>{torrent.linkedMediaKey}</code>

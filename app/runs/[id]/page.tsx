@@ -7,6 +7,7 @@ import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   ConsoleShell,
   DataTable,
+  MediaItemLink,
   ReasonCodeBadge,
   SectionCard,
   StatCard,
@@ -232,10 +233,13 @@ const toAppSyncRows = (summary: RunSummaryShape): AppSyncSummary[] => {
 
 const buildAttemptRows = (
   attempts: SearchAttemptRecord[],
-  resolveTitle: (mediaKey: string) => string | null
+  resolveTitle: (mediaKey: string) => string | null,
+  resolveMediaItem: (mediaKey: string) => import('@/src/db').MediaItemStateRecord | null,
+  config: import('@/src/config').ResolvedConfig
 ) => {
   return attempts.map((attempt) => {
     const title = resolveTitle(attempt.mediaKey);
+    const mediaItem = resolveMediaItem(attempt.mediaKey);
 
     return {
       attemptedAt: formatTimestamp(attempt.attemptedAt),
@@ -244,7 +248,16 @@ const buildAttemptRows = (
           {formatServiceName(attempt.app)}
         </span>
       ),
-      title: title ?? <span className="console-muted">Unknown title</span>,
+      title: title ? (
+        <MediaItemLink
+          config={config}
+          mediaItem={mediaItem}
+          fallbackTitle={title}
+          className="external-item-link"
+        />
+      ) : (
+        <span className="console-muted">Unknown title</span>
+      ),
       mediaKey: <code className="reason-code">{attempt.mediaKey}</code>,
       decision: (
         <StatusBadge status={attempt.decision === 'dispatch' ? 'success' : 'degraded'}>
@@ -333,7 +346,11 @@ const renderRunSummarySection = (
   );
 };
 
-const renderManualFetchSection = (summary: RunSummaryShape) => {
+const renderManualFetchSection = (
+  summary: RunSummaryShape,
+  mediaItem: import('@/src/db').MediaItemStateRecord | null,
+  config: import('@/src/config').ResolvedConfig
+) => {
   if (!summary.manualFetch) {
     return null;
   }
@@ -346,7 +363,14 @@ const renderManualFetchSection = (summary: RunSummaryShape) => {
       <div className="latest-run__summary">
         <div>
           <span className="console-meta__label">Title</span>
-          <strong>{summary.title ?? 'Unknown title'}</strong>
+          <strong>
+            <MediaItemLink
+              config={config}
+              mediaItem={mediaItem}
+              fallbackTitle={summary.title ?? 'Unknown title'}
+              className="external-item-link"
+            />
+          </strong>
         </div>
         <div>
           <span className="console-meta__label">Media key</span>
@@ -534,6 +558,11 @@ export default async function RunDetailPage({
 
     return titleCache.get(mediaKey) ?? null;
   };
+  const resolveMediaItem = (mediaKey: string) =>
+    runtime.database.repositories.mediaItemState.getByMediaKey(mediaKey);
+  const manualFetchMediaItem = summary.mediaKey
+    ? resolveMediaItem(summary.mediaKey)
+    : null;
   const filteredAttempts = allAttempts.filter((attempt) => {
     if (attemptApp && attempt.app !== attemptApp) {
       return false;
@@ -585,7 +614,7 @@ export default async function RunDetailPage({
         ← Run history
       </Link>
       {renderRunSummarySection(run, summary, totalAttempts)}
-      {renderManualFetchSection(summary)}
+      {renderManualFetchSection(summary, manualFetchMediaItem, runtime.config)}
       {renderSyncSection(summary)}
       {renderTransmissionSection(summary)}
       {renderDispatchSection(summary)}
@@ -656,7 +685,12 @@ export default async function RunDetailPage({
             { key: 'reason', label: 'Reason' },
             { key: 'outcome', label: 'Outcome' },
           ]}
-          rows={buildAttemptRows(attempts, resolveTitle)}
+          rows={buildAttemptRows(
+            attempts,
+            resolveTitle,
+            resolveMediaItem,
+            runtime.config
+          )}
           emptyMessage="No attempt rows were recorded for this run."
         />
       </SectionCard>

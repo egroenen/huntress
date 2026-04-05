@@ -6,6 +6,7 @@ import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   ConsoleShell,
   DataTable,
+  MediaItemLink,
   ReasonCodeBadge,
   SectionCard,
   StatusBadge,
@@ -53,9 +54,7 @@ const formatTimestamp = (value: string | null): string => {
   }).format(new Date(value));
 };
 
-const parsePositivePage = (
-  value: string | string[] | undefined
-): number => {
+const parsePositivePage = (value: string | string[] | undefined): number => {
   const normalized = Array.isArray(value) ? value[0] : value;
   const parsed = Number.parseInt(normalized ?? '', 10);
 
@@ -67,7 +66,7 @@ const parsePositivePage = (
 };
 
 const parseStringParam = (value: string | string[] | undefined): string => {
-  return Array.isArray(value) ? value[0] ?? '' : (value ?? '');
+  return Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
 };
 
 const parseDecisionFilter = (
@@ -239,10 +238,8 @@ const buildCollapseHref = (
 ): string => {
   const nextSections: CandidateSectionState = {
     ...sections,
-    sonarrCollapsed:
-      app === 'sonarr' ? collapsed : sections.sonarrCollapsed,
-    radarrCollapsed:
-      app === 'radarr' ? collapsed : sections.radarrCollapsed,
+    sonarrCollapsed: app === 'sonarr' ? collapsed : sections.sonarrCollapsed,
+    radarrCollapsed: app === 'radarr' ? collapsed : sections.radarrCollapsed,
   };
 
   return `/candidates?${buildCandidateParams(filters, pages, nextSections).toString()}`;
@@ -317,7 +314,11 @@ const sortCandidates = (
   return candidates
     .map((candidate, index) => ({ candidate, index }))
     .sort((left, right) => {
-      const previousComparison = compareCandidatesBySort(left.candidate, right.candidate, sort);
+      const previousComparison = compareCandidatesBySort(
+        left.candidate,
+        right.candidate,
+        sort
+      );
 
       if (previousComparison !== 0) {
         return previousComparison;
@@ -339,10 +340,7 @@ const filterCandidates = (
       return false;
     }
 
-    if (
-      filters.wantedState !== 'all' &&
-      candidate.wantedState !== filters.wantedState
-    ) {
+    if (filters.wantedState !== 'all' && candidate.wantedState !== filters.wantedState) {
       return false;
     }
 
@@ -519,7 +517,9 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
                   : 'Collapse section'}
             </a>
           </div>
-          {(app === 'sonarr' ? sections.sonarrCollapsed : sections.radarrCollapsed) ? null : (
+          {(
+            app === 'sonarr' ? sections.sonarrCollapsed : sections.radarrCollapsed
+          ) ? null : (
             <DataTable
               columns={[
                 { key: 'title', label: 'Title' },
@@ -532,7 +532,16 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
                 { key: 'actions', label: 'Actions', align: 'right' },
               ]}
               rows={pagedCandidates[app].map((candidate) => ({
-                title: candidate.title,
+                title: (
+                  <MediaItemLink
+                    config={runtime.config}
+                    mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
+                      candidate.mediaKey
+                    )}
+                    fallbackTitle={candidate.title}
+                    className="external-item-link"
+                  />
+                ),
                 mediaKey: <code className="reason-code">{candidate.mediaKey}</code>,
                 wantedState: candidate.wantedState,
                 decision: (
@@ -551,7 +560,11 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
                     method="post"
                     className="table-inline-form"
                   >
-                    <input type="hidden" name="csrfToken" value={runtime.csrfTokens.manualFetch} />
+                    <input
+                      type="hidden"
+                      name="csrfToken"
+                      value={runtime.csrfTokens.manualFetch}
+                    />
                     <input type="hidden" name="mediaKey" value={candidate.mediaKey} />
                     <button
                       type="submit"

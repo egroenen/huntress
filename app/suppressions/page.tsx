@@ -1,7 +1,13 @@
 import type { ReactNode } from 'react';
 
 import { createCsrfToken } from '@/src/auth';
-import { ConfirmButton, ConsoleShell, DataTable, SectionCard } from '@/src/ui';
+import {
+  ConfirmButton,
+  ConsoleShell,
+  DataTable,
+  MediaItemLink,
+  SectionCard,
+} from '@/src/ui';
 import { formatServiceName } from '@/src/ui/formatters';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 
@@ -216,7 +222,16 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
           rows={pagedSuppressions.map((suppression) => ({
             title: (
               <div className="suppression-title" title={suppression.mediaKey}>
-                <strong>{resolveTitle(suppression.mediaKey) ?? 'Unknown title'}</strong>
+                <strong>
+                  <MediaItemLink
+                    config={runtime.config}
+                    mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
+                      suppression.mediaKey
+                    )}
+                    fallbackTitle={resolveTitle(suppression.mediaKey) ?? 'Unknown title'}
+                    className="external-item-link"
+                  />
+                </strong>
                 <span className="secondary-value">
                   <code>{suppression.mediaKey}</code>
                 </span>

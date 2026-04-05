@@ -727,6 +727,15 @@ select {
   text-decoration: underline;
 }
 
+.external-item-link {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.external-item-link:hover {
+  text-decoration: underline;
+}
+
 .stat-card-link {
   display: block;
 }

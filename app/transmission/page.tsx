@@ -1,7 +1,13 @@
 import type { ReactNode } from 'react';
 
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
-import { ConsoleShell, DataTable, SectionCard, StatusBadge } from '@/src/ui';
+import {
+  ConsoleShell,
+  DataTable,
+  MediaItemLink,
+  SectionCard,
+  StatusBadge,
+} from '@/src/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -692,7 +698,18 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
               progress: `${Math.round(torrent.percentDone * 100)}%`,
               linkedMediaKey: torrent.linkedMediaKey ? (
                 <div className="linked-media-cell" title={torrent.linkedMediaKey}>
-                  <strong>{resolveTitle(torrent.linkedMediaKey) ?? 'Linked item'}</strong>
+                  <strong>
+                    <MediaItemLink
+                      config={runtime.config}
+                      mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
+                        torrent.linkedMediaKey
+                      )}
+                      fallbackTitle={
+                        resolveTitle(torrent.linkedMediaKey) ?? 'Linked item'
+                      }
+                      className="external-item-link"
+                    />
+                  </strong>
                   <span className="secondary-value">
                     <code>{torrent.linkedMediaKey}</code>
                   </span>
