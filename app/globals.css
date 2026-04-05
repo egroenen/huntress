@@ -727,6 +727,19 @@ select {
   text-decoration: underline;
 }
 
+.console-link-button {
+  appearance: none;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.console-link-button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
 .external-item-link {
   color: var(--accent-strong);
   font-weight: 700;

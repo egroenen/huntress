@@ -4,6 +4,7 @@ import type { CandidateDecision } from '@/src/domain';
 import { getDashboardCandidateSnapshot } from '@/src/server/console-data';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
+  CandidateSectionToggle,
   ConsoleShell,
   DataTable,
   MediaItemLink,
@@ -224,25 +225,6 @@ const renderPagination = (input: {
       </div>
     </div>
   );
-};
-
-const buildCollapseHref = (
-  app: 'sonarr' | 'radarr',
-  collapsed: boolean,
-  filters: CandidateFilters,
-  pages: {
-    sonarrPage: number;
-    radarrPage: number;
-  },
-  sections: CandidateSectionState
-): string => {
-  const nextSections: CandidateSectionState = {
-    ...sections,
-    sonarrCollapsed: app === 'sonarr' ? collapsed : sections.sonarrCollapsed,
-    radarrCollapsed: app === 'radarr' ? collapsed : sections.radarrCollapsed,
-  };
-
-  return `/candidates?${buildCandidateParams(filters, pages, nextSections).toString()}`;
 };
 
 const getComparableTimestamp = (value: string | null): number | null => {
@@ -495,90 +477,77 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
           }
         >
           <div className="candidate-section-controls">
-            <a
-              href={buildCollapseHref(
-                app,
-                !(app === 'sonarr' ? sections.sonarrCollapsed : sections.radarrCollapsed),
-                filters,
-                {
-                  sonarrPage,
-                  radarrPage,
-                },
-                sections
-              )}
-              className="console-link"
-            >
-              {app === 'sonarr'
-                ? sections.sonarrCollapsed
-                  ? 'Expand section'
-                  : 'Collapse section'
-                : sections.radarrCollapsed
-                  ? 'Expand section'
-                  : 'Collapse section'}
-            </a>
+            <CandidateSectionToggle
+              app={app}
+              collapsed={
+                app === 'sonarr' ? sections.sonarrCollapsed : sections.radarrCollapsed
+              }
+            />
           </div>
           {(
             app === 'sonarr' ? sections.sonarrCollapsed : sections.radarrCollapsed
           ) ? null : (
-            <DataTable
-              columns={[
-                { key: 'title', label: 'Title' },
-                { key: 'mediaKey', label: 'Media key' },
-                { key: 'wantedState', label: 'Wanted state' },
-                { key: 'decision', label: 'Decision' },
-                { key: 'reason', label: 'Reason code' },
-                { key: 'retryCount', label: 'Retries', align: 'right' },
-                { key: 'nextEligibleAt', label: 'Next eligible' },
-                { key: 'actions', label: 'Actions', align: 'right' },
-              ]}
-              rows={pagedCandidates[app].map((candidate) => ({
-                title: (
-                  <MediaItemLink
-                    config={runtime.config}
-                    mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
-                      candidate.mediaKey
-                    )}
-                    fallbackTitle={candidate.title}
-                    className="external-item-link"
-                  />
-                ),
-                mediaKey: <code className="reason-code">{candidate.mediaKey}</code>,
-                wantedState: candidate.wantedState,
-                decision: (
-                  <StatusBadge
-                    status={candidate.decision === 'dispatch' ? 'success' : 'degraded'}
-                  >
-                    {candidate.decision}
-                  </StatusBadge>
-                ),
-                reason: <ReasonCodeBadge reasonCode={candidate.reasonCode} />,
-                retryCount: candidate.retryCount,
-                nextEligibleAt: formatTimestamp(candidate.nextEligibleAt),
-                actions: (
-                  <form
-                    action="/api/actions/manual-fetch"
-                    method="post"
-                    className="table-inline-form"
-                  >
-                    <input
-                      type="hidden"
-                      name="csrfToken"
-                      value={runtime.csrfTokens.manualFetch}
+            <div id={`${app}-candidates-table`}>
+              <DataTable
+                columns={[
+                  { key: 'title', label: 'Title' },
+                  { key: 'mediaKey', label: 'Media key' },
+                  { key: 'wantedState', label: 'Wanted state' },
+                  { key: 'decision', label: 'Decision' },
+                  { key: 'reason', label: 'Reason code' },
+                  { key: 'retryCount', label: 'Retries', align: 'right' },
+                  { key: 'nextEligibleAt', label: 'Next eligible' },
+                  { key: 'actions', label: 'Actions', align: 'right' },
+                ]}
+                rows={pagedCandidates[app].map((candidate) => ({
+                  title: (
+                    <MediaItemLink
+                      config={runtime.config}
+                      mediaItem={runtime.database.repositories.mediaItemState.getByMediaKey(
+                        candidate.mediaKey
+                      )}
+                      fallbackTitle={candidate.title}
+                      className="external-item-link"
                     />
-                    <input type="hidden" name="mediaKey" value={candidate.mediaKey} />
-                    <button
-                      type="submit"
-                      className="candidate-action-button"
-                      title="Manually trigger a scoped search for this item now. This overrides normal cooldown and rolling search limits."
-                      aria-label={`Manual fetch ${candidate.title}`}
+                  ),
+                  mediaKey: <code className="reason-code">{candidate.mediaKey}</code>,
+                  wantedState: candidate.wantedState,
+                  decision: (
+                    <StatusBadge
+                      status={candidate.decision === 'dispatch' ? 'success' : 'degraded'}
                     >
-                      Fetch now
-                    </button>
-                  </form>
-                ),
-              }))}
-              emptyMessage={`No ${app} candidates are currently available.`}
-            />
+                      {candidate.decision}
+                    </StatusBadge>
+                  ),
+                  reason: <ReasonCodeBadge reasonCode={candidate.reasonCode} />,
+                  retryCount: candidate.retryCount,
+                  nextEligibleAt: formatTimestamp(candidate.nextEligibleAt),
+                  actions: (
+                    <form
+                      action="/api/actions/manual-fetch"
+                      method="post"
+                      className="table-inline-form"
+                    >
+                      <input
+                        type="hidden"
+                        name="csrfToken"
+                        value={runtime.csrfTokens.manualFetch}
+                      />
+                      <input type="hidden" name="mediaKey" value={candidate.mediaKey} />
+                      <button
+                        type="submit"
+                        className="candidate-action-button"
+                        title="Manually trigger a scoped search for this item now. This overrides normal cooldown and rolling search limits."
+                        aria-label={`Manual fetch ${candidate.title}`}
+                      >
+                        Fetch now
+                      </button>
+                    </form>
+                  ),
+                }))}
+                emptyMessage={`No ${app} candidates are currently available.`}
+              />
+            </div>
           )}
         </SectionCard>
       ))}

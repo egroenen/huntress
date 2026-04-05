@@ -429,7 +429,7 @@ export default async function HomePage() {
           rows={candidates.all.slice(0, 8).map((candidate) => ({
             app: (
               <span className="table-app-label table-app-label--inline">
-                {candidate.app}
+                {formatServiceName(candidate.app)}
               </span>
             ),
             title: (
