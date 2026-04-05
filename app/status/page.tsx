@@ -1,7 +1,15 @@
 import { getActivityFeedState } from '@/src/observability';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import { AutoRefresh } from '@/src/ui/auto-refresh';
-import { ConsoleShell, DataTable, SectionCard, StatCard, StatsGrid, StatusBadge } from '@/src/ui';
+import {
+  ConsoleShell,
+  DataTable,
+  SectionCard,
+  StatCard,
+  StatsGrid,
+  StatusBadge,
+} from '@/src/ui';
+import { formatShortRunId } from '@/src/ui/formatters';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,10 +24,7 @@ const formatTimestamp = (value: string | null): string => {
   }).format(new Date(value));
 };
 
-const formatProgress = (
-  current: number | null,
-  total: number | null
-): string => {
+const formatProgress = (current: number | null, total: number | null): string => {
   if (current === null && total === null) {
     return 'n/a';
   }
@@ -97,7 +102,10 @@ export default async function StatusPage() {
         />
         <StatCard
           label="Progress"
-          value={formatProgress(current?.progressCurrent ?? null, current?.progressTotal ?? null)}
+          value={formatProgress(
+            current?.progressCurrent ?? null,
+            current?.progressTotal ?? null
+          )}
           detail={
             current?.progressTotal
               ? `${Math.round(((current.progressCurrent ?? 0) / current.progressTotal) * 100)}% complete`
@@ -112,7 +120,11 @@ export default async function StatusPage() {
         actions={
           activeRun ? (
             <form action="/api/actions/recover-run" method="post">
-              <input type="hidden" name="csrfToken" value={runtime.csrfTokens.recoverRun} />
+              <input
+                type="hidden"
+                name="csrfToken"
+                value={runtime.csrfTokens.recoverRun}
+              />
               <button type="submit" className="table-inline-button">
                 Recover run
               </button>
@@ -134,7 +146,8 @@ export default async function StatusPage() {
           </div>
           <h4>{current?.message ?? 'No active work right now.'}</h4>
           <p className="activity-panel__detail">
-            {current?.detail ?? 'This page refreshes automatically while the service is running.'}
+            {current?.detail ??
+              'This page refreshes automatically while the service is running.'}
           </p>
           <div className="activity-progress">
             <div
@@ -159,7 +172,11 @@ export default async function StatusPage() {
             <span>Updated {formatTimestamp(current?.occurredAt ?? null)}</span>
             <span>Run {current?.runId ?? 'n/a'}</span>
             <span>
-              Progress {formatProgress(current?.progressCurrent ?? null, current?.progressTotal ?? null)}
+              Progress{' '}
+              {formatProgress(
+                current?.progressCurrent ?? null,
+                current?.progressTotal ?? null
+              )}
             </span>
             {activeRun ? (
               <span>
@@ -185,9 +202,13 @@ export default async function StatusPage() {
             { key: 'run', label: 'Run' },
           ]}
           rows={activity.recent.map((event) => ({
-            time: formatTimestamp(event.occurredAt),
+            time: (
+              <span className="timestamp-cell">{formatTimestamp(event.occurredAt)}</span>
+            ),
             source: (
-              <span className="table-app-label table-app-label--inline">{event.source}</span>
+              <span className="table-app-label table-app-label--inline">
+                {event.source}
+              </span>
             ),
             stage: (
               <span className="activity-stage">
@@ -204,7 +225,13 @@ export default async function StatusPage() {
               </div>
             ),
             progress: formatProgress(event.progressCurrent, event.progressTotal),
-            run: event.runId ?? 'n/a',
+            run: event.runId ? (
+              <span className="run-id-cell" title={event.runId}>
+                {formatShortRunId(event.runId)}
+              </span>
+            ) : (
+              'n/a'
+            ),
           }))}
           emptyMessage="No activity has been recorded yet."
         />

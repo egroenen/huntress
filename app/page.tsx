@@ -16,6 +16,11 @@ import {
   StatsGrid,
   StatusBadge,
 } from '@/src/ui';
+import {
+  formatDisplayMode,
+  formatRunTypeLabel,
+  formatServiceName,
+} from '@/src/ui/formatters';
 
 export const dynamic = 'force-dynamic';
 
@@ -114,8 +119,6 @@ const toRunSummaryShape = (
   return isRecord(summary) ? (summary as RunSummaryShape) : {};
 };
 
-const formatRunType = (value: string): string => value.replaceAll('_', ' ');
-
 export default async function HomePage() {
   const runtime = await requireAuthenticatedConsoleContext();
   const [dependencies, latestRun] = await Promise.all([
@@ -149,51 +152,64 @@ export default async function HomePage() {
       schedulerStatus={runtime.scheduler.getStatus()}
       actionTokens={runtime.csrfTokens}
     >
-      <StatsGrid>
-        <StatCard
-          label="Mode"
-          value={runtime.config.mode === 'live' ? 'Live dispatch' : 'Dry-run'}
-          tone={runtime.config.mode === 'live' ? 'success' : 'warn'}
-          detail={`Next cycle ${formatTimestamp(runtime.scheduler.getStatus().nextScheduledRunAt)}`}
-        />
-        <StatCard
-          label="Candidates"
-          value={candidates.all.length}
-          detail={`${dispatchableCount} dispatchable, ${skippedCount} skipped`}
-        />
-        <StatCard
-          label="Active suppressions"
-          value={suppressions.length}
-          detail="Release- and item-level blocks currently active"
-        />
-        <StatCard
-          label="Search rate"
-          value={`${searchRate.windows[0]?.used ?? 0}/${searchRate.windows[0]?.limit ?? 0}`}
-          tone={searchRate.currentThrottleReason ? 'warn' : 'default'}
-          detail={
-            searchRate.currentThrottleReason
-              ? `${searchRate.currentThrottleReason} until ${formatTimestamp(searchRate.nextEligibleAt)}`
-              : 'Dispatch budget currently available'
-          }
-        />
-        <StatCard
-          label="Last run"
-          value={latestRun?.status ?? 'none'}
-          tone={
-            latestRun?.status === 'success'
-              ? 'success'
-              : latestRun?.status === 'partial'
-                ? 'warn'
-                : latestRun?.status === 'failed'
-                  ? 'danger'
-                  : 'default'
-          }
-          detail={
-            latestRun
-              ? formatTimestamp(latestRun.finishedAt ?? latestRun.startedAt)
-              : 'No runs yet'
-          }
-        />
+      <StatsGrid className="stats-grid--overview">
+        <Link href="/settings" className="stat-card-link">
+          <StatCard
+            label="Dispatch mode"
+            value={formatDisplayMode(runtime.config.mode)}
+            tone={runtime.config.mode === 'live' ? 'success' : 'warn'}
+            detail={`Next cycle ${formatTimestamp(runtime.scheduler.getStatus().nextScheduledRunAt)}`}
+          />
+        </Link>
+        <Link href="/candidates" className="stat-card-link">
+          <StatCard
+            label="Candidates"
+            value={candidates.all.length}
+            detail={`${dispatchableCount} dispatchable, ${skippedCount} skipped`}
+          />
+        </Link>
+        <Link href="/suppressions" className="stat-card-link">
+          <StatCard
+            label="Active suppressions"
+            value={suppressions.length}
+            detail="Release-level blocks currently active"
+          />
+        </Link>
+        <Link href="/settings" className="stat-card-link">
+          <StatCard
+            label="Dispatch budget (15m)"
+            value={`${searchRate.windows[0]?.used ?? 0}/${searchRate.windows[0]?.limit ?? 0}`}
+            tone={searchRate.currentThrottleReason ? 'warn' : 'default'}
+            detail={
+              searchRate.currentThrottleReason
+                ? `${searchRate.currentThrottleReason} until ${formatTimestamp(searchRate.nextEligibleAt)}`
+                : 'Dispatch budget currently available'
+            }
+          />
+        </Link>
+        <Link
+          href={latestRun ? `/runs/${latestRun.id}` : '/runs'}
+          className="stat-card-link"
+        >
+          <StatCard
+            label="Last run"
+            value={latestRun?.status ?? 'none'}
+            tone={
+              latestRun?.status === 'success'
+                ? 'success'
+                : latestRun?.status === 'partial'
+                  ? 'warn'
+                  : latestRun?.status === 'failed'
+                    ? 'danger'
+                    : 'default'
+            }
+            detail={
+              latestRun
+                ? formatTimestamp(latestRun.finishedAt ?? latestRun.startedAt)
+                : 'No runs yet'
+            }
+          />
+        </Link>
       </StatsGrid>
 
       <SectionCard
@@ -222,7 +238,7 @@ export default async function HomePage() {
         {latestRun ? (
           <div className="latest-run">
             <StatsGrid>
-              <StatCard label="Run type" value={formatRunType(latestRun.runType)} />
+              <StatCard label="Run type" value={formatRunTypeLabel(latestRun.runType)} />
               <StatCard
                 label="Status"
                 value={latestRun.status}
@@ -244,22 +260,14 @@ export default async function HomePage() {
                   latestRunSummary.liveDispatchAllowed === undefined
                     ? latestRun.runType === 'manual_dry'
                       ? 'Dry only'
-                      : 'Live allowed'
+                      : 'Live dispatch'
                     : latestRunSummary.liveDispatchAllowed
-                      ? 'Live allowed'
+                      ? 'Live dispatch'
                       : 'Dry only'
                 }
               />
             </StatsGrid>
             <div className="latest-run__summary">
-              <div>
-                <span className="console-meta__label">Run type</span>
-                <strong>{formatRunType(latestRun.runType)}</strong>
-              </div>
-              <div>
-                <span className="console-meta__label">Status</span>
-                <StatusBadge status={latestRun.status}>{latestRun.status}</StatusBadge>
-              </div>
               <div>
                 <span className="console-meta__label">Started</span>
                 <strong>{formatTimestamp(latestRun.startedAt)}</strong>
@@ -272,8 +280,20 @@ export default async function HomePage() {
                 <span className="console-meta__label">Requested run type</span>
                 <strong>
                   {latestRunSummary.requestedRunType
-                    ? formatRunType(latestRunSummary.requestedRunType)
-                    : formatRunType(latestRun.runType)}
+                    ? formatRunTypeLabel(latestRunSummary.requestedRunType)
+                    : formatRunTypeLabel(latestRun.runType)}
+                </strong>
+              </div>
+              <div>
+                <span className="console-meta__label">Live dispatch allowed</span>
+                <strong>
+                  {latestRunSummary.liveDispatchAllowed === undefined
+                    ? latestRun.runType === 'manual_dry'
+                      ? 'No'
+                      : 'Yes'
+                    : latestRunSummary.liveDispatchAllowed
+                      ? 'Yes'
+                      : 'No'}
                 </strong>
               </div>
             </div>
@@ -288,7 +308,7 @@ export default async function HomePage() {
                 {latestRunSyncRows.map((row) => (
                   <article key={row.app} className="latest-run__detail-card">
                     <div className="latest-run__detail-card-header">
-                      <strong>{row.app}</strong>
+                      <strong>{formatServiceName(row.app)}</strong>
                       <StatusBadge
                         status={row.status === 'synced' ? 'success' : 'degraded'}
                       >
@@ -300,8 +320,10 @@ export default async function HomePage() {
                       {row.queueCount} queued
                     </p>
                     <p>
-                      fetched {row.missingPagesFetched}/{row.missingTotalPages} missing
-                      pages, {row.cutoffPagesFetched}/{row.cutoffTotalPages} cutoff pages
+                      Missing pages: {row.missingPagesFetched} of {row.missingTotalPages}
+                    </p>
+                    <p>
+                      Cutoff pages: {row.cutoffPagesFetched} of {row.cutoffTotalPages}
                     </p>
                   </article>
                 ))}
@@ -339,7 +361,8 @@ export default async function HomePage() {
                   </article>
                 ) : null}
               </div>
-            ) : latestRunSummary.transmissionSummary || latestRunSummary.dispatchSummary ? (
+            ) : latestRunSummary.transmissionSummary ||
+              latestRunSummary.dispatchSummary ? (
               <div className="latest-run__details-grid">
                 {latestRunSummary.transmissionSummary ? (
                   <article className="latest-run__detail-card">
@@ -464,7 +487,20 @@ export default async function HomePage() {
           ]}
           rows={recentTorrents.map((torrent) => ({
             name: torrent.name,
-            linkedMediaKey: torrent.linkedMediaKey ?? 'unlinked',
+            linkedMediaKey: torrent.linkedMediaKey ? (
+              <div className="linked-media-cell" title={torrent.linkedMediaKey}>
+                <strong>
+                  {runtime.database.repositories.mediaItemState.getByMediaKey(
+                    torrent.linkedMediaKey
+                  )?.title ?? 'Linked item'}
+                </strong>
+                <span className="secondary-value">
+                  <code>{torrent.linkedMediaKey}</code>
+                </span>
+              </div>
+            ) : (
+              'unlinked'
+            ),
             removedAt: formatTimestamp(torrent.removedAt),
             removalReason: torrent.removalReason ? (
               <code className="reason-code">{torrent.removalReason}</code>

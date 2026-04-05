@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
 
@@ -12,6 +13,11 @@ import {
   StatsGrid,
   StatusBadge,
 } from '@/src/ui';
+import {
+  formatRunTypeLabel,
+  formatServiceName,
+  formatShortRunId,
+} from '@/src/ui/formatters';
 
 export const dynamic = 'force-dynamic';
 
@@ -132,18 +138,49 @@ const clampPage = (page: number, totalItems: number): number => {
 };
 
 const buildRunDetailHref = (runId: string, page: number): string =>
-  `/runs/${runId}?page=${page}`;
+  page > 1 ? `/runs/${runId}?page=${page}` : `/runs/${runId}`;
+
+const buildRunDetailSearchHref = (
+  runId: string,
+  page: number,
+  input: { query: string; app: string; decision: string }
+): string => {
+  const params = new URLSearchParams();
+
+  if (input.query.trim()) {
+    params.set('q', input.query.trim());
+  }
+
+  if (input.app) {
+    params.set('app', input.app);
+  }
+
+  if (input.decision) {
+    params.set('decision', input.decision);
+  }
+
+  if (page > 1) {
+    params.set('page', String(page));
+  }
+
+  const suffix = params.toString();
+
+  return suffix ? `/runs/${runId}?${suffix}` : `/runs/${runId}`;
+};
 
 const renderPagination = (
   runId: string,
   currentPage: number,
-  totalItems: number
+  totalItems: number,
+  input: { query: string; app: string; decision: string }
 ): ReactNode => {
   const totalPages = Math.max(Math.ceil(totalItems / PAGE_SIZE), 1);
 
   if (totalItems <= PAGE_SIZE) {
     return (
-      <span className="console-muted">Showing all {totalItems} attempt rows for this run.</span>
+      <span className="console-muted">
+        Showing all {totalItems} attempt rows for this run.
+      </span>
     );
   }
 
@@ -154,14 +191,20 @@ const renderPagination = (
       </span>
       <div className="table-pagination__links">
         {currentPage > 1 ? (
-          <a href={buildRunDetailHref(runId, currentPage - 1)} className="console-link">
+          <a
+            href={buildRunDetailSearchHref(runId, currentPage - 1, input)}
+            className="console-link"
+          >
             Previous
           </a>
         ) : (
           <span className="console-muted">Previous</span>
         )}
         {currentPage < totalPages ? (
-          <a href={buildRunDetailHref(runId, currentPage + 1)} className="console-link">
+          <a
+            href={buildRunDetailSearchHref(runId, currentPage + 1, input)}
+            className="console-link"
+          >
             Next
           </a>
         ) : (
@@ -196,7 +239,11 @@ const buildAttemptRows = (
 
     return {
       attemptedAt: formatTimestamp(attempt.attemptedAt),
-      app: attempt.app,
+      app: (
+        <span className="table-app-label table-app-label--inline">
+          {formatServiceName(attempt.app)}
+        </span>
+      ),
       title: title ?? <span className="console-muted">Unknown title</span>,
       mediaKey: <code className="reason-code">{attempt.mediaKey}</code>,
       decision: (
@@ -221,14 +268,35 @@ const renderRunSummarySection = (
       subtitle="A quick operational view of what this run was, how long it took, and what it actually did."
     >
       <StatsGrid>
-        <StatCard label="Run type" value={run.runType.replace('_', ' ')} />
-        <StatCard label="Status" value={run.status} tone={run.status === 'success' ? 'success' : run.status === 'failed' ? 'danger' : 'warn'} />
-        <StatCard label="Duration" value={formatDuration(run.startedAt, run.finishedAt)} />
+        <StatCard label="Run type" value={formatRunTypeLabel(run.runType)} />
+        <StatCard
+          label="Status"
+          value={run.status}
+          tone={
+            run.status === 'success'
+              ? 'success'
+              : run.status === 'failed'
+                ? 'danger'
+                : 'warn'
+          }
+        />
+        <StatCard
+          label="Duration"
+          value={formatDuration(run.startedAt, run.finishedAt)}
+        />
         <StatCard label="Attempt rows" value={totalAttempts} />
         <StatCard label="Candidates" value={run.candidateCount} />
-        <StatCard label="Dispatches" value={run.dispatchCount} tone={run.dispatchCount > 0 ? 'success' : 'default'} />
-        <StatCard label="Skips" value={run.skipCount} tone={run.skipCount > 0 ? 'warn' : 'default'} />
-        <StatCard label="Errors" value={run.errorCount} tone={run.errorCount > 0 ? 'danger' : 'default'} />
+        <StatCard
+          label="Dispatches"
+          value={run.dispatchCount}
+          tone={run.dispatchCount > 0 ? 'success' : 'default'}
+        />
+        <StatCard label="Skips" value={run.skipCount} tone="default" />
+        <StatCard
+          label="Errors"
+          value={run.errorCount}
+          tone={run.errorCount > 0 ? 'danger' : 'default'}
+        />
       </StatsGrid>
 
       <div className="latest-run__summary">
@@ -242,7 +310,11 @@ const renderRunSummarySection = (
         </div>
         <div>
           <span className="console-meta__label">Requested run type</span>
-          <strong>{summary.requestedRunType?.replace('_', ' ') ?? run.runType.replace('_', ' ')}</strong>
+          <strong>
+            {summary.requestedRunType
+              ? formatRunTypeLabel(summary.requestedRunType)
+              : formatRunTypeLabel(run.runType)}
+          </strong>
         </div>
         <div>
           <span className="console-meta__label">Live dispatch allowed</span>
@@ -325,7 +397,7 @@ const renderSyncSection = (summary: RunSummaryShape) => {
           { key: 'ignored', label: 'Ignored' },
         ]}
         rows={rows.map((row) => ({
-          app: row.app,
+          app: formatServiceName(row.app),
           status: (
             <StatusBadge status={row.status === 'synced' ? 'success' : 'degraded'}>
               {row.status}
@@ -334,7 +406,15 @@ const renderSyncSection = (summary: RunSummaryShape) => {
           missing: row.missingCount,
           cutoff: row.cutoffCount,
           queue: row.queueCount,
-          pages: `missing ${row.missingPagesFetched}/${row.missingTotalPages}, cutoff ${row.cutoffPagesFetched}/${row.cutoffTotalPages}`,
+          pages: (
+            <div>
+              <strong>Missing:</strong> {row.missingPagesFetched} /{' '}
+              {row.missingTotalPages}
+              <span className="secondary-value">
+                <strong>Cutoff:</strong> {row.cutoffPagesFetched} / {row.cutoffTotalPages}
+              </span>
+            </div>
+          ),
           upserted: row.upsertedCount,
           ignored: row.ignoredCount,
         }))}
@@ -355,8 +435,14 @@ const renderTransmissionSection = (summary: RunSummaryShape) => {
       subtitle="How the Transmission guard pass behaved during this run."
     >
       <StatsGrid>
-        <StatCard label="Observed torrents" value={summary.transmissionSummary.observedCount} />
-        <StatCard label="Linked torrents" value={summary.transmissionSummary.linkedCount} />
+        <StatCard
+          label="Observed torrents"
+          value={summary.transmissionSummary.observedCount}
+        />
+        <StatCard
+          label="Linked torrents"
+          value={summary.transmissionSummary.linkedCount}
+        />
         <StatCard
           label="Removed torrents"
           value={summary.transmissionSummary.removedCount}
@@ -425,35 +511,79 @@ export default async function RunDetailPage({
   }
 
   const totalAttempts = runtime.database.repositories.searchAttempts.countByRunId(id);
-  const currentPage = clampPage(parsePositivePage(resolvedSearchParams.page), totalAttempts);
-  const attempts = runtime.database.repositories.searchAttempts.listPageByRunId(
-    id,
-    PAGE_SIZE,
-    (currentPage - 1) * PAGE_SIZE
-  );
+  const attemptQuery = Array.isArray(resolvedSearchParams.q)
+    ? (resolvedSearchParams.q[0] ?? '')
+    : (resolvedSearchParams.q ?? '');
+  const attemptApp = Array.isArray(resolvedSearchParams.app)
+    ? (resolvedSearchParams.app[0] ?? '')
+    : (resolvedSearchParams.app ?? '');
+  const attemptDecision = Array.isArray(resolvedSearchParams.decision)
+    ? (resolvedSearchParams.decision[0] ?? '')
+    : (resolvedSearchParams.decision ?? '');
+  const allAttempts = runtime.database.repositories.searchAttempts.listByRunId(id);
   const summary = toRunSummaryShape(run);
   const titleCache = new Map<string, string | null>();
   const resolveTitle = (mediaKey: string) => {
     if (!titleCache.has(mediaKey)) {
       titleCache.set(
         mediaKey,
-        runtime.database.repositories.mediaItemState.getByMediaKey(mediaKey)?.title ?? null
+        runtime.database.repositories.mediaItemState.getByMediaKey(mediaKey)?.title ??
+          null
       );
     }
 
     return titleCache.get(mediaKey) ?? null;
   };
+  const filteredAttempts = allAttempts.filter((attempt) => {
+    if (attemptApp && attempt.app !== attemptApp) {
+      return false;
+    }
+
+    if (attemptDecision && attempt.decision !== attemptDecision) {
+      return false;
+    }
+
+    if (attemptQuery.trim()) {
+      const haystack = [
+        resolveTitle(attempt.mediaKey) ?? '',
+        attempt.mediaKey,
+        attempt.reasonCode,
+        attempt.outcome ?? '',
+        attempt.app,
+        attempt.decision,
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      if (!haystack.includes(attemptQuery.trim().toLowerCase())) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+  const currentPage = clampPage(
+    parsePositivePage(resolvedSearchParams.page),
+    filteredAttempts.length
+  );
+  const attempts = filteredAttempts.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
 
   return (
     <ConsoleShell
       title="Run detail"
-      subtitle={`Detailed attempt records and operational summary for ${run.id}.`}
+      subtitle={`${formatRunTypeLabel(run.runType)} · ${formatTimestamp(run.startedAt)} · ${formatShortRunId(run.id)}`}
       activePath="/runs"
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
       actionTokens={runtime.csrfTokens}
     >
+      <Link href="/runs" className="console-link run-breadcrumb">
+        ← Run history
+      </Link>
       {renderRunSummarySection(run, summary, totalAttempts)}
       {renderManualFetchSection(summary)}
       {renderSyncSection(summary)}
@@ -463,11 +593,62 @@ export default async function RunDetailPage({
       <SectionCard
         title="Attempt log"
         subtitle="One row per evaluated or dispatched item, with current title lookup where available."
-        actions={renderPagination(id, currentPage, totalAttempts)}
+        actions={renderPagination(id, currentPage, filteredAttempts.length, {
+          query: attemptQuery,
+          app: attemptApp,
+          decision: attemptDecision,
+        })}
       >
+        <form
+          action={buildRunDetailHref(id, 1)}
+          method="get"
+          className="candidate-filters"
+        >
+          <div className="candidate-filters__grid">
+            <label className="candidate-filters__field candidate-filters__field--wide">
+              <span>Search</span>
+              <input
+                type="search"
+                name="q"
+                defaultValue={attemptQuery}
+                placeholder="Title, media key, reason, outcome, or decision"
+              />
+            </label>
+            <label className="candidate-filters__field">
+              <span>App</span>
+              <select name="app" defaultValue={attemptApp}>
+                <option value="">All apps</option>
+                <option value="sonarr">Sonarr</option>
+                <option value="radarr">Radarr</option>
+              </select>
+            </label>
+            <label className="candidate-filters__field">
+              <span>Decision</span>
+              <select name="decision" defaultValue={attemptDecision}>
+                <option value="">All decisions</option>
+                <option value="dispatch">Dispatch</option>
+                <option value="skip">Skip</option>
+              </select>
+            </label>
+          </div>
+          <div className="candidate-filters__actions">
+            <span className="console-muted">
+              {filteredAttempts.length} matching attempt row
+              {filteredAttempts.length === 1 ? '' : 's'} of {totalAttempts}
+            </span>
+            <div className="transmission-controls__links">
+              <a href={buildRunDetailHref(id, 1)} className="console-link">
+                Clear filters
+              </a>
+              <button type="submit" className="console-button">
+                Apply filters
+              </button>
+            </div>
+          </div>
+        </form>
         <DataTable
           columns={[
-            { key: 'attemptedAt', label: 'At' },
+            { key: 'attemptedAt', label: 'Time' },
             { key: 'app', label: 'App' },
             { key: 'title', label: 'Title' },
             { key: 'mediaKey', label: 'Media key' },

@@ -413,7 +413,8 @@ const renderPagination = (input: {
   return (
     <div className="table-pagination">
       <span className="console-muted">
-        Page {input.currentPage} of {totalPages} · {input.totalItems} cached torrent observations
+        Page {input.currentPage} of {totalPages} · {input.totalItems} cached torrent
+        observations
       </span>
       <div className="table-pagination__links">
         {input.currentPage > 1 ? (
@@ -462,6 +463,22 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
   const guardFilter = parseGuardFilter(searchParams.guard);
   const linkedFilter = parseLinkedFilter(searchParams.linked);
   const allTorrents = runtime.database.repositories.transmissionTorrentState.listAll();
+  const titleCache = new Map<string, string | null>();
+  const resolveTitle = (mediaKey: string | null) => {
+    if (!mediaKey) {
+      return null;
+    }
+
+    if (!titleCache.has(mediaKey)) {
+      titleCache.set(
+        mediaKey,
+        runtime.database.repositories.mediaItemState.getByMediaKey(mediaKey)?.title ??
+          null
+      );
+    }
+
+    return titleCache.get(mediaKey) ?? null;
+  };
   const now = new Date();
   const filteredTorrents = allTorrents.filter((torrent) => {
     const insight = getGuardInsight({
@@ -477,6 +494,7 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
     if (query) {
       const haystack = [
         torrent.name,
+        resolveTitle(torrent.linkedMediaKey) ?? '',
         torrent.linkedMediaKey ?? '',
         torrent.removalReason ?? '',
         insight.label,
@@ -506,7 +524,10 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
     return true;
   });
   const sortedTorrents = sortTorrents(filteredTorrents, sort);
-  const currentPage = clampPage(parsePositivePage(searchParams.page), sortedTorrents.length);
+  const currentPage = clampPage(
+    parsePositivePage(searchParams.page),
+    sortedTorrents.length
+  );
   const start = (currentPage - 1) * PAGE_SIZE;
   const pagedTorrents = sortedTorrents.slice(start, start + PAGE_SIZE);
 
@@ -544,8 +565,8 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
         <div className="candidate-filters transmission-controls">
           {state === 'cache-reset' ? (
             <p className="settings-notice is-success">
-              Transmission cache cleared. The next sync or guard pass will rebuild observations
-              from fresh data.
+              Transmission cache cleared. The next sync or guard pass will rebuild
+              observations from fresh data.
             </p>
           ) : null}
 
@@ -601,7 +622,7 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
 
             <div className="transmission-controls__actions">
               <button type="submit" className="console-button">
-                Apply sort
+                Apply filters
               </button>
             </div>
           </form>
@@ -667,21 +688,25 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
                   {formatTransmissionState(torrent.status)}
                 </span>
               ),
-              guard: (
-                <StatusBadge status={insight.tone}>
-                  {insight.label}
-                </StatusBadge>
-              ),
+              guard: <StatusBadge status={insight.tone}>{insight.label}</StatusBadge>,
               progress: `${Math.round(torrent.percentDone * 100)}%`,
-              linkedMediaKey: torrent.linkedMediaKey ?? 'unlinked',
+              linkedMediaKey: torrent.linkedMediaKey ? (
+                <div className="linked-media-cell" title={torrent.linkedMediaKey}>
+                  <strong>{resolveTitle(torrent.linkedMediaKey) ?? 'Linked item'}</strong>
+                  <span className="secondary-value">
+                    <code>{torrent.linkedMediaKey}</code>
+                  </span>
+                </div>
+              ) : (
+                <span className="console-muted">unlinked</span>
+              ),
               noProgressSince: torrent.noProgressSince ? (
-                <span>
-                  {formatTimestamp(torrent.noProgressSince)}
-                  <br />
-                  <span className="console-muted">
+                <div className="linked-media-cell">
+                  <strong>{formatTimestamp(torrent.noProgressSince)}</strong>
+                  <span className="secondary-value">
                     {formatDurationSince(torrent.noProgressSince, now)} ago
                   </span>
-                </span>
+                </div>
               ) : (
                 <span className="console-muted">active / none</span>
               ),

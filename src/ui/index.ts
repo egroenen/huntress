@@ -11,3 +11,4 @@ export {
   type ConsoleActionTokens,
   type DependencyHealthCard,
 } from './operator-console';
+export { ConfirmButton } from './confirm-button';

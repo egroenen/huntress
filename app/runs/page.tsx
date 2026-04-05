@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import { ConsoleShell, DataTable, SectionCard, StatusBadge } from '@/src/ui';
+import { formatRunTypeLabel } from '@/src/ui/formatters';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,15 +103,21 @@ export default async function RunsPage(props: { searchParams: SearchParams }) {
             { key: 'status', label: 'Status' },
             { key: 'startedAt', label: 'Started' },
             { key: 'finishedAt', label: 'Finished' },
-            { key: 'counts', label: 'Counts' },
+            { key: 'candidates', label: 'Candidates', align: 'right' },
+            { key: 'dispatches', label: 'Dispatches', align: 'right' },
+            { key: 'skips', label: 'Skips', align: 'right' },
+            { key: 'errors', label: 'Errors', align: 'right' },
             { key: 'detail', label: 'Detail', align: 'right' },
           ]}
           rows={runs.map((run) => ({
-            runType: run.runType.replace('_', ' '),
+            runType: formatRunTypeLabel(run.runType),
             status: <StatusBadge status={run.status}>{run.status}</StatusBadge>,
             startedAt: formatTimestamp(run.startedAt),
             finishedAt: formatTimestamp(run.finishedAt),
-            counts: `${run.candidateCount} / ${run.dispatchCount} / ${run.skipCount} / ${run.errorCount}`,
+            candidates: run.candidateCount,
+            dispatches: run.dispatchCount,
+            skips: run.skipCount,
+            errors: run.errorCount,
             detail: (
               <Link href={`/runs/${run.id}`} className="console-link">
                 View

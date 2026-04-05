@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import type { SchedulerCoordinatorStatus } from '@/src/scheduler';
+import { formatDisplayMode } from './formatters';
 
 type NavPath =
   | '/'
@@ -42,6 +43,7 @@ interface ConsoleShellProps {
 
 interface StatsGridProps {
   children: ReactNode;
+  className?: string;
 }
 
 interface StatCardProps {
@@ -106,6 +108,7 @@ export const StatusBadge = ({
     'unavailable',
     'running',
     'success',
+    'info',
     'partial',
     'failed',
   ].includes(status)
@@ -212,8 +215,8 @@ export const ConsoleShell = ({
 
         <div className="console-sidebar__meta">
           <div>
-            <span className="console-meta__label">Mode</span>
-            <strong>{mode}</strong>
+            <span className="console-meta__label">Dispatch mode</span>
+            <strong>{formatDisplayMode(mode)}</strong>
           </div>
           <div>
             <span className="console-meta__label">Next cycle</span>
@@ -229,7 +232,6 @@ export const ConsoleShell = ({
       <main className="console-main">
         <header className="console-header">
           <div>
-            <p className="console-header__eyebrow">Deterministic re-search control</p>
             <h2>{title}</h2>
             <p>{subtitle}</p>
           </div>
@@ -244,16 +246,14 @@ export const ConsoleShell = ({
                     : 'Dry-run mode is enabled. The system will evaluate and record decisions, but it will not send real searches.'
                 }
                 ariaLabel={
-                  mode === 'live'
-                    ? 'Live dispatch enabled'
-                    : 'Dry-run mode enabled'
+                  mode === 'live' ? 'Live dispatch enabled' : 'Dry-run mode enabled'
                 }
               >
                 {mode === 'live' ? 'live dispatch' : 'dry-run mode'}
               </StatusBadge>
               {schedulerStatus.startupGraceActive ? (
                 <StatusBadge
-                  status="degraded"
+                  status="info"
                   title="Startup grace is active. Automatic live dispatch is temporarily paused while the service settles after startup."
                   ariaLabel="Startup grace active"
                 >
@@ -339,8 +339,9 @@ export const ConsoleShell = ({
   );
 };
 
-export const StatsGrid = ({ children }: StatsGridProps) => {
-  return <section className="stats-grid">{children}</section>;
+export const StatsGrid = ({ children, className }: StatsGridProps) => {
+  const classes = ['stats-grid', className].filter(Boolean).join(' ');
+  return <section className={classes}>{children}</section>;
 };
 
 export const StatCard = ({ label, value, tone = 'default', detail }: StatCardProps) => {
