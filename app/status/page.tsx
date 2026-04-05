@@ -1,8 +1,10 @@
 import { getActivityFeedState } from '@/src/observability';
+import { recoverRunAction } from '@/src/server/actions';
 import { probeDependencyHealth } from '@/src/server/console-data';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import { AutoRefresh } from '@/src/ui/auto-refresh';
 import {
+  ConsoleHeaderActions,
   ConsoleShell,
   DataTable,
   SectionCard,
@@ -17,6 +19,8 @@ import {
 } from '@/src/ui/formatters';
 
 export const dynamic = 'force-dynamic';
+
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 const formatTimestamp = (value: string | null): string => {
   if (!value) {
@@ -56,9 +60,16 @@ const toBadgeStatus = (
   return active ? 'running' : 'success';
 };
 
-export default async function StatusPage() {
+const parseStringParam = (value: string | string[] | undefined): string | undefined => {
+  return typeof value === 'string' ? value : Array.isArray(value) ? value[0] : undefined;
+};
+
+export default async function StatusPage(props: { searchParams: SearchParams }) {
+  const searchParams = await props.searchParams;
   const runtime = await requireAuthenticatedConsoleContext();
   const dependencyCards = await probeDependencyHealth(runtime);
+  const notice = parseStringParam(searchParams.notice);
+  const noticeStatus = parseStringParam(searchParams.status);
   const activity = getActivityFeedState(runtime.database);
   const current = activity.current;
   const schedulerStatus = runtime.scheduler.getStatus();
@@ -73,8 +84,14 @@ export default async function StatusPage() {
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={schedulerStatus}
-      actionTokens={runtime.csrfTokens}
       dependencyCards={dependencyCards}
+      headerActions={
+        <ConsoleHeaderActions
+          mode={runtime.config.mode}
+          schedulerStatus={schedulerStatus}
+          actionTokens={runtime.csrfTokens}
+        />
+      }
     >
       <AutoRefresh intervalMs={5000} enabled={autoRefreshEnabled} />
 
@@ -139,7 +156,7 @@ export default async function StatusPage() {
               </span>
             ) : null}
             {activeRun ? (
-              <form action="/api/actions/recover-run" method="post">
+              <form action={recoverRunAction}>
                 <input
                   type="hidden"
                   name="csrfToken"
@@ -153,6 +170,18 @@ export default async function StatusPage() {
           </div>
         }
       >
+        {notice ? (
+          <p
+            className={
+              noticeStatus === 'success'
+                ? 'settings-notice is-success'
+                : 'settings-notice is-error'
+            }
+          >
+            {notice}
+          </p>
+        ) : null}
+
         <div className="activity-panel">
           <div className="activity-panel__header">
             <div>

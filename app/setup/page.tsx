@@ -1,12 +1,22 @@
 import { redirect } from 'next/navigation';
 
 import { createCsrfToken, isBootstrapRequired } from '@/src/auth';
+import { setupAction } from '@/src/server/actions';
 import { getAppContext } from '@/src/server/app-context';
 
 export const dynamic = 'force-dynamic';
 
-export default async function SetupPage() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+const parseStringParam = (value: string | string[] | undefined): string | undefined => {
+  return typeof value === 'string' ? value : Array.isArray(value) ? value[0] : undefined;
+};
+
+export default async function SetupPage(props: { searchParams: SearchParams }) {
+  const searchParams = await props.searchParams;
   const { config, database } = await getAppContext();
+  const notice = parseStringParam(searchParams.notice);
+  const noticeStatus = parseStringParam(searchParams.status);
 
   if (!isBootstrapRequired(database)) {
     redirect('/login');
@@ -24,7 +34,19 @@ export default async function SetupPage() {
           created.
         </p>
 
-        <form action="/auth/setup" method="post" className="auth-form">
+        {notice ? (
+          <p
+            className={
+              noticeStatus === 'success'
+                ? 'settings-notice is-success'
+                : 'settings-notice is-error'
+            }
+          >
+            {notice}
+          </p>
+        ) : null}
+
+        <form action={setupAction} className="auth-form">
           <input type="hidden" name="csrfToken" value={csrfToken} />
 
           <label>

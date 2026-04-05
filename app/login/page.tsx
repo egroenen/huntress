@@ -6,12 +6,22 @@ import {
   resolveAuthenticatedSession,
   SESSION_COOKIE_NAME,
 } from '@/src/auth';
+import { loginAction } from '@/src/server/actions';
 import { getAppContext } from '@/src/server/app-context';
 
 export const dynamic = 'force-dynamic';
 
-export default async function LoginPage() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+const parseStringParam = (value: string | string[] | undefined): string | undefined => {
+  return typeof value === 'string' ? value : Array.isArray(value) ? value[0] : undefined;
+};
+
+export default async function LoginPage(props: { searchParams: SearchParams }) {
+  const searchParams = await props.searchParams;
   const { config, cookieStore, database } = await getAppContext();
+  const notice = parseStringParam(searchParams.notice);
+  const noticeStatus = parseStringParam(searchParams.status);
 
   if (isBootstrapRequired(database)) {
     redirect('/setup');
@@ -42,7 +52,19 @@ export default async function LoginPage() {
           Use the built-in local admin account created during first-run setup.
         </p>
 
-        <form action="/auth/login" method="post" className="auth-form">
+        {notice ? (
+          <p
+            className={
+              noticeStatus === 'success'
+                ? 'settings-notice is-success'
+                : 'settings-notice is-error'
+            }
+          >
+            {notice}
+          </p>
+        ) : null}
+
+        <form action={loginAction} className="auth-form">
           <input type="hidden" name="csrfToken" value={csrfToken} />
 
           <label>

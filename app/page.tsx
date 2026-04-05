@@ -10,6 +10,7 @@ import { getSearchRateSnapshot } from '@/src/observability';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   BudgetMeter,
+  ConsoleHeaderActions,
   ConsoleShell,
   DataTable,
   DependencyHealthGrid,
@@ -215,8 +216,14 @@ export default async function HomePage() {
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
-      actionTokens={runtime.csrfTokens}
       dependencyCards={dependencies}
+      headerActions={
+        <ConsoleHeaderActions
+          mode={runtime.config.mode}
+          schedulerStatus={runtime.scheduler.getStatus()}
+          actionTokens={runtime.csrfTokens}
+        />
+      }
     >
       <StatsGrid className="stats-grid--overview">
         <Link href="/settings" className="stat-card-link">

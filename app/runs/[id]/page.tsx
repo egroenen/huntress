@@ -7,6 +7,7 @@ import { probeDependencyHealth } from '@/src/server/console-data';
 import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
+  ConsoleHeaderActions,
   ConsoleShell,
   DataTable,
   MediaItemLink,
@@ -765,8 +766,14 @@ export default async function RunDetailPage({
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
-      actionTokens={runtime.csrfTokens}
       dependencyCards={dependencyCards}
+      headerActions={
+        <ConsoleHeaderActions
+          mode={runtime.config.mode}
+          schedulerStatus={runtime.scheduler.getStatus()}
+          actionTokens={runtime.csrfTokens}
+        />
+      }
     >
       <Link href="/runs" className="console-link run-breadcrumb">
         ← Run history

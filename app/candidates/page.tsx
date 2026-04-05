@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import type { CandidateDecision } from '@/src/domain';
+import { manualFetchAction } from '@/src/server/actions';
 import {
   getCandidateReleasePreviewMap,
   getDashboardCandidateSnapshot,
@@ -11,6 +12,7 @@ import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   CandidateSectionToggle,
+  ConsoleHeaderActions,
   ConsoleShell,
   DataTable,
   ManualFetchButton,
@@ -480,8 +482,14 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
-      actionTokens={runtime.csrfTokens}
       dependencyCards={dependencyCards}
+      headerActions={
+        <ConsoleHeaderActions
+          mode={runtime.config.mode}
+          schedulerStatus={runtime.scheduler.getStatus()}
+          actionTokens={runtime.csrfTokens}
+        />
+      }
     >
       <SectionCard
         title="Search, filter, and sort"
@@ -644,6 +652,7 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
                     nextEligibleAt: formatTimestamp(candidate.nextEligibleAt),
                     actions: (
                       <ManualFetchButton
+                        action={manualFetchAction}
                         mediaKey={candidate.mediaKey}
                         csrfToken={runtime.csrfTokens.manualFetch}
                         label="Fetch now"

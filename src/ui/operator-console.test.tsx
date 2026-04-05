@@ -21,15 +21,6 @@ test('ConsoleShell keeps the Runs nav item active for run detail pages', () => {
       currentUser="ed"
       mode="live"
       schedulerStatus={createSchedulerStatus()}
-      actionTokens={{
-        logout: 'logout',
-        runSync: 'run-sync',
-        runDry: 'run-dry',
-        runLive: 'run-live',
-        recoverRun: 'recover-run',
-        manualFetch: 'manual-fetch',
-        resetTransmissionCache: 'reset-transmission-cache',
-      }}
     >
       <div>content</div>
     </ConsoleShell>

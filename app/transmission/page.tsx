@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react';
 
+import { resetTransmissionCacheAction } from '@/src/server/actions';
 import { probeDependencyHealth } from '@/src/server/console-data';
 import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
+  ConsoleHeaderActions,
   ConsoleShell,
   DataTable,
   MediaItemLink,
@@ -468,6 +470,8 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
   const dependencyCards = await probeDependencyHealth(runtime);
   const searchParams = await props.searchParams;
   const state = parseStringParam(searchParams.state);
+  const notice = parseStringParam(searchParams.notice);
+  const noticeStatus = parseStringParam(searchParams.status);
   const sort = parseSort(searchParams.sort);
   const query = parseStringParam(searchParams.q).trim();
   const guardFilter = parseGuardFilter(searchParams.guard);
@@ -555,14 +559,20 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
-      actionTokens={runtime.csrfTokens}
       dependencyCards={dependencyCards}
+      headerActions={
+        <ConsoleHeaderActions
+          mode={runtime.config.mode}
+          schedulerStatus={runtime.scheduler.getStatus()}
+          actionTokens={runtime.csrfTokens}
+        />
+      }
     >
       <SectionCard
         title="Transmission controls"
         subtitle="Sort the cached observation view and clear the cache when old linkage data needs to be rebuilt from fresh Arr queue state."
         actions={
-          <form action="/api/actions/reset-transmission-cache" method="post">
+          <form action={resetTransmissionCacheAction}>
             <input
               type="hidden"
               name="csrfToken"
@@ -580,6 +590,18 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
         }
       >
         <div className="candidate-filters transmission-controls">
+          {notice ? (
+            <p
+              className={
+                noticeStatus === 'success'
+                  ? 'settings-notice is-success'
+                  : 'settings-notice is-error'
+              }
+            >
+              {notice}
+            </p>
+          ) : null}
+
           {state === 'cache-reset' ? (
             <p className="settings-notice is-success">
               Transmission cache cleared. The next sync or guard pass will rebuild

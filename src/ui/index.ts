@@ -1,4 +1,5 @@
 export {
+  ConsoleHeaderActions,
   ConsoleShell,
   DataTable,
   DependencyHealthGrid,

@@ -3,7 +3,13 @@ import type { ReactNode } from 'react';
 
 import { probeDependencyHealth } from '@/src/server/console-data';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
-import { ConsoleShell, DataTable, SectionCard, StatusBadge } from '@/src/ui';
+import {
+  ConsoleHeaderActions,
+  ConsoleShell,
+  DataTable,
+  SectionCard,
+  StatusBadge,
+} from '@/src/ui';
 import { formatRunTypeLabel } from '@/src/ui/formatters';
 
 export const dynamic = 'force-dynamic';
@@ -187,6 +193,8 @@ export default async function RunsPage(props: { searchParams: SearchParams }) {
   const searchParams = await props.searchParams;
   const runtime = await requireAuthenticatedConsoleContext();
   const dependencyCards = await probeDependencyHealth(runtime);
+  const notice = parseStringParam(searchParams.notice).trim();
+  const noticeStatus = parseStringParam(searchParams.status).trim();
   const pageSize = parsePageSize(searchParams.pageSize);
   const runType = parseStringParam(searchParams.runType).trim();
   const status = parseStringParam(searchParams.status).trim();
@@ -214,8 +222,14 @@ export default async function RunsPage(props: { searchParams: SearchParams }) {
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
-      actionTokens={runtime.csrfTokens}
       dependencyCards={dependencyCards}
+      headerActions={
+        <ConsoleHeaderActions
+          mode={runtime.config.mode}
+          schedulerStatus={runtime.scheduler.getStatus()}
+          actionTokens={runtime.csrfTokens}
+        />
+      }
     >
       <SectionCard
         title="Recent runs"
@@ -230,6 +244,18 @@ export default async function RunsPage(props: { searchParams: SearchParams }) {
           })
         }
       >
+        {notice ? (
+          <p
+            className={
+              noticeStatus === 'success'
+                ? 'settings-notice is-success'
+                : 'settings-notice is-error'
+            }
+          >
+            {notice}
+          </p>
+        ) : null}
+
         <form action="/runs" method="get" className="candidate-filters">
           <div className="candidate-filters__grid">
             <label className="candidate-filters__field">

@@ -1,4 +1,5 @@
 import { getRedactedConfig, probeDependencyHealth } from '@/src/server/console-data';
+import { saveSettingsAction, testConnectionAction } from '@/src/server/actions';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   buildConnectionSettingsFromConfig,
@@ -6,7 +7,12 @@ import {
   buildSchedulerOverridesFromConfig,
   buildSearchSafetyOverridesFromConfig,
 } from '@/src/server/runtime-config';
-import { ConsoleShell, SectionCard, StatusBadge } from '@/src/ui';
+import {
+  ConsoleHeaderActions,
+  ConsoleShell,
+  SectionCard,
+  StatusBadge,
+} from '@/src/ui';
 import { formatConfigSourceLabel, formatServiceName } from '@/src/ui/formatters';
 
 export const dynamic = 'force-dynamic';
@@ -64,8 +70,14 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
-      actionTokens={runtime.csrfTokens}
       dependencyCards={dependencyCards}
+      headerActions={
+        <ConsoleHeaderActions
+          mode={runtime.config.mode}
+          schedulerStatus={runtime.scheduler.getStatus()}
+          actionTokens={runtime.csrfTokens}
+        />
+      }
     >
       <SectionCard
         title="Configuration status"
@@ -112,13 +124,13 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
           </p>
         ) : null}
 
-        <form action="/api/settings/save" method="post" className="settings-form">
+        <form action={saveSettingsAction} className="settings-form">
           <section className="settings-form__section">
             <div className="settings-form__heading">
               <h4>Sonarr</h4>
               <button
                 type="submit"
-                formAction="/api/settings/test/sonarr"
+                formAction={testConnectionAction.bind(null, 'sonarr')}
                 name="csrfToken"
                 value={runtime.csrfTokens.testSonarr}
                 className="console-button console-button--ghost"
@@ -272,7 +284,7 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
               <h4>Radarr</h4>
               <button
                 type="submit"
-                formAction="/api/settings/test/radarr"
+                formAction={testConnectionAction.bind(null, 'radarr')}
                 name="csrfToken"
                 value={runtime.csrfTokens.testRadarr}
                 className="console-button console-button--ghost"
@@ -426,7 +438,7 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
               <h4>Prowlarr</h4>
               <button
                 type="submit"
-                formAction="/api/settings/test/prowlarr"
+                formAction={testConnectionAction.bind(null, 'prowlarr')}
                 name="csrfToken"
                 value={runtime.csrfTokens.testProwlarr}
                 className="console-button console-button--ghost"
@@ -469,7 +481,7 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
               <h4>Transmission</h4>
               <button
                 type="submit"
-                formAction="/api/settings/test/transmission"
+                formAction={testConnectionAction.bind(null, 'transmission')}
                 name="csrfToken"
                 value={runtime.csrfTokens.testTransmission}
                 className="console-button console-button--ghost"

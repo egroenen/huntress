@@ -1,10 +1,15 @@
 import type { ReactNode } from 'react';
 
 import { createCsrfToken } from '@/src/auth';
+import {
+  clearSelectedSuppressionsAction,
+  clearSuppressionAction,
+} from '@/src/server/actions';
 import { probeDependencyHealth } from '@/src/server/console-data';
 import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import {
   ConfirmButton,
+  ConsoleHeaderActions,
   ConsoleShell,
   DataTable,
   MediaItemLink,
@@ -217,8 +222,14 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
-      actionTokens={runtime.csrfTokens}
       dependencyCards={dependencyCards}
+      headerActions={
+        <ConsoleHeaderActions
+          mode={runtime.config.mode}
+          schedulerStatus={runtime.scheduler.getStatus()}
+          actionTokens={runtime.csrfTokens}
+        />
+      }
     >
       <SectionCard
         title="Active suppressions"
@@ -266,8 +277,7 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
         <div className="bulk-actions">
           <form
             id="bulk-clear-selected-form"
-            action="/api/suppressions/clear-selected"
-            method="post"
+            action={clearSelectedSuppressionsAction}
             className="bulk-actions__group"
           >
             <input
@@ -285,8 +295,7 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
             </ConfirmButton>
           </form>
           <form
-            action="/api/suppressions/clear-selected"
-            method="post"
+            action={clearSelectedSuppressionsAction}
             className="bulk-actions__group"
           >
             <input
@@ -374,8 +383,7 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
             expiresAt: formatTimestamp(suppression.expiresAt),
             action: suppression.id ? (
               <form
-                action={`/api/suppressions/${suppression.id}/clear`}
-                method="post"
+                action={clearSuppressionAction.bind(null, suppression.id)}
                 className="table-inline-form"
               >
                 <input
