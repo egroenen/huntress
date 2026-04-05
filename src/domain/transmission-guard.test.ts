@@ -8,6 +8,7 @@ import test from 'node:test';
 import type { ResolvedConfig } from '@/src/config';
 import { initializeDatabase } from '@/src/db';
 import { createTransmissionClient } from '@/src/integrations';
+import type { SonarrApiClient } from '@/src/integrations';
 
 import { runTransmissionGuard } from './transmission-guard';
 
@@ -525,5 +526,131 @@ test('runTransmissionGuard removes torrents that match an active suppressed rele
   } finally {
     database.close();
     await server.close();
+  }
+});
+
+test('runTransmissionGuard removes dangerous Sonarr queue items and permanently suppresses the torrent hash', async () => {
+  const removedQueueItems: Array<{
+    queueId: number;
+    options: {
+      removeFromClient: boolean;
+      blocklist: boolean;
+      skipRedownload: boolean;
+    };
+  }> = [];
+  const databasePath = await createDatabasePath();
+  const database = await initializeDatabase(databasePath);
+  const config = createResolvedConfig();
+
+  database.repositories.mediaItemState.upsert({
+    mediaKey: 'sonarr:episode:60178',
+    mediaType: 'sonarr_episode',
+    arrId: 60178,
+    parentArrId: 112,
+    title: 'The Pitt - 2x14',
+    monitored: true,
+    releaseDate: '2026-04-04T00:00:00.000Z',
+    wantedState: 'missing',
+    inQueue: true,
+    retryCount: 0,
+    lastSearchAt: null,
+    lastGrabAt: null,
+    nextEligibleAt: null,
+    suppressedUntil: null,
+    suppressionReason: null,
+    lastSeenAt: '2026-04-04T19:00:00.000Z',
+    stateHash: 'sonarr-episode-state',
+  });
+  database.repositories.serviceState.set({
+    key: 'arr_queue_download_map:sonarr',
+    value: {
+      c5a4a380814caa033c646d1955402a05c06697b5: 'sonarr:episode:60178',
+    },
+    updatedAt: '2026-04-04T19:00:00.000Z',
+  });
+
+  const sonarrClient = {
+    async getQueueDetails() {
+      return [
+        {
+          id: 123,
+          title: 'The Pitt S02E14 1080p WEB h264-ETHEL.exe',
+          status: 'completed',
+          trackedDownloadState: 'importPending',
+          trackedDownloadStatus: 'warning',
+          protocol: 'torrent',
+          downloadId: 'C5A4A380814CAA033C646D1955402A05C06697B5',
+          estimatedCompletionTime: null,
+          payload: {
+            statusMessages: [
+              {
+                title: 'The Pitt S02E14 1080p WEB h264-ETHEL.exe',
+                messages: ["Caution: Found executable file with extension: '.exe'"],
+              },
+            ],
+          },
+        },
+      ];
+    },
+    async removeQueueItem(
+      queueId: number,
+      options: {
+        removeFromClient: boolean;
+        blocklist: boolean;
+        skipRedownload: boolean;
+      }
+    ) {
+      removedQueueItems.push({ queueId, options });
+    },
+  } as unknown as SonarrApiClient;
+
+  try {
+    const summary = await runTransmissionGuard({
+      database,
+      config,
+      client: null,
+      sonarrClient,
+      now: new Date('2026-04-04T19:05:00.000Z'),
+    });
+
+    const suppressions = database.repositories.releaseSuppressions.listActive(
+      '2026-04-04T19:05:00.000Z'
+    );
+    const hashSuppression = suppressions.find(
+      (suppression) => suppression.fingerprintType === 'torrent_hash'
+    );
+    const titleSuppression = suppressions.find(
+      (suppression) => suppression.fingerprintType === 'release_title'
+    );
+    const torrentState =
+      database.repositories.transmissionTorrentState.getByHash(
+        'c5a4a380814caa033c646d1955402a05c06697b5'
+      );
+
+    assert.equal(summary.observedCount, 0);
+    assert.equal(summary.removedCount, 1);
+    assert.equal(summary.suppressionCount, 2);
+    assert.equal(summary.linkedCount, 1);
+    assert.deepEqual(removedQueueItems, [
+      {
+        queueId: 123,
+        options: {
+          removeFromClient: true,
+          blocklist: true,
+          skipRedownload: true,
+        },
+      },
+    ]);
+    assert.equal(hashSuppression?.reason, 'TX_DANGEROUS_DOWNLOAD_REMOVE');
+    assert.equal(hashSuppression?.expiresAt, '9999-12-31T23:59:59.999Z');
+    assert.equal(
+      hashSuppression?.fingerprintValue,
+      'c5a4a380814caa033c646d1955402a05c06697b5'
+    );
+    assert.equal(titleSuppression?.reason, 'TX_DANGEROUS_DOWNLOAD_REMOVE');
+    assert.equal(torrentState?.removalReason, 'TX_DANGEROUS_DOWNLOAD_REMOVE');
+    assert.equal(torrentState?.linkedMediaKey, 'sonarr:episode:60178');
+  } finally {
+    database.close();
   }
 });

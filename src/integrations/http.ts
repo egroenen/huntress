@@ -24,7 +24,7 @@ export class IntegrationError extends Error {
 }
 
 export interface HttpRequestOptions {
-  method?: 'GET' | 'POST';
+  method?: 'GET' | 'POST' | 'DELETE';
   headers?: Record<string, string>;
   body?: string;
   timeoutMs?: number;

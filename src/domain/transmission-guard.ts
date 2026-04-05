@@ -5,6 +5,8 @@ import type {
   TransmissionTorrentStateRecord,
 } from '@/src/db';
 import type {
+  ArrQueueRecord,
+  SonarrApiClient,
   TransmissionApiClient,
   TransmissionTorrentRecord,
 } from '@/src/integrations';
@@ -19,6 +21,7 @@ export type TransmissionGuardReason =
   | 'TX_ERROR_REMOVE'
   | 'TX_STALLED_REMOVE'
   | 'TX_LOOP_REPEAT_RELEASE'
+  | 'TX_DANGEROUS_DOWNLOAD_REMOVE'
   | 'TX_NO_ACTION';
 
 export interface TransmissionGuardRunSummary {
@@ -36,6 +39,7 @@ const normalizeFingerprint = (value: string): string => {
 };
 
 const normalizeDownloadId = (value: string): string => value.trim().toLowerCase();
+const PERMANENT_SUPPRESSION_EXPIRES_AT = '9999-12-31T23:59:59.999Z';
 
 const escapeRegExp = (value: string): string => {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -255,22 +259,248 @@ const isStalledTorrent = (
 const hasActiveSuppressedRelease = (
   database: DatabaseContext,
   linkedMediaKey: string | null,
-  torrentName: string,
+  torrent: Pick<TransmissionTorrentRecord, 'hashString' | 'name'>,
   nowIso: string
 ): boolean => {
   if (!linkedMediaKey) {
     return false;
   }
 
-  const fingerprint = normalizeFingerprint(torrentName);
+  const normalizedHash = normalizeDownloadId(torrent.hashString);
+  const fingerprint = normalizeFingerprint(torrent.name);
   return database.repositories.releaseSuppressions
     .listActive(nowIso)
     .some(
       (suppression) =>
         suppression.mediaKey === linkedMediaKey &&
-        suppression.fingerprintType === 'release_title' &&
-        suppression.fingerprintValue === fingerprint
+        ((suppression.fingerprintType === 'release_title' &&
+          suppression.fingerprintValue === fingerprint) ||
+          (suppression.fingerprintType === 'torrent_hash' &&
+            suppression.fingerprintValue === normalizedHash))
     );
+};
+
+const isDangerousStatusMessage = (message: string): boolean => {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('found executable file') ||
+    normalized.includes("extension: '.exe'") ||
+    normalized.includes('caution: found executable')
+  );
+};
+
+const extractDangerousQueueMessage = (queueRecord: ArrQueueRecord): string | null => {
+  if (queueRecord.trackedDownloadStatus !== 'warning') {
+    return null;
+  }
+
+  const payload =
+    typeof queueRecord.payload === 'object' && queueRecord.payload !== null
+      ? (queueRecord.payload as {
+          statusMessages?: Array<{
+            title?: string | null;
+            messages?: string[] | null;
+          }> | null;
+        })
+      : null;
+
+  const statusMessages = payload?.statusMessages ?? [];
+
+  for (const statusMessage of statusMessages) {
+    for (const message of statusMessage.messages ?? []) {
+      if (isDangerousStatusMessage(message)) {
+        return message;
+      }
+    }
+  }
+
+  return null;
+};
+
+const createReleaseSuppression = (input: {
+  database: DatabaseContext;
+  mediaKey: string | null;
+  fingerprintType: string;
+  fingerprintValue: string;
+  reason: TransmissionGuardReason;
+  source?: string;
+  createdAt: string;
+  expiresAt: string;
+}): boolean => {
+  if (!input.mediaKey || !input.fingerprintValue.trim()) {
+    return false;
+  }
+
+  const existing = input.database.repositories.releaseSuppressions
+    .listActive(input.createdAt)
+    .some(
+      (suppression) =>
+        suppression.mediaKey === input.mediaKey &&
+        suppression.fingerprintType === input.fingerprintType &&
+        suppression.fingerprintValue === input.fingerprintValue
+    );
+
+  if (existing) {
+    return false;
+  }
+
+  input.database.repositories.releaseSuppressions.create({
+    mediaKey: input.mediaKey,
+    fingerprintType: input.fingerprintType,
+    fingerprintValue: input.fingerprintValue,
+    reason: input.reason,
+    source: input.source ?? 'transmission_guard',
+    createdAt: input.createdAt,
+    expiresAt: input.expiresAt,
+  });
+
+  return true;
+};
+
+const handleDangerousSonarrQueueItems = async (input: {
+  database: DatabaseContext;
+  sonarrClient: SonarrApiClient | null;
+  activityTracker?: ActivityTracker;
+  now: Date;
+}): Promise<{ removedCount: number; suppressionCount: number; linkedCount: number }> => {
+  if (!input.sonarrClient) {
+    return {
+      removedCount: 0,
+      suppressionCount: 0,
+      linkedCount: 0,
+    };
+  }
+
+  const nowIso = input.now.toISOString();
+  const queueDownloadMap = getQueueDownloadMap(input.database);
+  const queueDetails = await input.sonarrClient.getQueueDetails();
+  const dangerousItems = queueDetails
+    .map((record) => ({
+      record,
+      dangerousMessage: extractDangerousQueueMessage(record),
+    }))
+    .filter(
+      (
+        entry
+      ): entry is { record: ArrQueueRecord; dangerousMessage: string } =>
+        entry.dangerousMessage !== null
+    );
+
+  if (dangerousItems.length === 0) {
+    return {
+      removedCount: 0,
+      suppressionCount: 0,
+      linkedCount: 0,
+    };
+  }
+
+  input.activityTracker?.warn({
+    source: 'transmission',
+    stage: 'dangerous_queue_detected',
+    message: `Found ${dangerousItems.length} dangerous Sonarr queue item${dangerousItems.length === 1 ? '' : 's'}`,
+    detail: 'Removing from queue/download client and permanently suppressing torrent fingerprints.',
+    progressCurrent: 0,
+    progressTotal: dangerousItems.length,
+  });
+
+  let removedCount = 0;
+  let suppressionCount = 0;
+  let linkedCount = 0;
+
+  for (const [index, entry] of dangerousItems.entries()) {
+    const queueRecord = entry.record;
+    const normalizedDownloadId = queueRecord.downloadId
+      ? normalizeDownloadId(queueRecord.downloadId)
+      : null;
+    const linkedMediaKey =
+      normalizedDownloadId ? (queueDownloadMap[normalizedDownloadId] ?? null) : null;
+
+    if (linkedMediaKey) {
+      linkedCount += 1;
+    }
+
+    input.activityTracker?.warn({
+      source: 'transmission',
+      stage: 'dangerous_queue_remove',
+      message: `Removing dangerous Sonarr queue item ${index + 1} of ${dangerousItems.length}`,
+      detail: `${queueRecord.title} (${entry.dangerousMessage})`,
+      progressCurrent: index + 1,
+      progressTotal: dangerousItems.length,
+    });
+
+    await input.sonarrClient.removeQueueItem(queueRecord.id, {
+      removeFromClient: true,
+      blocklist: true,
+      skipRedownload: true,
+    });
+
+    if (normalizedDownloadId) {
+      input.database.repositories.transmissionTorrentState.upsert({
+        hashString: normalizedDownloadId,
+        name: queueRecord.title,
+        status: 0,
+        percentDone: 1,
+        errorCode: null,
+        errorString: entry.dangerousMessage,
+        firstSeenAt:
+          input.database.repositories.transmissionTorrentState.getByHash(
+            normalizedDownloadId
+          )?.firstSeenAt ?? nowIso,
+        lastSeenAt: nowIso,
+        linkedMediaKey,
+        removedAt: nowIso,
+        removalReason: 'TX_DANGEROUS_DOWNLOAD_REMOVE',
+        noProgressSince: null,
+      });
+    }
+
+    if (
+      normalizedDownloadId &&
+      createReleaseSuppression({
+        database: input.database,
+        mediaKey: linkedMediaKey,
+        fingerprintType: 'torrent_hash',
+        fingerprintValue: normalizedDownloadId,
+        reason: 'TX_DANGEROUS_DOWNLOAD_REMOVE',
+        createdAt: nowIso,
+        expiresAt: PERMANENT_SUPPRESSION_EXPIRES_AT,
+      })
+    ) {
+      suppressionCount += 1;
+    }
+
+    if (
+      createReleaseSuppression({
+        database: input.database,
+        mediaKey: linkedMediaKey,
+        fingerprintType: 'release_title',
+        fingerprintValue: normalizeFingerprint(queueRecord.title),
+        reason: 'TX_DANGEROUS_DOWNLOAD_REMOVE',
+        createdAt: nowIso,
+        expiresAt: PERMANENT_SUPPRESSION_EXPIRES_AT,
+      })
+    ) {
+      suppressionCount += 1;
+    }
+
+    logger.warn({
+      event: 'dangerous_sonarr_queue_item_removed',
+      queueId: queueRecord.id,
+      title: queueRecord.title,
+      linkedMediaKey,
+      downloadId: normalizedDownloadId,
+      reasonCode: 'TX_DANGEROUS_DOWNLOAD_REMOVE',
+      detail: entry.dangerousMessage,
+    });
+    recordTransmissionRemoval('TX_DANGEROUS_DOWNLOAD_REMOVE');
+    removedCount += 1;
+  }
+
+  return {
+    removedCount,
+    suppressionCount,
+    linkedCount,
+  };
 };
 
 const removeTorrentAndSuppress = async (input: {
@@ -299,28 +529,40 @@ const removeTorrentAndSuppress = async (input: {
   const suppressUntilIso = new Date(
     input.now.getTime() + input.suppressDurationMs
   ).toISOString();
-  input.database.repositories.releaseSuppressions.create({
+  const created = createReleaseSuppression({
+    database: input.database,
     mediaKey: input.torrentState.linkedMediaKey,
     fingerprintType: 'release_title',
     fingerprintValue: normalizeFingerprint(input.torrentState.name),
     reason: input.reason,
-    source: 'transmission_guard',
     createdAt: nowIso,
     expiresAt: suppressUntilIso,
   });
 
-  return { suppressionCreated: true };
+  return { suppressionCreated: created };
 };
 
 export const runTransmissionGuard = async (input: {
   database: DatabaseContext;
   config: ResolvedConfig;
   client: TransmissionApiClient | null;
+  sonarrClient?: SonarrApiClient | null;
   activityTracker?: ActivityTracker;
   now?: Date;
 }): Promise<TransmissionGuardRunSummary> => {
   const now = input.now ?? new Date();
   const nowIso = now.toISOString();
+  const dangerousQueueSummary = await handleDangerousSonarrQueueItems({
+    database: input.database,
+    sonarrClient: input.sonarrClient ?? null,
+    now,
+    ...(input.activityTracker
+      ? {
+          activityTracker: input.activityTracker,
+        }
+      : {}),
+  });
+
   if (!input.client) {
     input.activityTracker?.info({
       source: 'transmission',
@@ -333,9 +575,9 @@ export const runTransmissionGuard = async (input: {
 
     return {
       observedCount: 0,
-      removedCount: 0,
-      suppressionCount: 0,
-      linkedCount: 0,
+      removedCount: dangerousQueueSummary.removedCount,
+      suppressionCount: dangerousQueueSummary.suppressionCount,
+      linkedCount: dangerousQueueSummary.linkedCount,
     };
   }
   input.activityTracker?.info({
@@ -347,9 +589,9 @@ export const runTransmissionGuard = async (input: {
   const mediaItems = listMediaItems(input.database);
   const queueDownloadMap = getQueueDownloadMap(input.database);
 
-  let removedCount = 0;
-  let suppressionCount = 0;
-  let linkedCount = 0;
+  let removedCount = dangerousQueueSummary.removedCount;
+  let suppressionCount = dangerousQueueSummary.suppressionCount;
+  let linkedCount = dangerousQueueSummary.linkedCount;
 
   input.activityTracker?.info({
     source: 'transmission',
@@ -389,7 +631,7 @@ export const runTransmissionGuard = async (input: {
       hasActiveSuppressedRelease(
         input.database,
         torrentState.linkedMediaKey,
-        torrent.name,
+        torrent,
         nowIso
       )
     ) {

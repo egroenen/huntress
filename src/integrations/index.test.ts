@@ -46,6 +46,11 @@ const startJsonServer = async (
 };
 
 test('Sonarr client probes system status and normalizes wanted/queue responses', async () => {
+  const observedDeleteRequests: Array<{
+    pathname: string;
+    search: string;
+    method: string;
+  }> = [];
   const server = await startJsonServer((request, response) => {
     response.setHeader('Content-Type', 'application/json');
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
@@ -150,6 +155,16 @@ test('Sonarr client probes system status and normalizes wanted/queue responses',
       return;
     }
 
+    if (url.pathname === '/api/v3/queue/1' && request.method === 'DELETE') {
+      observedDeleteRequests.push({
+        pathname: url.pathname,
+        search: url.search,
+        method: request.method ?? 'DELETE',
+      });
+      response.end(JSON.stringify({}));
+      return;
+    }
+
     response.statusCode = 404;
     response.end(JSON.stringify({ error: 'not found' }));
   });
@@ -167,12 +182,25 @@ test('Sonarr client probes system status and normalizes wanted/queue responses',
       client.getWantedCutoff(),
       client.getQueueDetails(),
     ]);
+    await client.removeQueueItem(1, {
+      removeFromClient: true,
+      blocklist: true,
+      skipRedownload: true,
+    });
 
     assert.equal(status.appName, 'Sonarr');
     assert.equal(missing[0]?.title, 'Example Series - Pilot');
     assert.equal(cutoff.length, 2);
     assert.equal(cutoff[0]?.qualityCutoffNotMet, true);
     assert.equal(queue[0]?.downloadId, 'dl-1');
+    assert.deepEqual(observedDeleteRequests, [
+      {
+        pathname: '/api/v3/queue/1',
+        search:
+          '?removeFromClient=true&blocklist=true&skipRedownload=true',
+        method: 'DELETE',
+      },
+    ]);
   } finally {
     await server.close();
   }

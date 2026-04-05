@@ -48,6 +48,12 @@ export interface ArrQueueRecord {
   payload: unknown;
 }
 
+export interface ArrQueueDeleteOptions {
+  removeFromClient: boolean;
+  blocklist: boolean;
+  skipRedownload: boolean;
+}
+
 export interface ProwlarrHealthRecord {
   source: string | null;
   type: string | null;

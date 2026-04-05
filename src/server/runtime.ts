@@ -198,6 +198,7 @@ const buildRuntimeCore = async () => {
         database,
         config: runtimeState.config,
         client: runtimeState.clients.transmission,
+        sonarrClient: runtimeState.clients.sonarr,
         activityTracker,
       });
 

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { joinUrl, requestJson, type HttpRequestOptions } from './http';
 import type {
   ArrCommandResponse,
+  ArrQueueDeleteOptions,
   ArrQueueRecord,
   ArrWantedPageResult,
   ArrSystemStatus,
@@ -342,6 +343,43 @@ export const fetchArrQueue = async (
     estimatedCompletionTime: entry.estimatedCompletionTime ?? null,
     payload: entry,
   }));
+};
+
+export const deleteArrQueueItem = async (
+  options: ArrClientOptions,
+  queueId: number,
+  deleteOptions: ArrQueueDeleteOptions
+): Promise<void> => {
+  if (options.serviceName) {
+    reportActivity(options, {
+      source: options.serviceName,
+      stage: 'queue_delete',
+      message: `Removing ${options.serviceName} queue item ${queueId}`,
+      detail: `/api/v3/queue/${queueId}`,
+      metadata: {
+        queueId,
+        removeFromClient: deleteOptions.removeFromClient,
+        blocklist: deleteOptions.blocklist,
+        skipRedownload: deleteOptions.skipRedownload,
+      },
+    });
+  }
+
+  const endpoint = new URL(joinUrl(options.baseUrl, `/api/v3/queue/${queueId}`));
+  endpoint.searchParams.set(
+    'removeFromClient',
+    deleteOptions.removeFromClient ? 'true' : 'false'
+  );
+  endpoint.searchParams.set('blocklist', deleteOptions.blocklist ? 'true' : 'false');
+  endpoint.searchParams.set(
+    'skipRedownload',
+    deleteOptions.skipRedownload ? 'true' : 'false'
+  );
+
+  await requestJson(endpoint.toString(), z.unknown(), {
+    ...createRequestOptions(options),
+    method: 'DELETE',
+  });
 };
 
 export const fetchSonarrWanted = async (
