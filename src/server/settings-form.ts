@@ -65,6 +65,28 @@ const readPositiveInteger = (formData: FormData, key: string): number | null => 
   return parsed;
 };
 
+const readNonNegativeInteger = (formData: FormData, key: string): number | null => {
+  const value = formData.get(key);
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(normalized, 10);
+
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`${key} must be a whole number greater than or equal to 0`);
+  }
+
+  return parsed;
+};
+
 export const parseSearchSafetyOverridesForm = (
   formData: FormData
 ): PersistedSearchSafetyOverrides => {
@@ -115,11 +137,11 @@ export const parseReleaseSelectionOverridesForm = (
   ): PersistedReleaseSelectionOverrides['sonarr'] => ({
     enabled: readCheckbox(formData, `${prefix}ReleaseSelectionEnabled`),
     strategy: readStrategy(`${prefix}ReleaseSelectionStrategy`),
-    preferredMinResolution: readPositiveInteger(
+    preferredMinResolution: readNonNegativeInteger(
       formData,
       `${prefix}PreferredMinResolution`
     )!,
-    fallbackMinResolution: readPositiveInteger(
+    fallbackMinResolution: readNonNegativeInteger(
       formData,
       `${prefix}FallbackMinResolution`
     )!,

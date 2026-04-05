@@ -13,6 +13,16 @@ export const dynamic = 'force-dynamic';
 
 const statusTone = (configured: boolean) => (configured ? 'healthy' : 'degraded');
 
+const RESOLUTION_OPTIONS = [
+  { value: '0', label: 'Any resolution' },
+  { value: '480', label: '480p' },
+  { value: '576', label: '576p' },
+  { value: '720', label: '720p' },
+  { value: '1080', label: '1080p' },
+  { value: '1440', label: '1440p' },
+  { value: '2160', label: '2160p / 4K' },
+] as const;
+
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function SettingsPage(props: { searchParams: SearchParams }) {
@@ -179,27 +189,33 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
               </label>
               <label>
                 <span>Preferred minimum resolution</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
+                <select
                   name="sonarrPreferredMinResolution"
-                  defaultValue={
+                  defaultValue={String(
                     releaseSelectionOverrides.sonarr.preferredMinResolution
-                  }
-                />
+                  )}
+                >
+                  {RESOLUTION_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 <span>Fallback minimum resolution</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
+                <select
                   name="sonarrFallbackMinResolution"
-                  defaultValue={
+                  defaultValue={String(
                     releaseSelectionOverrides.sonarr.fallbackMinResolution
-                  }
-                />
+                  )}
+                >
+                  {RESOLUTION_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 <span>Minimum seeders</span>
@@ -324,27 +340,33 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
               </label>
               <label>
                 <span>Preferred minimum resolution</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
+                <select
                   name="radarrPreferredMinResolution"
-                  defaultValue={
+                  defaultValue={String(
                     releaseSelectionOverrides.radarr.preferredMinResolution
-                  }
-                />
+                  )}
+                >
+                  {RESOLUTION_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 <span>Fallback minimum resolution</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
+                <select
                   name="radarrFallbackMinResolution"
-                  defaultValue={
+                  defaultValue={String(
                     releaseSelectionOverrides.radarr.fallbackMinResolution
-                  }
-                />
+                  )}
+                >
+                  {RESOLUTION_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 <span>Minimum seeders</span>
