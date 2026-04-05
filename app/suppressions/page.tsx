@@ -119,6 +119,18 @@ const formatFingerprintType = (value: string): string => {
   }
 };
 
+const formatFingerprintValue = (type: string, value: string): string => {
+  const trimmedValue = value.trim();
+
+  if (type === 'release_title') {
+    return trimmedValue
+      .replace(/\s+/g, ' ')
+      .replace(/(^\w)|(\s\w)/g, (match) => match.toUpperCase());
+  }
+
+  return trimmedValue;
+};
+
 export default async function SuppressionsPage(props: { searchParams: SearchParams }) {
   const runtime = await requireAuthenticatedConsoleContext();
   const searchParams = await props.searchParams;
@@ -241,7 +253,12 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
                 title={`${suppression.fingerprintType}: ${suppression.fingerprintValue}`}
               >
                 <strong>{formatFingerprintType(suppression.fingerprintType)}</strong>
-                <span className="secondary-value">{suppression.fingerprintValue}</span>
+                <span className="secondary-value">
+                  {formatFingerprintValue(
+                    suppression.fingerprintType,
+                    suppression.fingerprintValue
+                  )}
+                </span>
               </div>
             ),
             reason: suppression.reason,

@@ -2,11 +2,26 @@ export const formatDisplayMode = (mode: 'dry-run' | 'live'): string =>
   mode === 'live' ? 'Live dispatch' : 'Dry-run';
 
 export const formatServiceName = (value: string): string => {
-  if (value.length === 0) {
-    return value;
-  }
+  const normalized = value.trim().toLowerCase();
 
-  return `${value[0]?.toUpperCase() ?? ''}${value.slice(1)}`;
+  switch (normalized) {
+    case 'sonarr':
+      return 'Sonarr';
+    case 'radarr':
+      return 'Radarr';
+    case 'prowlarr':
+      return 'Prowlarr';
+    case 'transmission':
+      return 'Transmission';
+    case 'scheduler':
+      return 'Scheduler';
+    default:
+      return normalized
+        .split(/[\s_-]+/)
+        .filter(Boolean)
+        .map((part) => `${part[0]?.toUpperCase() ?? ''}${part.slice(1)}`)
+        .join(' ');
+  }
 };
 
 export const formatRunTypeLabel = (value: string): string => value.replaceAll('_', ' ');

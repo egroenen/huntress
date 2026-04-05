@@ -9,7 +9,7 @@ import {
   StatsGrid,
   StatusBadge,
 } from '@/src/ui';
-import { formatShortRunId } from '@/src/ui/formatters';
+import { formatServiceName, formatShortRunId } from '@/src/ui/formatters';
 
 export const dynamic = 'force-dynamic';
 
@@ -136,7 +136,7 @@ export default async function StatusPage() {
           <div className="activity-panel__header">
             <div>
               <span className="console-meta__label">Source</span>
-              <strong>{current?.source ?? 'scheduler'}</strong>
+              <strong>{formatServiceName(current?.source ?? 'scheduler')}</strong>
             </div>
             <StatusBadge
               status={toBadgeStatus(current?.level ?? 'info', current?.active ?? false)}
@@ -207,7 +207,7 @@ export default async function StatusPage() {
             ),
             source: (
               <span className="table-app-label table-app-label--inline">
-                {event.source}
+                {formatServiceName(event.source)}
               </span>
             ),
             stage: (

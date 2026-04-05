@@ -376,7 +376,7 @@ const renderManualFetchSection = (
         </div>
         <div>
           <span className="console-meta__label">App</span>
-          <strong>{summary.app ?? 'n/a'}</strong>
+          <strong>{summary.app ? formatServiceName(summary.app) : 'n/a'}</strong>
         </div>
         <div>
           <span className="console-meta__label">Manual override</span>
