@@ -9,6 +9,11 @@ import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import { getSearchRateSnapshot } from '@/src/observability';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
+  formatRunDuration,
+  formatRunTimestamp,
+  toRunSummaryShape,
+} from '@/src/server/run-summary';
+import {
   BudgetMeter,
   ConsoleHeaderActions,
   ConsoleShell,
@@ -29,108 +34,6 @@ import {
 } from '@/src/ui/formatters';
 
 export const dynamic = 'force-dynamic';
-
-interface AppSyncSummary {
-  app: 'sonarr' | 'radarr';
-  status: 'synced' | 'not_configured';
-  syncedAt: string;
-  missingCount: number;
-  missingPagesFetched: number;
-  missingTotalPages: number;
-  cutoffCount: number;
-  cutoffPagesFetched: number;
-  cutoffTotalPages: number;
-  queueCount: number;
-  upsertedCount: number;
-  ignoredCount: number;
-}
-
-interface ArrStateSyncSummary {
-  syncedAt: string;
-  sonarr: AppSyncSummary;
-  radarr: AppSyncSummary;
-}
-
-interface TransmissionSummary {
-  observedCount: number;
-  removedCount: number;
-  suppressionCount: number;
-  linkedCount: number;
-}
-
-interface DispatchSummary {
-  dryRun: boolean;
-  dryRunDispatchPreviewCount: number;
-  throttleReason: string | null;
-  attemptsPersisted: number;
-  releaseSelectionSummary?: {
-    directGrabCount: number;
-    blindSearchCount: number;
-    fallbackUpgradeCount: number;
-    goodEnoughCount: number;
-    preferredReleaseCount: number;
-  };
-}
-
-interface RunSummaryShape {
-  syncSummary?: ArrStateSyncSummary;
-  transmissionSummary?: TransmissionSummary;
-  dispatchSummary?: DispatchSummary;
-  requestedRunType?: string;
-  liveDispatchAllowed?: boolean;
-}
-
-const formatTimestamp = (value: string | null): string => {
-  if (!value) {
-    return 'n/a';
-  }
-
-  return new Intl.DateTimeFormat('en-NZ', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
-};
-
-const formatDuration = (startedAt: string, finishedAt: string | null): string => {
-  const started = new Date(startedAt).getTime();
-  const finished = finishedAt ? new Date(finishedAt).getTime() : null;
-
-  if (!Number.isFinite(started)) {
-    return 'n/a';
-  }
-
-  if (finished === null || !Number.isFinite(finished)) {
-    return 'In progress';
-  }
-
-  const durationMs = Math.max(finished - started, 0);
-  const totalSeconds = Math.round(durationMs / 1000);
-
-  if (totalSeconds < 60) {
-    return `${totalSeconds}s`;
-  }
-
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  if (minutes < 60) {
-    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-
-  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const toRunSummaryShape = (
-  summary: Record<string, unknown> | undefined
-): RunSummaryShape => {
-  return isRecord(summary) ? (summary as RunSummaryShape) : {};
-};
 
 const renderCandidateDispatchPath = (preview: {
   available: boolean;
@@ -267,7 +170,7 @@ export default async function HomePage() {
                 limit={searchRate.windows[0]?.limit ?? 0}
                 detail={
                   searchRate.currentThrottleReason
-                    ? `${searchRate.currentThrottleReason} until ${formatTimestamp(searchRate.nextEligibleAt)}`
+                    ? `${searchRate.currentThrottleReason} until ${formatRunTimestamp(searchRate.nextEligibleAt)}`
                     : 'Dispatch budget currently available'
                 }
               />
@@ -292,7 +195,7 @@ export default async function HomePage() {
             }
             detail={
               latestRun
-                ? formatTimestamp(latestRun.finishedAt ?? latestRun.startedAt)
+                ? formatRunTimestamp(latestRun.finishedAt ?? latestRun.startedAt)
                 : 'No runs yet'
             }
           />
@@ -339,7 +242,7 @@ export default async function HomePage() {
               />
               <StatCard
                 label="Duration"
-                value={formatDuration(latestRun.startedAt, latestRun.finishedAt)}
+                value={formatRunDuration(latestRun.startedAt, latestRun.finishedAt)}
               />
               <StatCard
                 label="Dispatch mode"
@@ -357,11 +260,11 @@ export default async function HomePage() {
             <div className="latest-run__summary">
               <div>
                 <span className="console-meta__label">Started</span>
-                <strong>{formatTimestamp(latestRun.startedAt)}</strong>
+                <strong>{formatRunTimestamp(latestRun.startedAt)}</strong>
               </div>
               <div>
                 <span className="console-meta__label">Finished</span>
-                <strong>{formatTimestamp(latestRun.finishedAt)}</strong>
+                <strong>{formatRunTimestamp(latestRun.finishedAt)}</strong>
               </div>
               <div>
                 <span className="console-meta__label">Requested run type</span>
@@ -607,7 +510,7 @@ export default async function HomePage() {
               );
             })(),
             reason: <ReasonCodeBadge reasonCode={candidate.reasonCode} />,
-            nextEligibleAt: formatTimestamp(candidate.nextEligibleAt),
+            nextEligibleAt: formatRunTimestamp(candidate.nextEligibleAt),
           }))}
           emptyMessage="No candidate decisions are available yet."
         />
@@ -632,7 +535,7 @@ export default async function HomePage() {
             limit: window.limit,
             remaining: window.remaining,
             usage: <BudgetMeter used={window.used} limit={window.limit} />,
-            nextEligibleAt: formatTimestamp(window.nextEligibleAt),
+            nextEligibleAt: formatRunTimestamp(window.nextEligibleAt),
           }))}
           emptyMessage="No dispatch budget windows are available."
         />
@@ -671,7 +574,7 @@ export default async function HomePage() {
             ) : (
               'unlinked'
             ),
-            removedAt: formatTimestamp(torrent.removedAt),
+            removedAt: formatRunTimestamp(torrent.removedAt),
             removalReason: torrent.removalReason ? (
               <code className="reason-code">{torrent.removalReason}</code>
             ) : (

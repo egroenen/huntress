@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import type { MediaItemStateRecord } from '@/src/db';
+import { logger } from '@/src/observability';
 import type { RuntimeContext } from '@/src/server/runtime';
 
 interface MediaDisplayCacheRecord {
@@ -295,7 +296,16 @@ export const hydrateMediaDisplayRecords = async (
               : record;
 
         records.set(mediaKey, hydrated);
-      } catch {
+      } catch (error) {
+        logger.debug(
+          {
+            error,
+            event: 'media_display_hydration_failed',
+            mediaKey,
+          },
+          'Failed to enrich cached media display record'
+        );
+
         // Keep the stored record if enrichment fails; the page can still render.
       }
     })
@@ -311,7 +321,16 @@ export const hydrateMediaDisplayRecords = async (
         if (fetchedRecord) {
           records.set(mediaKey, toDisplayRecord(fetchedRecord));
         }
-      } catch {
+      } catch (error) {
+        logger.debug(
+          {
+            error,
+            event: 'media_display_fetch_failed',
+            mediaKey,
+          },
+          'Failed to fetch missing media display record'
+        );
+
         // Best-effort enrichment only. The page can fall back to raw media keys.
       }
     })

@@ -7,6 +7,13 @@ import { probeDependencyHealth } from '@/src/server/console-data';
 import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
+  formatRunDuration,
+  formatRunTimestamp,
+  getAppSyncRows,
+  toRunSummaryShape,
+  type RunSummaryShape,
+} from '@/src/server/run-summary';
+import {
   ConsoleHeaderActions,
   ConsoleShell,
   DataTable,
@@ -28,122 +35,6 @@ export const dynamic = 'force-dynamic';
 const PAGE_SIZE = 100;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
-
-interface AppSyncSummary {
-  app: 'sonarr' | 'radarr';
-  status: 'synced' | 'not_configured';
-  syncedAt: string;
-  missingCount: number;
-  missingPagesFetched: number;
-  missingTotalPages: number;
-  cutoffCount: number;
-  cutoffPagesFetched: number;
-  cutoffTotalPages: number;
-  queueCount: number;
-  upsertedCount: number;
-  ignoredCount: number;
-}
-
-interface ArrStateSyncSummary {
-  syncedAt: string;
-  sonarr: AppSyncSummary;
-  radarr: AppSyncSummary;
-}
-
-interface TransmissionSummary {
-  observedCount: number;
-  removedCount: number;
-  suppressionCount: number;
-  linkedCount: number;
-}
-
-interface DispatchSummary {
-  dryRun: boolean;
-  dryRunDispatchPreviewCount: number;
-  throttleReason: string | null;
-  attemptsPersisted: number;
-  releaseSelectionSummary?: {
-    directGrabCount: number;
-    blindSearchCount: number;
-    fallbackUpgradeCount: number;
-    goodEnoughCount: number;
-    preferredReleaseCount: number;
-    selections: Array<{
-      mediaKey: string;
-      title: string;
-      app: string;
-      mode: string;
-      reason: string;
-      selectedReleaseTitle: string | null;
-      selectedReleaseQuality: string | null;
-      selectedReleaseResolution: number | null;
-      selectedReleaseIndexer: string | null;
-      selectedReleaseGuid: string | null;
-      upgradePriority: boolean;
-    }>;
-  };
-}
-
-interface RunSummaryShape {
-  syncSummary?: ArrStateSyncSummary;
-  transmissionSummary?: TransmissionSummary;
-  dispatchSummary?: DispatchSummary;
-  requestedRunType?: string;
-  liveDispatchAllowed?: boolean;
-  manualFetch?: boolean;
-  mediaKey?: string;
-  title?: string;
-  app?: string;
-  manualOverride?: boolean;
-  arrCommandId?: number | null;
-  error?: {
-    name?: string;
-    message?: string;
-  };
-}
-
-const formatTimestamp = (value: string | null): string => {
-  if (!value) {
-    return 'n/a';
-  }
-
-  return new Intl.DateTimeFormat('en-NZ', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
-};
-
-const formatDuration = (startedAt: string, finishedAt: string | null): string => {
-  const started = new Date(startedAt).getTime();
-  const finished = finishedAt ? new Date(finishedAt).getTime() : null;
-
-  if (!Number.isFinite(started)) {
-    return 'n/a';
-  }
-
-  if (finished === null || !Number.isFinite(finished)) {
-    return 'In progress';
-  }
-
-  const durationMs = Math.max(finished - started, 0);
-  const totalSeconds = Math.round(durationMs / 1000);
-
-  if (totalSeconds < 60) {
-    return `${totalSeconds}s`;
-  }
-
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  if (minutes < 60) {
-    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-
-  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
-};
 
 const formatProgress = (current: number | null, total: number | null): string => {
   if (current === null && total === null) {
@@ -265,21 +156,6 @@ const renderPagination = (
   );
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const toRunSummaryShape = (run: RunHistoryRecord): RunSummaryShape => {
-  return isRecord(run.summary) ? (run.summary as RunSummaryShape) : {};
-};
-
-const toAppSyncRows = (summary: RunSummaryShape): AppSyncSummary[] => {
-  if (!summary.syncSummary) {
-    return [];
-  }
-
-  return [summary.syncSummary.sonarr, summary.syncSummary.radarr];
-};
-
 const buildAttemptRows = (
   attempts: SearchAttemptRecord[],
   resolveTitle: (mediaKey: string) => string | null,
@@ -291,7 +167,7 @@ const buildAttemptRows = (
     const mediaItem = resolveMediaItem(attempt.mediaKey);
 
     return {
-      attemptedAt: formatTimestamp(attempt.attemptedAt),
+      attemptedAt: formatRunTimestamp(attempt.attemptedAt),
       app: (
         <span className="table-app-label table-app-label--inline">
           {formatServiceName(attempt.app)}
@@ -344,7 +220,7 @@ const renderRunSummarySection = (
         />
         <StatCard
           label="Duration"
-          value={formatDuration(run.startedAt, run.finishedAt)}
+          value={formatRunDuration(run.startedAt, run.finishedAt)}
         />
         <StatCard label="Attempt rows" value={totalAttempts} />
         <StatCard label="Candidates" value={run.candidateCount} />
@@ -364,11 +240,11 @@ const renderRunSummarySection = (
       <div className="latest-run__summary">
         <div>
           <span className="console-meta__label">Started</span>
-          <strong>{formatTimestamp(run.startedAt)}</strong>
+          <strong>{formatRunTimestamp(run.startedAt)}</strong>
         </div>
         <div>
           <span className="console-meta__label">Finished</span>
-          <strong>{formatTimestamp(run.finishedAt)}</strong>
+          <strong>{formatRunTimestamp(run.finishedAt)}</strong>
         </div>
         <div>
           <span className="console-meta__label">Requested run type</span>
@@ -436,64 +312,35 @@ const renderManualFetchSection = (
           <strong>{summary.arrCommandId ?? 'n/a'}</strong>
         </div>
         <div>
-          <span className="console-meta__label">Dispatch kind</span>
-          <strong>
-            {typeof (summary as Record<string, unknown>).dispatchKind === 'string'
-              ? String((summary as Record<string, unknown>).dispatchKind).replaceAll('_', ' ')
-              : 'n/a'}
-          </strong>
-        </div>
+            <span className="console-meta__label">Dispatch kind</span>
+            <strong>
+              {summary.dispatchKind ? summary.dispatchKind.replaceAll('_', ' ') : 'n/a'}
+            </strong>
+          </div>
         <div>
           <span className="console-meta__label">Error</span>
           <strong>{summary.error?.message ?? 'none'}</strong>
         </div>
       </div>
-      {(summary as Record<string, unknown>).releaseSelection &&
-      typeof (summary as Record<string, unknown>).releaseSelection === 'object' ? (
+      {summary.releaseSelection ? (
         <div className="latest-run__summary">
           <div>
             <span className="console-meta__label">Selection mode</span>
             <strong>
-              {String(
-                ((summary as Record<string, unknown>).releaseSelection as Record<
-                  string,
-                  unknown
-                >).mode ?? 'n/a'
-              ).replaceAll('_', ' ')}
+              {(summary.releaseSelection.mode ?? 'n/a').replaceAll('_', ' ')}
             </strong>
           </div>
           <div>
             <span className="console-meta__label">Selected release</span>
-            <strong>
-              {String(
-                ((summary as Record<string, unknown>).releaseSelection as Record<
-                  string,
-                  unknown
-                >).selectedReleaseTitle ?? 'none'
-              )}
-            </strong>
+            <strong>{summary.releaseSelection.selectedReleaseTitle ?? 'none'}</strong>
           </div>
           <div>
             <span className="console-meta__label">Quality</span>
-            <strong>
-              {String(
-                ((summary as Record<string, unknown>).releaseSelection as Record<
-                  string,
-                  unknown
-                >).selectedReleaseQuality ?? 'n/a'
-              )}
-            </strong>
+            <strong>{summary.releaseSelection.selectedReleaseQuality ?? 'n/a'}</strong>
           </div>
           <div>
             <span className="console-meta__label">Upgrade priority</span>
-            <strong>
-              {((summary as Record<string, unknown>).releaseSelection as Record<
-                string,
-                unknown
-              >).upgradePriority
-                ? 'Yes'
-                : 'No'}
-            </strong>
+            <strong>{summary.releaseSelection.upgradePriority ? 'Yes' : 'No'}</strong>
           </div>
         </div>
       ) : null}
@@ -502,7 +349,7 @@ const renderManualFetchSection = (
 };
 
 const renderSyncSection = (summary: RunSummaryShape) => {
-  const rows = toAppSyncRows(summary);
+  const rows = getAppSyncRows(summary);
 
   if (rows.length === 0) {
     return null;
@@ -511,7 +358,7 @@ const renderSyncSection = (summary: RunSummaryShape) => {
   return (
     <SectionCard
       title="Sync summary"
-      subtitle={`Arr state snapshot taken at ${formatTimestamp(summary.syncSummary?.syncedAt ?? null)}.`}
+      subtitle={`Arr state snapshot taken at ${formatRunTimestamp(summary.syncSummary?.syncedAt ?? null)}.`}
     >
         <DataTable
           columns={[
@@ -695,7 +542,7 @@ export default async function RunDetailPage({
     ? (resolvedSearchParams.decision[0] ?? '')
     : (resolvedSearchParams.decision ?? '');
   const allAttempts = runtime.database.repositories.searchAttempts.listByRunId(id);
-  const summary = toRunSummaryShape(run);
+  const summary = toRunSummaryShape(run.summary);
   const titleCache = new Map<string, string | null>();
   const resolveTitle = (mediaKey: string) => {
     if (!titleCache.has(mediaKey)) {
@@ -761,7 +608,7 @@ export default async function RunDetailPage({
   return (
     <ConsoleShell
       title="Run detail"
-      subtitle={`${formatRunTypeLabel(run.runType)} · ${formatTimestamp(run.startedAt)} · ${formatShortRunId(run.id)}`}
+      subtitle={`${formatRunTypeLabel(run.runType)} · ${formatRunTimestamp(run.startedAt)} · ${formatShortRunId(run.id)}`}
       activePath="/runs"
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
@@ -796,7 +643,7 @@ export default async function RunDetailPage({
             { key: 'progress', label: 'Progress', align: 'right' },
           ]}
           rows={runEvents.map((event) => ({
-            time: formatTimestamp(event.occurredAt),
+            time: formatRunTimestamp(event.occurredAt),
             source: formatServiceName(event.source),
             stage: (
               <span className="activity-stage">

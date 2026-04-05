@@ -3,6 +3,7 @@ import { getRuntimeContext } from '@/src/server/runtime';
 import {
   getMetricsText,
   getReadinessSnapshot,
+  logger,
   updateActiveSuppressionsMetric,
   updateDependencyHealthMetrics,
   updateSearchRateMetrics,
@@ -25,7 +26,15 @@ export async function GET() {
       runtime.database.repositories.releaseSuppressions.listActive(readiness.checkedAt)
         .length
     );
-  } catch {
+  } catch (error) {
+    logger.debug(
+      {
+        error,
+        event: 'metrics_enrichment_failed',
+      },
+      'Failed to enrich metrics scrape'
+    );
+
     // Best-effort scrape enrichment only.
   }
 

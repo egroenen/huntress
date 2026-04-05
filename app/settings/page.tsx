@@ -15,19 +15,11 @@ import {
 } from '@/src/ui';
 import { formatConfigSourceLabel, formatServiceName } from '@/src/ui/formatters';
 
+import { ArrServiceSettingsSection } from './arr-service-settings-section';
+
 export const dynamic = 'force-dynamic';
 
 const statusTone = (configured: boolean) => (configured ? 'healthy' : 'degraded');
-
-const RESOLUTION_OPTIONS = [
-  { value: '0', label: 'Any resolution' },
-  { value: '480', label: '480p' },
-  { value: '576', label: '576p' },
-  { value: '720', label: '720p' },
-  { value: '1080', label: '1080p' },
-  { value: '1440', label: '1440p' },
-  { value: '2160', label: '2160p / 4K' },
-] as const;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -151,309 +143,25 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
             value={runtime.csrfTokens.testTransmission}
           />
 
-          <section className="settings-form__section">
-            <div className="settings-form__heading">
-              <h4>Sonarr</h4>
-              <button
-                type="submit"
-                formAction={testConnectionAction.bind(null, 'sonarr')}
-                className="console-button console-button--ghost"
-              >
-                Test connection
-              </button>
-            </div>
-            <label>
-              <span>URL</span>
-              <input
-                type="url"
-                name="sonarrUrl"
-                defaultValue={connectionSettings.sonarr.url ?? ''}
-              />
-            </label>
-            <label>
-              <span>API key</span>
-              <input
-                type="password"
-                name="sonarrApiKey"
-                defaultValue={connectionSettings.sonarr.apiKey ?? ''}
-              />
-            </label>
-            <label className="settings-form__checkbox">
-              <input
-                type="checkbox"
-                name="sonarrFetchAllPages"
-                defaultChecked={connectionSettings.sonarr.fetchAllWantedPages}
-              />
-              <span>Fetch all wanted pages on each sync</span>
-            </label>
-            <p className="settings-form__hint">
-              Disable this to use incremental randomized page coverage instead of a
-              full wanted-page walk.
-            </p>
-            {testService === 'sonarr' && testNotice ? (
-              <p
-                className={
-                  testStatus === 'success'
-                    ? 'settings-notice is-success'
-                    : 'settings-notice is-error'
-                }
-              >
-                {testNotice}
-                {testDetail ? ` ${testDetail}` : ''}
-              </p>
-            ) : null}
-            <div className="settings-form__subsection">
-              <h5>Release selection policy</h5>
-              <label className="settings-form__checkbox">
-                <input
-                  type="checkbox"
-                  name="sonarrReleaseSelectionEnabled"
-                  defaultChecked={releaseSelectionOverrides.sonarr.enabled}
-                />
-                <span>Enable release-aware grabbing before blind search</span>
-              </label>
-              <label>
-                <span>Strategy</span>
-                <select
-                  name="sonarrReleaseSelectionStrategy"
-                  defaultValue={releaseSelectionOverrides.sonarr.strategy}
-                >
-                  <option value="best_only">Best only</option>
-                  <option value="good_enough_now">Good enough now</option>
-                  <option value="fallback_then_upgrade">Fallback then upgrade</option>
-                </select>
-              </label>
-              <label>
-                <span>Preferred minimum resolution</span>
-                <select
-                  name="sonarrPreferredMinResolution"
-                  defaultValue={String(
-                    releaseSelectionOverrides.sonarr.preferredMinResolution
-                  )}
-                >
-                  {RESOLUTION_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Fallback minimum resolution</span>
-                <select
-                  name="sonarrFallbackMinResolution"
-                  defaultValue={String(
-                    releaseSelectionOverrides.sonarr.fallbackMinResolution
-                  )}
-                >
-                  {RESOLUTION_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Minimum seeders</span>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  name="sonarrMinimumSeeders"
-                  defaultValue={releaseSelectionOverrides.sonarr.minimumSeeders}
-                />
-              </label>
-              <label>
-                <span>Minimum custom format score</span>
-                <input
-                  type="number"
-                  step="1"
-                  name="sonarrMinimumCustomFormatScore"
-                  defaultValue={
-                    releaseSelectionOverrides.sonarr.minimumCustomFormatScore
-                  }
-                />
-              </label>
-              <label className="settings-form__checkbox">
-                <input
-                  type="checkbox"
-                  name="sonarrRequireEnglish"
-                  defaultChecked={releaseSelectionOverrides.sonarr.requireEnglish}
-                />
-                <span>Require English-language releases</span>
-              </label>
-              <label>
-                <span>Upgrade retry after fallback (days)</span>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  name="sonarrUpgradeRetryAfterFallbackDays"
-                  defaultValue={
-                    Math.max(
-                      1,
-                      Math.ceil(
-                        releaseSelectionOverrides.sonarr
-                          .upgradeRetryAfterFallbackMs / 86_400_000
-                      )
-                    )
-                  }
-                />
-              </label>
-            </div>
-          </section>
+          <ArrServiceSettingsSection
+            service="sonarr"
+            connection={connectionSettings.sonarr}
+            releaseSelection={releaseSelectionOverrides.sonarr}
+            showTestNotice={testService === 'sonarr'}
+            testStatus={testStatus}
+            testNotice={testNotice}
+            testDetail={testDetail}
+          />
 
-          <section className="settings-form__section">
-            <div className="settings-form__heading">
-              <h4>Radarr</h4>
-              <button
-                type="submit"
-                formAction={testConnectionAction.bind(null, 'radarr')}
-                className="console-button console-button--ghost"
-              >
-                Test connection
-              </button>
-            </div>
-            <label>
-              <span>URL</span>
-              <input
-                type="url"
-                name="radarrUrl"
-                defaultValue={connectionSettings.radarr.url ?? ''}
-              />
-            </label>
-            <label>
-              <span>API key</span>
-              <input
-                type="password"
-                name="radarrApiKey"
-                defaultValue={connectionSettings.radarr.apiKey ?? ''}
-              />
-            </label>
-            <label className="settings-form__checkbox">
-              <input
-                type="checkbox"
-                name="radarrFetchAllPages"
-                defaultChecked={connectionSettings.radarr.fetchAllWantedPages}
-              />
-              <span>Fetch all wanted pages on each sync</span>
-            </label>
-            <p className="settings-form__hint">
-              Disable this to use incremental randomized page coverage instead of a
-              full wanted-page walk.
-            </p>
-            {testService === 'radarr' && testNotice ? (
-              <p
-                className={
-                  testStatus === 'success'
-                    ? 'settings-notice is-success'
-                    : 'settings-notice is-error'
-                }
-              >
-                {testNotice}
-                {testDetail ? ` ${testDetail}` : ''}
-              </p>
-            ) : null}
-            <div className="settings-form__subsection">
-              <h5>Release selection policy</h5>
-              <label className="settings-form__checkbox">
-                <input
-                  type="checkbox"
-                  name="radarrReleaseSelectionEnabled"
-                  defaultChecked={releaseSelectionOverrides.radarr.enabled}
-                />
-                <span>Enable release-aware grabbing before blind search</span>
-              </label>
-              <label>
-                <span>Strategy</span>
-                <select
-                  name="radarrReleaseSelectionStrategy"
-                  defaultValue={releaseSelectionOverrides.radarr.strategy}
-                >
-                  <option value="best_only">Best only</option>
-                  <option value="good_enough_now">Good enough now</option>
-                  <option value="fallback_then_upgrade">Fallback then upgrade</option>
-                </select>
-              </label>
-              <label>
-                <span>Preferred minimum resolution</span>
-                <select
-                  name="radarrPreferredMinResolution"
-                  defaultValue={String(
-                    releaseSelectionOverrides.radarr.preferredMinResolution
-                  )}
-                >
-                  {RESOLUTION_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Fallback minimum resolution</span>
-                <select
-                  name="radarrFallbackMinResolution"
-                  defaultValue={String(
-                    releaseSelectionOverrides.radarr.fallbackMinResolution
-                  )}
-                >
-                  {RESOLUTION_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Minimum seeders</span>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  name="radarrMinimumSeeders"
-                  defaultValue={releaseSelectionOverrides.radarr.minimumSeeders}
-                />
-              </label>
-              <label>
-                <span>Minimum custom format score</span>
-                <input
-                  type="number"
-                  step="1"
-                  name="radarrMinimumCustomFormatScore"
-                  defaultValue={
-                    releaseSelectionOverrides.radarr.minimumCustomFormatScore
-                  }
-                />
-              </label>
-              <label className="settings-form__checkbox">
-                <input
-                  type="checkbox"
-                  name="radarrRequireEnglish"
-                  defaultChecked={releaseSelectionOverrides.radarr.requireEnglish}
-                />
-                <span>Require English-language releases</span>
-              </label>
-              <label>
-                <span>Upgrade retry after fallback (days)</span>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  name="radarrUpgradeRetryAfterFallbackDays"
-                  defaultValue={
-                    Math.max(
-                      1,
-                      Math.ceil(
-                        releaseSelectionOverrides.radarr
-                          .upgradeRetryAfterFallbackMs / 86_400_000
-                      )
-                    )
-                  }
-                />
-              </label>
-            </div>
-          </section>
+          <ArrServiceSettingsSection
+            service="radarr"
+            connection={connectionSettings.radarr}
+            releaseSelection={releaseSelectionOverrides.radarr}
+            showTestNotice={testService === 'radarr'}
+            testStatus={testStatus}
+            testNotice={testNotice}
+            testDetail={testDetail}
+          />
 
           <section className="settings-form__section">
             <div className="settings-form__heading">
