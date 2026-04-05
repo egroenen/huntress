@@ -215,10 +215,17 @@ select {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.console-sidebar__meta > div,
+.activity-panel__header > div,
+.latest-run__summary > div {
+  display: grid;
+  gap: 0.22rem;
+}
+
 .console-sidebar__meta strong,
+.activity-panel__header strong,
 .latest-run__summary strong {
   display: block;
-  margin-top: 0.22rem;
   color: var(--text-strong);
 }
 
