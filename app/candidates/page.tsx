@@ -375,6 +375,10 @@ const formatReleaseSelectionMode = (
     return { label: 'n/a', status: 'info' };
   }
 
+  if (!preview.available) {
+    return { label: 'Unavailable', status: 'degraded' };
+  }
+
   switch (preview.mode) {
     case 'preferred_release':
       return { label: 'Direct release', status: 'success' };
@@ -391,6 +395,15 @@ const formatReleaseSelectionMode = (
 const renderReleasePreview = (preview: CandidateReleasePreview | undefined) => {
   if (!preview) {
     return 'n/a';
+  }
+
+  if (!preview.available) {
+    return (
+      <div className="release-preview" title={preview.reason}>
+        <strong>Release preview unavailable</strong>
+        <small>{preview.reason}</small>
+      </div>
+    );
   }
 
   if (!preview.selectedReleaseTitle) {

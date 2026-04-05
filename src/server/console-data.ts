@@ -8,6 +8,7 @@ import {
   type PlannedReleaseSelection,
 } from '@/src/domain';
 import type { ProwlarrHealthRecord } from '@/src/integrations';
+import { logger } from '@/src/observability';
 import { getRuntimeContext, type RuntimeContext } from '@/src/server/runtime';
 import type { DependencyHealthCard } from '@/src/ui';
 
@@ -260,6 +261,7 @@ export const getDashboardCandidateSnapshot = (
 };
 
 export interface CandidateReleasePreview {
+  available: boolean;
   mode: PlannedReleaseSelection['mode'];
   reason: string;
   selectedReleaseTitle: string | null;
@@ -277,8 +279,9 @@ export const getCandidateReleasePreviewMap = async (
     (candidate) => candidate.decision === 'dispatch'
   );
 
-  const previews = await Promise.all(
-    dispatchCandidates.map(async (candidate) => {
+  const previews: Array<readonly [string, CandidateReleasePreview] | null> =
+    await Promise.all(
+      dispatchCandidates.map(async (candidate) => {
       const item = runtime.database.repositories.mediaItemState.getByMediaKey(
         candidate.mediaKey
       );
@@ -287,32 +290,60 @@ export const getCandidateReleasePreviewMap = async (
         return null;
       }
 
-      const preview = await planReleaseSelection({
-        database: runtime.database,
-        config: runtime.config,
-        clients: {
-          sonarr: runtime.clients.sonarr,
-          radarr: runtime.clients.radarr,
-        },
-        item,
-        app: candidate.app,
-        now: new Date(),
-      });
+      try {
+        const preview = await planReleaseSelection({
+          database: runtime.database,
+          config: runtime.config,
+          clients: {
+            sonarr: runtime.clients.sonarr,
+            radarr: runtime.clients.radarr,
+          },
+          item,
+          app: candidate.app,
+          now: new Date(),
+        });
 
-      return [
-        candidate.mediaKey,
-        {
-          mode: preview.mode,
-          reason: preview.reason,
-          selectedReleaseTitle: preview.selectedRelease?.title ?? null,
-          selectedReleaseQuality: preview.selectedRelease?.qualityName ?? null,
-          selectedReleaseResolution: preview.selectedRelease?.qualityResolution ?? null,
-          selectedReleaseIndexer: preview.selectedRelease?.indexer ?? null,
-          upgradePriority: preview.upgradePriority,
-        } satisfies CandidateReleasePreview,
-      ] as const;
-    })
-  );
+        return [
+          candidate.mediaKey,
+          {
+            available: true,
+            mode: preview.mode,
+            reason: preview.reason,
+            selectedReleaseTitle: preview.selectedRelease?.title ?? null,
+            selectedReleaseQuality: preview.selectedRelease?.qualityName ?? null,
+            selectedReleaseResolution:
+              preview.selectedRelease?.qualityResolution ?? null,
+            selectedReleaseIndexer: preview.selectedRelease?.indexer ?? null,
+            upgradePriority: preview.upgradePriority,
+          } satisfies CandidateReleasePreview,
+        ] as const;
+      } catch (error) {
+        logger.warn({
+          event: 'release_preview_unavailable',
+          app: candidate.app,
+          mediaKey: candidate.mediaKey,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+
+        return [
+          candidate.mediaKey,
+          {
+            available: false,
+            mode: 'blind_search',
+            reason:
+              error instanceof Error
+                ? `Release preview unavailable: ${error.message}`
+                : 'Release preview unavailable due to an unexpected error.',
+            selectedReleaseTitle: null,
+            selectedReleaseQuality: null,
+            selectedReleaseResolution: null,
+            selectedReleaseIndexer: null,
+            upgradePriority: false,
+          } satisfies CandidateReleasePreview,
+        ] as const;
+      }
+      })
+    );
 
   return new Map(
     previews.filter(

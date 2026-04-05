@@ -132,6 +132,7 @@ const toRunSummaryShape = (
 };
 
 const renderCandidateDispatchPath = (preview: {
+  available: boolean;
   mode: string;
   reason: string;
   selectedReleaseTitle: string | null;
@@ -140,6 +141,14 @@ const renderCandidateDispatchPath = (preview: {
 } | null) => {
   if (!preview) {
     return <StatusBadge status="info">n/a</StatusBadge>;
+  }
+
+  if (!preview.available) {
+    return (
+      <StatusBadge status="degraded" title={preview.reason}>
+        Unavailable
+      </StatusBadge>
+    );
   }
 
   const label =
@@ -559,6 +568,15 @@ export default async function HomePage() {
 
               if (!preview) {
                 return 'n/a';
+              }
+
+              if (!preview.available) {
+                return (
+                  <div className="release-preview" title={preview.reason}>
+                    <strong>Release preview unavailable</strong>
+                    <small>{preview.reason}</small>
+                  </div>
+                );
               }
 
               if (!preview.selectedReleaseTitle) {
