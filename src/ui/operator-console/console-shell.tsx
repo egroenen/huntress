@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import type { SchedulerCoordinatorStatus } from '@/src/scheduler';
@@ -63,14 +62,14 @@ export const ConsoleShell = ({
             const active = item.href === activePath;
 
             return (
-              <Link
+              <a
                 key={item.href}
                 href={item.href}
                 className={active ? 'console-nav__link is-active' : 'console-nav__link'}
               >
                 <span>{item.label}</span>
                 {item.badge ? <small>{item.badge}</small> : null}
-              </Link>
+              </a>
             );
           })}
         </nav>
@@ -117,9 +116,10 @@ export const ConsoleShell = ({
                   .join(' · ')}
               </p>
             </div>
-            <Link href="/" className="console-link">
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+            <a href="/" className="console-link">
               Review dependency health
-            </Link>
+            </a>
           </div>
         ) : null}
         <div className="console-content">{children}</div>

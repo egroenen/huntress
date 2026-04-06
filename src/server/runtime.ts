@@ -305,7 +305,7 @@ export const runManualCycle = async (
   runType: Exclude<CoordinatedRunType, 'scheduled'>
 ) => {
   const runtime = await getRuntimeContext();
-  return runtime.scheduler.runManual(runType);
+  return runtime.scheduler.startManual(runType);
 };
 
 export const recoverActiveRun = async (reason?: string) => {
@@ -351,69 +351,74 @@ export const runManualFetch = async (mediaKey: string) => {
     },
   });
 
-  try {
-    const summary = await executeManualFetch({
-      database: runtime.database,
-      config: runtime.config,
-      clients: {
-        sonarr: runtime.clients.sonarr,
-        radarr: runtime.clients.radarr,
-      },
-      runId,
-      mediaKey,
-      now: startedAt,
-    });
-
-    runtime.database.repositories.runHistory.update({
-      id: runId,
-      runType: 'manual_live',
-      startedAt: startedAtIso,
-      finishedAt: new Date().toISOString(),
-      status: summary.errorCount > 0 ? 'failed' : 'success',
-      candidateCount: summary.candidateCount,
-      dispatchCount: summary.dispatchCount,
-      skipCount: summary.skipCount,
-      errorCount: summary.errorCount,
-      summary: summary.summary,
-    });
-
-    return {
-      accepted: true,
-      runId,
-      reason: null,
-    };
-  } catch (error) {
-    runtime.database.repositories.runHistory.update({
-      id: runId,
-      runType: 'manual_live',
-      startedAt: startedAtIso,
-      finishedAt: new Date().toISOString(),
-      status: 'failed',
-      candidateCount: 1,
-      dispatchCount: 0,
-      skipCount: 0,
-      errorCount: 1,
-      summary: {
-        manualFetch: true,
+  void (async () => {
+    try {
+      const summary = await executeManualFetch({
+        database: runtime.database,
+        config: runtime.config,
+        clients: {
+          sonarr: runtime.clients.sonarr,
+          radarr: runtime.clients.radarr,
+        },
+        runId,
         mediaKey,
-        manualOverride: true,
-        error:
-          error instanceof Error
-            ? {
-                name: error.name,
-                message: error.message,
-              }
-            : {
-                message: 'Unknown manual fetch error',
-              },
-      },
-    });
+        now: startedAt,
+      });
 
-    return {
-      accepted: true,
-      runId,
-      reason:
-        error instanceof Error ? error.message : 'Unknown manual fetch error',
-    };
-  }
+      runtime.database.repositories.runHistory.update({
+        id: runId,
+        runType: 'manual_live',
+        startedAt: startedAtIso,
+        finishedAt: new Date().toISOString(),
+        status: summary.errorCount > 0 ? 'failed' : 'success',
+        candidateCount: summary.candidateCount,
+        dispatchCount: summary.dispatchCount,
+        skipCount: summary.skipCount,
+        errorCount: summary.errorCount,
+        summary: summary.summary,
+      });
+    } catch (error) {
+      logger.error(
+        {
+          error,
+          event: 'manual_fetch_background_failed',
+          mediaKey,
+          runId,
+        },
+        'Background manual fetch failed'
+      );
+
+      runtime.database.repositories.runHistory.update({
+        id: runId,
+        runType: 'manual_live',
+        startedAt: startedAtIso,
+        finishedAt: new Date().toISOString(),
+        status: 'failed',
+        candidateCount: 1,
+        dispatchCount: 0,
+        skipCount: 0,
+        errorCount: 1,
+        summary: {
+          manualFetch: true,
+          mediaKey,
+          manualOverride: true,
+          error:
+            error instanceof Error
+              ? {
+                  name: error.name,
+                  message: error.message,
+                }
+              : {
+                  message: 'Unknown manual fetch error',
+                },
+        },
+      });
+    }
+  })();
+
+  return {
+    accepted: true,
+    runId,
+    reason: null,
+  };
 };

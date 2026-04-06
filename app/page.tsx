@@ -82,7 +82,7 @@ export default async function HomePage() {
       }
     >
       <StatsGrid className="stats-grid--overview">
-        <Link href="/settings" className="stat-card-link">
+        <a href="/settings" className="stat-card-link">
           <StatCard
             label="Dispatch mode"
             value={formatDisplayMode(runtime.config.mode)}
@@ -97,22 +97,22 @@ export default async function HomePage() {
               )
             }
           />
-        </Link>
-        <Link href="/candidates" className="stat-card-link">
+        </a>
+        <a href="/candidates" className="stat-card-link">
           <StatCard
             label="Candidates"
             value={candidates.all.length}
             detail={`${dispatchableCount} dispatchable, ${skippedCount} skipped`}
           />
-        </Link>
-        <Link href="/suppressions" className="stat-card-link">
+        </a>
+        <a href="/suppressions" className="stat-card-link">
           <StatCard
             label="Active suppressions"
             value={suppressions.length}
             detail="Release-level blocks currently active"
           />
-        </Link>
-        <Link href="/settings" className="stat-card-link">
+        </a>
+        <a href="/settings" className="stat-card-link">
           <StatCard
             label="Dispatch budget (15m)"
             value={`${searchRate.windows[0]?.used ?? 0}/${searchRate.windows[0]?.limit ?? 0}`}
@@ -129,8 +129,8 @@ export default async function HomePage() {
               />
             }
           />
-        </Link>
-        <Link
+        </a>
+        <a
           href={latestRun ? `/runs/${latestRun.id}` : '/runs'}
           className="stat-card-link"
         >
@@ -152,7 +152,7 @@ export default async function HomePage() {
                 : 'No runs yet'
             }
           />
-        </Link>
+        </a>
       </StatsGrid>
 
       <SectionCard
@@ -387,9 +387,9 @@ export default async function HomePage() {
         title="Candidate snapshot"
         subtitle="A deterministic preview of what the decision engine would do right now."
         actions={
-          <Link href="/candidates" className="console-link">
+          <a href="/candidates" className="console-link">
             Open candidate preview
-          </Link>
+          </a>
         }
       >
         <DataTable
@@ -459,9 +459,9 @@ export default async function HomePage() {
         title="Recent Transmission actions"
         subtitle="Latest observed torrents, including removals triggered by the guard."
         actions={
-          <Link href="/transmission" className="console-link">
+          <a href="/transmission" className="console-link">
             Open Transmission view
-          </Link>
+          </a>
         }
       >
         <DataTable

@@ -224,7 +224,20 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
     return referenceTime.getTime() < startedAt.getTime() + options.startupGracePeriodMs;
   };
 
-  const run = async (runType: CoordinatedRunType): Promise<RunInvocationResult> => {
+  const initializeRun = (runType: CoordinatedRunType):
+    | {
+        accepted: false;
+        result: RunInvocationResult;
+      }
+    | {
+        accepted: true;
+        runId: string;
+        runType: CoordinatedRunType;
+        runStart: Date;
+        runStartedAtIso: string;
+        startupGraceActive: boolean;
+        activityTracker: ActivityTracker;
+      } => {
     const runStart = now();
     const runId = createRunId(runType);
     const lockState = createLockState(runId, runType, runStart, options.lockTtlMs);
@@ -240,9 +253,12 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
       });
       return {
         accepted: false,
-        runId: null,
-        reason: 'run_in_progress',
-        startupGraceActive,
+        result: {
+          accepted: false,
+          runId: null,
+          reason: 'run_in_progress',
+          startupGraceActive,
+        },
       };
     }
 
@@ -265,6 +281,34 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
       runType,
       startupGraceActive,
     });
+
+    return {
+      accepted: true,
+      runId,
+      runType,
+      runStart,
+      runStartedAtIso,
+      startupGraceActive,
+      activityTracker,
+    };
+  };
+
+  const executeStartedRun = async (startedRun: {
+    runId: string;
+    runType: CoordinatedRunType;
+    runStart: Date;
+    runStartedAtIso: string;
+    startupGraceActive: boolean;
+    activityTracker: ActivityTracker;
+  }): Promise<RunInvocationResult> => {
+    const {
+      runId,
+      runType,
+      runStart,
+      runStartedAtIso,
+      startupGraceActive,
+      activityTracker,
+    } = startedRun;
 
     try {
       const timeoutPromise = new Promise<RunExecutionResult>((_, reject) => {
@@ -425,6 +469,33 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
     };
   };
 
+  const run = async (runType: CoordinatedRunType): Promise<RunInvocationResult> => {
+    const initialized = initializeRun(runType);
+
+    if (!initialized.accepted) {
+      return initialized.result;
+    }
+
+    return executeStartedRun(initialized);
+  };
+
+  const startRun = async (runType: CoordinatedRunType): Promise<RunInvocationResult> => {
+    const initialized = initializeRun(runType);
+
+    if (!initialized.accepted) {
+      return initialized.result;
+    }
+
+    void executeStartedRun(initialized);
+
+    return {
+      accepted: true,
+      runId: initialized.runId,
+      reason: 'started',
+      startupGraceActive: initialized.startupGraceActive,
+    };
+  };
+
   const scheduleInterval = (): void => {
     nextScheduledRunAt = new Date(now().getTime() + cadenceMs);
     intervalHandle = createScheduledInterval(() => {
@@ -473,6 +544,11 @@ export const createSchedulerCoordinator = (options: SchedulerCoordinatorOptions)
       runType: Exclude<CoordinatedRunType, 'scheduled'>
     ): Promise<RunInvocationResult> {
       return run(runType);
+    },
+    startManual(
+      runType: Exclude<CoordinatedRunType, 'scheduled'>
+    ): Promise<RunInvocationResult> {
+      return startRun(runType);
     },
     getStatus(): SchedulerCoordinatorStatus {
       const referenceTime = now();

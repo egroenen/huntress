@@ -1,4 +1,4 @@
-import { getRedactedConfig, probeDependencyHealth } from '@/src/server/console-data';
+import { probeDependencyHealth } from '@/src/server/console-data';
 import { saveSettingsAction, testConnectionAction } from '@/src/server/actions';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
@@ -25,7 +25,6 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function SettingsPage(props: { searchParams: SearchParams }) {
   const runtime = await requireAuthenticatedConsoleContext();
-  const redactedConfig = await getRedactedConfig();
   const dependencyCards = await probeDependencyHealth(runtime);
   const searchParams = await props.searchParams;
   const notice =
@@ -328,9 +327,17 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
 
       <SectionCard
         title="Effective configuration"
-        subtitle={`Loaded from ${redactedConfig.meta.configPath}. Session secret source: ${runtime.sessionSecretSource}.`}
+        subtitle={`Loaded from ${runtime.redactedConfig.meta.configPath}. Session secret source: ${runtime.sessionSecretSource}.`}
       >
-        <pre className="config-pre">{JSON.stringify(redactedConfig, null, 2)}</pre>
+        <div className="settings-config-summary">
+          <p className="settings-form__hint">
+            The full redacted runtime config is available on a separate page so the
+            main Settings screen stays responsive.
+          </p>
+          <a href="/settings/config" className="console-link">
+            Open effective configuration
+          </a>
+        </div>
       </SectionCard>
     </ConsoleShell>
   );
