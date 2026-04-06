@@ -20,6 +20,8 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+const PAGE_SIZE = 50;
+
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 const formatTimestamp = (value: string | null): string => {
@@ -64,17 +66,54 @@ const parseStringParam = (value: string | string[] | undefined): string | undefi
   return typeof value === 'string' ? value : Array.isArray(value) ? value[0] : undefined;
 };
 
+const parsePositivePage = (value: string | string[] | undefined): number => {
+  const parsed = Number.parseInt(parseStringParam(value) ?? '', 10);
+
+  if (Number.isNaN(parsed) || parsed < 1) {
+    return 1;
+  }
+
+  return parsed;
+};
+
+const clampPage = (page: number, totalItems: number): number => {
+  const totalPages = Math.max(Math.ceil(totalItems / PAGE_SIZE), 1);
+  return Math.min(page, totalPages);
+};
+
+const buildStatusHref = (page: number): string => {
+  if (page <= 1) {
+    return '/status';
+  }
+
+  return `/status?page=${page}`;
+};
+
 export default async function StatusPage(props: { searchParams: SearchParams }) {
   const searchParams = await props.searchParams;
   const runtime = await requireAuthenticatedConsoleContext();
   const dependencyCards = await probeDependencyHealth(runtime);
   const notice = parseStringParam(searchParams.notice);
   const noticeStatus = parseStringParam(searchParams.status);
-  const activity = getActivityFeedState(runtime.database);
+  const requestedPage = parsePositivePage(searchParams.page);
+  let activity = getActivityFeedState(runtime.database, {
+    limit: PAGE_SIZE,
+    offset: (requestedPage - 1) * PAGE_SIZE,
+  });
+  const currentPage = clampPage(requestedPage, activity.totalRecent);
+
+  if (currentPage !== requestedPage) {
+    activity = getActivityFeedState(runtime.database, {
+      limit: PAGE_SIZE,
+      offset: (currentPage - 1) * PAGE_SIZE,
+    });
+  }
+
   const current = activity.current;
   const schedulerStatus = runtime.scheduler.getStatus();
   const activeRun = schedulerStatus.activeRun;
   const autoRefreshEnabled = Boolean(activeRun);
+  const totalPages = Math.max(Math.ceil(activity.totalRecent / PAGE_SIZE), 1);
 
   return (
     <ConsoleShell
@@ -243,6 +282,35 @@ export default async function StatusPage(props: { searchParams: SearchParams }) 
       <SectionCard
         title="Recent event feed"
         subtitle="Newest first. This is the detailed step-by-step trail for the current and recent runs."
+        actions={
+          activity.totalRecent <= PAGE_SIZE ? (
+            <span className="console-muted">
+              Showing all {activity.totalRecent} recent events.
+            </span>
+          ) : (
+            <div className="table-pagination">
+              <span className="console-muted">
+                Page {currentPage} of {totalPages} · {activity.totalRecent} recent events
+              </span>
+              <div className="table-pagination__links">
+                {currentPage > 1 ? (
+                  <a href={buildStatusHref(currentPage - 1)} className="console-link">
+                    Previous
+                  </a>
+                ) : (
+                  <span className="console-muted">Previous</span>
+                )}
+                {currentPage < totalPages ? (
+                  <a href={buildStatusHref(currentPage + 1)} className="console-link">
+                    Next
+                  </a>
+                ) : (
+                  <span className="console-muted">Next</span>
+                )}
+              </div>
+            </div>
+          )
+        }
       >
         <DataTable
           columns={[

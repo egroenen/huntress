@@ -1,4 +1,5 @@
 import type { DatabaseContext } from '@/src/db';
+import { createRepositories } from '@/src/db/repositories';
 
 const CURRENT_ACTIVITY_KEY = 'current_activity_snapshot';
 const MAX_ACTIVITY_EVENTS = 500;
@@ -23,6 +24,7 @@ export interface ActivitySnapshot {
 export interface ActivityFeedState {
   current: ActivitySnapshot | null;
   recent: Array<ActivitySnapshot & { id?: number }>;
+  totalRecent: number;
 }
 
 export interface ActivityTracker {
@@ -138,14 +140,48 @@ export const createActivityTracker = (
   };
 };
 
-export const getActivityFeedState = (database: DatabaseContext): ActivityFeedState => {
+const getActivityLogRepository = (
+  database: DatabaseContext
+): DatabaseContext['repositories']['activityLog'] => {
+  const currentActivityLog = database.repositories.activityLog as
+    | (DatabaseContext['repositories']['activityLog'] & {
+        countAll?: () => number;
+        listPage?: (limit: number, offset: number) => ReturnType<
+          DatabaseContext['repositories']['activityLog']['listRecent']
+        >;
+      })
+    | undefined;
+
+  if (
+    currentActivityLog &&
+    typeof currentActivityLog.countAll === 'function' &&
+    typeof currentActivityLog.listPage === 'function'
+  ) {
+    return currentActivityLog;
+  }
+
+  database.repositories = createRepositories(database.connection);
+  return database.repositories.activityLog;
+};
+
+export const getActivityFeedState = (
+  database: DatabaseContext,
+  options?: {
+    limit?: number;
+    offset?: number;
+  }
+): ActivityFeedState => {
   const current =
     database.repositories.serviceState.get<ActivitySnapshot>(CURRENT_ACTIVITY_KEY)?.value ??
     null;
+  const limit = options?.limit ?? 150;
+  const offset = options?.offset ?? 0;
+  const activityLog = getActivityLogRepository(database);
 
   return {
     current,
-    recent: database.repositories.activityLog.listRecent(150).map((event) => {
+    totalRecent: activityLog.countAll(),
+    recent: activityLog.listPage(limit, offset).map((event) => {
       const snapshot: ActivitySnapshot & { id?: number } = {
         occurredAt: event.occurredAt,
         level: event.level,

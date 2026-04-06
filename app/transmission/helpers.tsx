@@ -1,37 +1,20 @@
 import type { ReactNode } from 'react';
 
-import type { TransmissionTorrentStateRecord } from '@/src/db';
+import type {
+  TransmissionTorrentGuardFilter,
+  TransmissionTorrentLinkedFilter,
+  TransmissionTorrentSort,
+  TransmissionTorrentStateRecord,
+} from '@/src/db';
 
 export const PAGE_SIZE = 50;
 export const DEFAULT_SORT = 'recent_desc';
 
-export type TransmissionSort =
-  | 'recent_desc'
-  | 'recent_asc'
-  | 'name_asc'
-  | 'name_desc'
-  | 'progress_desc'
-  | 'progress_asc'
-  | 'linked_media_asc'
-  | 'linked_media_desc';
-
-export type TransmissionGuardFilter =
-  | 'all'
-  | 'active'
-  | 'stalling'
-  | 'remove_soon'
-  | 'stalled_removable'
-  | 'error_removable'
-  | 'removed'
-  | 'complete';
-
-export type TransmissionLinkedFilter = 'all' | 'linked' | 'unlinked';
-
 export interface TransmissionFilters {
-  sort: TransmissionSort;
+  sort: TransmissionTorrentSort;
   query: string;
-  guard: TransmissionGuardFilter;
-  linked: TransmissionLinkedFilter;
+  guard: TransmissionTorrentGuardFilter;
+  linked: TransmissionTorrentLinkedFilter;
 }
 
 export interface GuardInsight {
@@ -214,7 +197,9 @@ export const parsePositivePage = (value: string | string[] | undefined): number 
   return parsed;
 };
 
-const parseSort = (value: string | string[] | undefined): TransmissionSort => {
+const parseSort = (
+  value: string | string[] | undefined
+): TransmissionTorrentSort => {
   const normalized = parseStringParam(value);
 
   switch (normalized) {
@@ -233,7 +218,7 @@ const parseSort = (value: string | string[] | undefined): TransmissionSort => {
 
 const parseGuardFilter = (
   value: string | string[] | undefined
-): TransmissionGuardFilter => {
+): TransmissionTorrentGuardFilter => {
   const normalized = parseStringParam(value);
 
   switch (normalized) {
@@ -252,7 +237,7 @@ const parseGuardFilter = (
 
 const parseLinkedFilter = (
   value: string | string[] | undefined
-): TransmissionLinkedFilter => {
+): TransmissionTorrentLinkedFilter => {
   const normalized = parseStringParam(value);
 
   switch (normalized) {
@@ -281,11 +266,11 @@ export const clampPage = (page: number, totalItems: number): number => {
 };
 
 const buildTransmissionParams = (input: {
-  sort: TransmissionSort;
+  sort: TransmissionTorrentSort;
   page: number;
   query: string;
-  guard: TransmissionGuardFilter;
-  linked: TransmissionLinkedFilter;
+  guard: TransmissionTorrentGuardFilter;
+  linked: TransmissionTorrentLinkedFilter;
 }): URLSearchParams => {
   const params = new URLSearchParams();
 
@@ -313,11 +298,11 @@ const buildTransmissionParams = (input: {
 };
 
 export const buildTransmissionHref = (input: {
-  sort: TransmissionSort;
+  sort: TransmissionTorrentSort;
   page: number;
   query: string;
-  guard: TransmissionGuardFilter;
-  linked: TransmissionLinkedFilter;
+  guard: TransmissionTorrentGuardFilter;
+  linked: TransmissionTorrentLinkedFilter;
 }): string => {
   const params = buildTransmissionParams(input);
   const suffix = params.toString();
@@ -353,7 +338,7 @@ const compareTorrents = (
     TransmissionTorrentStateRecord,
     'name' | 'percentDone' | 'linkedMediaKey' | 'removedAt' | 'lastSeenAt'
   >,
-  sort: TransmissionSort
+  sort: TransmissionTorrentSort
 ): number => {
   switch (sort) {
     case 'recent_asc':
@@ -377,7 +362,7 @@ const compareTorrents = (
 
 export const sortTransmissionTorrents = (
   torrents: TransmissionTorrentStateRecord[],
-  sort: TransmissionSort
+  sort: TransmissionTorrentSort
 ): TransmissionTorrentStateRecord[] => {
   return torrents
     .map((torrent, index) => ({ torrent, index }))
@@ -451,10 +436,10 @@ export const filterTransmissionTorrents = (input: {
 export const renderTransmissionPagination = (input: {
   currentPage: number;
   totalItems: number;
-  sort: TransmissionSort;
+  sort: TransmissionTorrentSort;
   query: string;
-  guard: TransmissionGuardFilter;
-  linked: TransmissionLinkedFilter;
+  guard: TransmissionTorrentGuardFilter;
+  linked: TransmissionTorrentLinkedFilter;
 }): ReactNode => {
   const totalPages = Math.max(Math.ceil(input.totalItems / PAGE_SIZE), 1);
 

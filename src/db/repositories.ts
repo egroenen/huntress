@@ -54,6 +54,46 @@ export interface MediaItemStateRecord {
   stateHash: string;
 }
 
+export type CandidatePreviewApp = 'sonarr' | 'radarr';
+export type CandidatePreviewDecision = 'dispatch' | 'skip';
+export type CandidatePreviewSort =
+  | 'engine'
+  | 'title_asc'
+  | 'title_desc'
+  | 'retry_desc'
+  | 'retry_asc'
+  | 'next_eligible_asc'
+  | 'next_eligible_desc';
+
+export interface CandidatePreviewRecord {
+  mediaKey: string;
+  app: CandidatePreviewApp;
+  title: string;
+  wantedState: string;
+  decision: CandidatePreviewDecision;
+  reasonCode: string;
+  priorityBucket: string | null;
+  retryCount: number;
+  nextEligibleAt: string | null;
+  sortKey: string | null;
+}
+
+export interface CandidatePreviewQuery {
+  app: CandidatePreviewApp;
+  nowIso: string;
+  recentReleaseWindowDays: number;
+  excludeUnreleased: boolean;
+  excludeUnmonitored: boolean;
+  appAvailable: boolean;
+  panicDisableSearch: boolean;
+  globalSearchBlocked: boolean;
+  appDispatchLimit: number;
+  effectiveGlobalDispatchLimit: number;
+  query?: string | null;
+  decision?: CandidatePreviewDecision | null;
+  wantedState?: string | null;
+}
+
 export interface WantedPageCoverageRecord {
   app: 'sonarr' | 'radarr';
   collectionKind: 'missing' | 'cutoff';
@@ -166,6 +206,41 @@ export interface ReleaseSuppressionRecord {
   expiresAt: string;
 }
 
+export interface ReleaseSuppressionFilter {
+  query?: string | null;
+}
+
+export type TransmissionTorrentSort =
+  | 'recent_desc'
+  | 'recent_asc'
+  | 'name_asc'
+  | 'name_desc'
+  | 'progress_desc'
+  | 'progress_asc'
+  | 'linked_media_asc'
+  | 'linked_media_desc';
+
+export type TransmissionTorrentGuardFilter =
+  | 'all'
+  | 'active'
+  | 'stalling'
+  | 'remove_soon'
+  | 'stalled_removable'
+  | 'error_removable'
+  | 'removed'
+  | 'complete';
+
+export type TransmissionTorrentLinkedFilter = 'all' | 'linked' | 'unlinked';
+
+export interface TransmissionTorrentFilter {
+  nowIso: string;
+  stallNoProgressForMs: number;
+  sort: TransmissionTorrentSort;
+  query?: string | null;
+  guard?: TransmissionTorrentGuardFilter | null;
+  linked?: TransmissionTorrentLinkedFilter | null;
+}
+
 export interface TransmissionTorrentStateRecord {
   hashString: string;
   name: string;
@@ -180,6 +255,430 @@ export interface TransmissionTorrentStateRecord {
   removalReason: string | null;
   noProgressSince: string | null;
 }
+
+interface ReleaseSuppressionRow {
+  id: number;
+  media_key: string;
+  fingerprint_type: string;
+  fingerprint_value: string;
+  reason: string;
+  source: string;
+  created_at: string;
+  expires_at: string;
+}
+
+interface TransmissionTorrentStateRow {
+  hash_string: string;
+  name: string;
+  status: number;
+  percent_done: number;
+  error_code: number | null;
+  error_string: string | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  linked_media_key: string | null;
+  removed_at: string | null;
+  removal_reason: string | null;
+  no_progress_since: string | null;
+}
+
+const CANDIDATE_SAFE_INTEGER = 9_007_199_254_740_991;
+
+const buildReleaseSuppressionFilterSql = () => `
+  FROM release_suppression
+  LEFT JOIN media_item_state
+    ON media_item_state.media_key = release_suppression.media_key
+  WHERE release_suppression.expires_at > @nowIso
+    AND (
+      @queryFilter = ''
+      OR lower(
+        coalesce(media_item_state.title, '') || ' ' ||
+        release_suppression.media_key || ' ' ||
+        release_suppression.fingerprint_type || ' ' ||
+        release_suppression.fingerprint_value || ' ' ||
+        release_suppression.reason || ' ' ||
+        release_suppression.source
+      ) LIKE @queryLike
+    )
+`;
+
+const buildReleaseSuppressionFilterParams = (
+  nowIso: string,
+  filter: ReleaseSuppressionFilter = {}
+) => {
+  const normalizedQuery = filter.query?.trim().toLowerCase() ?? '';
+
+  return {
+    nowIso,
+    queryFilter: normalizedQuery,
+    queryLike: normalizedQuery ? `%${normalizedQuery}%` : '',
+  };
+};
+
+const buildTransmissionTorrentFilterCte = (sortClause: string) => `
+  WITH annotated AS (
+    SELECT
+      transmission_torrent_state.hash_string,
+      transmission_torrent_state.name,
+      transmission_torrent_state.status,
+      transmission_torrent_state.percent_done,
+      transmission_torrent_state.error_code,
+      transmission_torrent_state.error_string,
+      transmission_torrent_state.first_seen_at,
+      transmission_torrent_state.last_seen_at,
+      transmission_torrent_state.linked_media_key,
+      transmission_torrent_state.removed_at,
+      transmission_torrent_state.removal_reason,
+      transmission_torrent_state.no_progress_since,
+      media_item_state.title AS linked_title,
+      CASE transmission_torrent_state.status
+        WHEN 0 THEN 'stopped'
+        WHEN 1 THEN 'check wait'
+        WHEN 2 THEN 'checking'
+        WHEN 3 THEN 'download wait'
+        WHEN 4 THEN 'downloading'
+        WHEN 5 THEN 'seed wait'
+        WHEN 6 THEN 'seeding'
+        ELSE 'status ' || transmission_torrent_state.status
+      END AS state_label,
+      CASE
+        WHEN transmission_torrent_state.removed_at IS NOT NULL THEN 'removed'
+        WHEN COALESCE(transmission_torrent_state.error_code, 0) > 0
+          THEN 'error_removable'
+        WHEN transmission_torrent_state.percent_done >= 1 THEN 'complete'
+        WHEN transmission_torrent_state.no_progress_since IS NULL THEN 'active'
+        WHEN strftime('%s', transmission_torrent_state.no_progress_since) IS NULL
+          THEN 'active'
+        WHEN (
+          CAST(strftime('%s', transmission_torrent_state.no_progress_since) AS INTEGER) * 1000
+          + @stallNoProgressForMs
+        ) <= (CAST(strftime('%s', @nowIso) AS INTEGER) * 1000)
+          THEN 'stalled_removable'
+        WHEN (
+          CAST(strftime('%s', transmission_torrent_state.no_progress_since) AS INTEGER) * 1000
+          + @stallNoProgressForMs
+          - (CAST(strftime('%s', @nowIso) AS INTEGER) * 1000)
+        ) <= 3600000
+          THEN 'remove_soon'
+        ELSE 'stalling'
+      END AS guard_label,
+      COALESCE(
+        CAST(strftime(
+          '%s',
+          COALESCE(
+            transmission_torrent_state.removed_at,
+            transmission_torrent_state.last_seen_at
+          )
+        ) AS INTEGER),
+        0
+      ) AS recent_epoch
+    FROM transmission_torrent_state
+    LEFT JOIN media_item_state
+      ON media_item_state.media_key = transmission_torrent_state.linked_media_key
+  ),
+  filtered AS (
+    SELECT *
+    FROM annotated
+    WHERE (
+      @linkedFilter = 'all'
+      OR (@linkedFilter = 'linked' AND linked_media_key IS NOT NULL)
+      OR (@linkedFilter = 'unlinked' AND linked_media_key IS NULL)
+    )
+      AND (@guardFilter = 'all' OR guard_label = @guardFilter)
+      AND (
+        @queryFilter = ''
+        OR lower(
+          name || ' ' ||
+          coalesce(linked_title, '') || ' ' ||
+          coalesce(linked_media_key, '') || ' ' ||
+          coalesce(removal_reason, '') || ' ' ||
+          replace(guard_label, '_', ' ') || ' ' ||
+          state_label || ' ' ||
+          coalesce(error_string, '')
+        ) LIKE @queryLike
+      )
+  )
+  SELECT
+    hash_string,
+    name,
+    status,
+    percent_done,
+    error_code,
+    error_string,
+    first_seen_at,
+    last_seen_at,
+    linked_media_key,
+    removed_at,
+    removal_reason,
+    no_progress_since
+  FROM filtered
+  ${sortClause}
+`;
+
+const buildTransmissionTorrentSortClause = (
+  sort: TransmissionTorrentSort
+): string => {
+  switch (sort) {
+    case 'recent_asc':
+      return 'ORDER BY recent_epoch ASC, hash_string ASC';
+    case 'name_asc':
+      return 'ORDER BY name COLLATE NOCASE ASC, hash_string ASC';
+    case 'name_desc':
+      return 'ORDER BY name COLLATE NOCASE DESC, hash_string ASC';
+    case 'progress_desc':
+      return 'ORDER BY percent_done DESC, hash_string ASC';
+    case 'progress_asc':
+      return 'ORDER BY percent_done ASC, hash_string ASC';
+    case 'linked_media_asc':
+      return `
+        ORDER BY
+          CASE WHEN linked_media_key IS NULL THEN 1 ELSE 0 END ASC,
+          coalesce(linked_title, linked_media_key, '') COLLATE NOCASE ASC,
+          hash_string ASC
+      `;
+    case 'linked_media_desc':
+      return `
+        ORDER BY
+          CASE WHEN linked_media_key IS NULL THEN 1 ELSE 0 END ASC,
+          coalesce(linked_title, linked_media_key, '') COLLATE NOCASE DESC,
+          hash_string ASC
+      `;
+    case 'recent_desc':
+    default:
+      return 'ORDER BY recent_epoch DESC, hash_string ASC';
+  }
+};
+
+const buildTransmissionTorrentFilterParams = (
+  filter: TransmissionTorrentFilter
+) => {
+  const normalizedQuery = filter.query?.trim().toLowerCase() ?? '';
+
+  return {
+    nowIso: filter.nowIso,
+    stallNoProgressForMs: filter.stallNoProgressForMs,
+    linkedFilter: filter.linked ?? 'all',
+    guardFilter: filter.guard ?? 'all',
+    queryFilter: normalizedQuery,
+    queryLike: normalizedQuery ? `%${normalizedQuery}%` : '',
+  };
+};
+
+const buildCandidatePreviewCte = (sortClause: string) => `
+  WITH base AS (
+    SELECT
+      media_key,
+      title,
+      wanted_state,
+      retry_count,
+      next_eligible_at,
+      last_search_at,
+      release_date,
+      monitored,
+      in_queue,
+      suppressed_until,
+      CASE
+        WHEN media_type = 'sonarr_episode' THEN 'sonarr'
+        ELSE 'radarr'
+      END AS app
+    FROM media_item_state
+    WHERE media_type = @mediaType
+  ),
+  annotated AS (
+    SELECT
+      base.*,
+      CASE
+        WHEN @appAvailable = 0 THEN 'SKIP_APP_UNAVAILABLE'
+        WHEN @panicDisableSearch = 1 THEN 'SKIP_GLOBAL_PANIC_DISABLE'
+        WHEN @globalSearchBlocked = 1 THEN 'SKIP_GLOBAL_SEARCH_BLOCKED'
+        WHEN wanted_state = 'ignored' THEN 'SKIP_IGNORED_STATE'
+        WHEN @excludeUnmonitored = 1 AND monitored = 0 THEN 'SKIP_UNMONITORED'
+        WHEN @excludeUnreleased = 1
+          AND release_date IS NOT NULL
+          AND julianday(release_date) > julianday(@nowIso)
+          THEN 'SKIP_UNRELEASED'
+        WHEN in_queue = 1 THEN 'SKIP_IN_QUEUE'
+        WHEN suppressed_until IS NOT NULL
+          AND julianday(suppressed_until) > julianday(@nowIso)
+          THEN 'SKIP_ITEM_SUPPRESSED'
+        WHEN next_eligible_at IS NOT NULL
+          AND julianday(next_eligible_at) > julianday(@nowIso)
+          THEN 'SKIP_COOLDOWN_ACTIVE'
+        ELSE NULL
+      END AS hard_skip_reason,
+      CASE
+        WHEN wanted_state = 'missing'
+          AND release_date IS NOT NULL
+          AND (julianday(@nowIso) - julianday(release_date)) BETWEEN 0 AND @recentReleaseWindowDays
+          THEN 'missing_recent'
+        WHEN wanted_state = 'missing' THEN 'missing_backlog'
+        WHEN wanted_state = 'cutoff_unmet'
+          AND release_date IS NOT NULL
+          AND (julianday(@nowIso) - julianday(release_date)) BETWEEN 0 AND @recentReleaseWindowDays
+          THEN 'cutoff_recent'
+        WHEN wanted_state = 'cutoff_unmet' THEN 'cutoff_backlog'
+        ELSE NULL
+      END AS priority_bucket,
+      CASE
+        WHEN wanted_state = 'missing'
+          AND release_date IS NOT NULL
+          AND (julianday(@nowIso) - julianday(release_date)) BETWEEN 0 AND @recentReleaseWindowDays
+          THEN 'ELIGIBLE_MISSING_RECENT'
+        WHEN wanted_state = 'missing' THEN 'ELIGIBLE_MISSING_BACKLOG'
+        WHEN wanted_state = 'cutoff_unmet'
+          AND release_date IS NOT NULL
+          AND (julianday(@nowIso) - julianday(release_date)) BETWEEN 0 AND @recentReleaseWindowDays
+          THEN 'ELIGIBLE_CUTOFF_RECENT'
+        WHEN wanted_state = 'cutoff_unmet' THEN 'ELIGIBLE_CUTOFF_BACKLOG'
+        ELSE NULL
+      END AS dispatch_reason_code,
+      CASE
+        WHEN wanted_state = 'missing'
+          AND release_date IS NOT NULL
+          AND (julianday(@nowIso) - julianday(release_date)) BETWEEN 0 AND @recentReleaseWindowDays
+          THEN 0
+        WHEN wanted_state = 'missing' THEN 1
+        WHEN wanted_state = 'cutoff_unmet'
+          AND release_date IS NOT NULL
+          AND (julianday(@nowIso) - julianday(release_date)) BETWEEN 0 AND @recentReleaseWindowDays
+          THEN 2
+        WHEN wanted_state = 'cutoff_unmet' THEN 3
+        ELSE 99
+      END AS bucket_rank
+    FROM base
+  ),
+  ranked AS (
+    SELECT
+      annotated.*,
+      printf(
+        '%02d:%016d:%016d:%016d:%s',
+        bucket_rank,
+        COALESCE(CAST(strftime('%s', next_eligible_at) AS INTEGER), 0),
+        ${CANDIDATE_SAFE_INTEGER} - COALESCE(CAST(strftime('%s', release_date) AS INTEGER), 0),
+        COALESCE(CAST(strftime('%s', last_search_at) AS INTEGER), 0),
+        media_key
+      ) AS sort_key,
+      ROW_NUMBER() OVER (
+        ORDER BY
+          bucket_rank ASC,
+          COALESCE(CAST(strftime('%s', next_eligible_at) AS INTEGER), 0) ASC,
+          COALESCE(CAST(strftime('%s', release_date) AS INTEGER), 0) DESC,
+          COALESCE(CAST(strftime('%s', last_search_at) AS INTEGER), 0) ASC,
+          media_key ASC
+      ) AS eligible_rank
+    FROM annotated
+    WHERE hard_skip_reason IS NULL
+      AND priority_bucket IS NOT NULL
+  ),
+  decisions AS (
+    SELECT
+      annotated.media_key,
+      annotated.app,
+      annotated.title,
+      annotated.wanted_state,
+      annotated.retry_count,
+      annotated.next_eligible_at,
+      CASE
+        WHEN annotated.hard_skip_reason IS NOT NULL THEN 'skip'
+        WHEN annotated.priority_bucket IS NULL THEN 'skip'
+        WHEN ranked.eligible_rank > @appDispatchLimit THEN 'skip'
+        WHEN ranked.eligible_rank > @effectiveGlobalDispatchLimit THEN 'skip'
+        ELSE 'dispatch'
+      END AS decision,
+      CASE
+        WHEN annotated.hard_skip_reason IS NOT NULL THEN annotated.hard_skip_reason
+        WHEN annotated.priority_bucket IS NULL THEN 'SKIP_IGNORED_STATE'
+        WHEN ranked.eligible_rank > @appDispatchLimit THEN 'SKIP_APP_BUDGET_EXHAUSTED'
+        WHEN ranked.eligible_rank > @effectiveGlobalDispatchLimit THEN 'SKIP_GLOBAL_BUDGET_EXHAUSTED'
+        ELSE annotated.dispatch_reason_code
+      END AS reason_code,
+      annotated.priority_bucket,
+      ranked.sort_key
+    FROM annotated
+    LEFT JOIN ranked ON ranked.media_key = annotated.media_key
+  ),
+  filtered AS (
+    SELECT *
+    FROM decisions
+    WHERE (@decisionFilter = '' OR decision = @decisionFilter)
+      AND (@wantedStateFilter = '' OR wanted_state = @wantedStateFilter)
+      AND (
+        @queryFilter = ''
+        OR lower(
+          title || ' ' || media_key || ' ' || reason_code || ' ' || wanted_state || ' ' || decision
+        ) LIKE @queryLike
+      )
+  )
+  SELECT
+    media_key,
+    app,
+    title,
+    wanted_state,
+    decision,
+    reason_code,
+    priority_bucket,
+    retry_count,
+    next_eligible_at,
+    sort_key
+  FROM filtered
+  ${sortClause}
+`;
+
+const buildCandidateSortClause = (sort: CandidatePreviewSort): string => {
+  switch (sort) {
+    case 'title_asc':
+      return 'ORDER BY title ASC, media_key ASC';
+    case 'title_desc':
+      return 'ORDER BY title DESC, media_key ASC';
+    case 'retry_desc':
+      return 'ORDER BY retry_count DESC, media_key ASC';
+    case 'retry_asc':
+      return 'ORDER BY retry_count ASC, media_key ASC';
+    case 'next_eligible_asc':
+      return `
+        ORDER BY
+          CASE WHEN next_eligible_at IS NULL THEN 1 ELSE 0 END ASC,
+          next_eligible_at ASC,
+          media_key ASC
+      `;
+    case 'next_eligible_desc':
+      return `
+        ORDER BY
+          CASE WHEN next_eligible_at IS NULL THEN 1 ELSE 0 END ASC,
+          next_eligible_at DESC,
+          media_key ASC
+      `;
+    case 'engine':
+    default:
+      return `
+        ORDER BY
+          CASE WHEN decision = 'dispatch' THEN 0 ELSE 1 END ASC,
+          COALESCE(sort_key, media_key) ASC,
+          media_key ASC
+      `;
+  }
+};
+
+const buildCandidatePreviewParams = (query: CandidatePreviewQuery) => {
+  const normalizedQuery = query.query?.trim().toLowerCase() ?? '';
+
+  return {
+    mediaType: query.app === 'sonarr' ? 'sonarr_episode' : 'radarr_movie',
+    appAvailable: fromBoolean(query.appAvailable),
+    panicDisableSearch: fromBoolean(query.panicDisableSearch),
+    globalSearchBlocked: fromBoolean(query.globalSearchBlocked),
+    excludeUnmonitored: fromBoolean(query.excludeUnmonitored),
+    excludeUnreleased: fromBoolean(query.excludeUnreleased),
+    nowIso: query.nowIso,
+    recentReleaseWindowDays: query.recentReleaseWindowDays,
+    appDispatchLimit: query.appDispatchLimit,
+    effectiveGlobalDispatchLimit: query.effectiveGlobalDispatchLimit,
+    decisionFilter: query.decision ?? '',
+    wantedStateFilter: query.wantedState ?? '',
+    queryFilter: normalizedQuery,
+    queryLike: normalizedQuery ? `%${normalizedQuery}%` : '',
+  };
+};
 
 interface MediaItemStateRow {
   media_key: string;
@@ -200,6 +699,19 @@ interface MediaItemStateRow {
   suppression_reason: string | null;
   last_seen_at: string;
   state_hash: string;
+}
+
+interface CandidatePreviewRow {
+  media_key: string;
+  app: CandidatePreviewApp;
+  title: string;
+  wanted_state: string;
+  decision: CandidatePreviewDecision;
+  reason_code: string;
+  priority_bucket: string | null;
+  retry_count: number;
+  next_eligible_at: string | null;
+  sort_key: string | null;
 }
 
 interface WantedPageCoverageRow {
@@ -237,6 +749,23 @@ const toMediaItemStateRecord = (row: MediaItemStateRow): MediaItemStateRecord =>
     suppressionReason: row.suppression_reason,
     lastSeenAt: row.last_seen_at,
     stateHash: row.state_hash,
+  };
+};
+
+const toCandidatePreviewRecord = (
+  row: CandidatePreviewRow
+): CandidatePreviewRecord => {
+  return {
+    mediaKey: row.media_key,
+    app: row.app,
+    title: row.title,
+    wantedState: row.wanted_state,
+    decision: row.decision,
+    reasonCode: row.reason_code,
+    priorityBucket: row.priority_bucket,
+    retryCount: row.retry_count,
+    nextEligibleAt: row.next_eligible_at,
+    sortKey: row.sort_key,
   };
 };
 
@@ -299,6 +828,40 @@ const toActivityLogRecord = (row: ActivityLogRow): ActivityLogRecord => {
     progressCurrent: row.progress_current,
     progressTotal: row.progress_total,
     metadata: decodeJson<Record<string, unknown>>(row.metadata_json),
+  };
+};
+
+const toReleaseSuppressionRecord = (
+  row: ReleaseSuppressionRow
+): ReleaseSuppressionRecord => {
+  return {
+    id: row.id,
+    mediaKey: row.media_key,
+    fingerprintType: row.fingerprint_type,
+    fingerprintValue: row.fingerprint_value,
+    reason: row.reason,
+    source: row.source,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+  };
+};
+
+const toTransmissionTorrentStateRecord = (
+  row: TransmissionTorrentStateRow
+): TransmissionTorrentStateRecord => {
+  return {
+    hashString: row.hash_string,
+    name: row.name,
+    status: row.status,
+    percentDone: row.percent_done,
+    errorCode: row.error_code,
+    errorString: row.error_string,
+    firstSeenAt: row.first_seen_at,
+    lastSeenAt: row.last_seen_at,
+    linkedMediaKey: row.linked_media_key,
+    removedAt: row.removed_at,
+    removalReason: row.removal_reason,
+    noProgressSince: row.no_progress_since,
   };
 };
 
@@ -682,6 +1245,16 @@ export const createRepositories = (database: SqliteDatabase) => {
 
       return rows.map((row) => toMediaItemStateRecord(row));
     },
+    countByMediaType(mediaType: string): number {
+      const row = database
+        .prepare<
+          [string],
+          { total: number } | undefined
+        >('SELECT COUNT(*) AS total FROM media_item_state WHERE media_type = ?')
+        .get(mediaType);
+
+      return row?.total ?? 0;
+    },
     count(): number {
       const row = database
         .prepare<
@@ -691,6 +1264,68 @@ export const createRepositories = (database: SqliteDatabase) => {
         .get();
 
       return row?.total ?? 0;
+    },
+  };
+
+  const candidatePreview = {
+    countReservedDispatches(query: CandidatePreviewQuery): number {
+      const row = database
+        .prepare<
+          ReturnType<typeof buildCandidatePreviewParams>,
+          { total: number } | undefined
+        >(
+          `
+            SELECT COUNT(*) AS total
+            FROM (${buildCandidatePreviewCte('')})
+            WHERE decision = 'dispatch'
+          `
+        )
+        .get(buildCandidatePreviewParams(query));
+
+      return row?.total ?? 0;
+    },
+    countFiltered(query: CandidatePreviewQuery): number {
+      const row = database
+        .prepare<
+          ReturnType<typeof buildCandidatePreviewParams>,
+          { total: number } | undefined
+        >(
+          `
+            SELECT COUNT(*) AS total
+            FROM (${buildCandidatePreviewCte('')})
+          `
+        )
+        .get(buildCandidatePreviewParams(query));
+
+      return row?.total ?? 0;
+    },
+    listFilteredPage(
+      query: CandidatePreviewQuery & {
+        sort: CandidatePreviewSort;
+      },
+      limit: number,
+      offset: number
+    ): CandidatePreviewRecord[] {
+      const rows = database
+        .prepare<
+          ReturnType<typeof buildCandidatePreviewParams> & {
+            limit: number;
+            offset: number;
+          },
+          CandidatePreviewRow
+        >(
+          `
+            ${buildCandidatePreviewCte(buildCandidateSortClause(query.sort))}
+            LIMIT @limit OFFSET @offset
+          `
+        )
+        .all({
+          ...buildCandidatePreviewParams(query),
+          limit,
+          offset,
+        });
+
+      return rows.map((row) => toCandidatePreviewRecord(row));
     },
   };
 
@@ -964,6 +1599,33 @@ export const createRepositories = (database: SqliteDatabase) => {
 
       return rows.map((row) => toActivityLogRecord(row));
     },
+    countAll(): number {
+      const row = database
+        .prepare<[], { total: number } | undefined>(
+          `
+            SELECT COUNT(*) AS total
+            FROM activity_log
+          `
+        )
+        .get();
+
+      return row?.total ?? 0;
+    },
+    listPage(limit: number, offset: number): ActivityLogRecord[] {
+      const rows = database
+        .prepare<[number, number], ActivityLogRow>(
+          `
+            SELECT id, occurred_at, level, source, stage, message, detail, run_id, run_type,
+                   progress_current, progress_total, metadata_json
+            FROM activity_log
+            ORDER BY occurred_at DESC, id DESC
+            LIMIT ? OFFSET ?
+          `
+        )
+        .all(limit, offset);
+
+      return rows.map((row) => toActivityLogRecord(row));
+    },
     listByRunId(runId: string): ActivityLogRecord[] {
       const rows = database
         .prepare<[string], ActivityLogRow>(
@@ -1157,19 +1819,7 @@ export const createRepositories = (database: SqliteDatabase) => {
     },
     listActive(nowIso: string): ReleaseSuppressionRecord[] {
       const rows = database
-        .prepare<
-          [string],
-          {
-            id: number;
-            media_key: string;
-            fingerprint_type: string;
-            fingerprint_value: string;
-            reason: string;
-            source: string;
-            created_at: string;
-            expires_at: string;
-          }
-        >(
+        .prepare<[string], ReleaseSuppressionRow>(
           `
             SELECT id, media_key, fingerprint_type, fingerprint_value, reason, source, created_at, expires_at
             FROM release_suppression
@@ -1179,16 +1829,75 @@ export const createRepositories = (database: SqliteDatabase) => {
         )
         .all(nowIso);
 
-      return rows.map((row) => ({
-        id: row.id,
-        mediaKey: row.media_key,
-        fingerprintType: row.fingerprint_type,
-        fingerprintValue: row.fingerprint_value,
-        reason: row.reason,
-        source: row.source,
-        createdAt: row.created_at,
-        expiresAt: row.expires_at,
-      }));
+      return rows.map((row) => toReleaseSuppressionRecord(row));
+    },
+    countActive(nowIso: string): number {
+      const row = database
+        .prepare<[string], { total: number } | undefined>(
+          `
+            SELECT COUNT(*) AS total
+            FROM release_suppression
+            WHERE expires_at > ?
+          `
+        )
+        .get(nowIso);
+
+      return row?.total ?? 0;
+    },
+    countActiveFiltered(
+      nowIso: string,
+      filter: ReleaseSuppressionFilter = {}
+    ): number {
+      const row = database
+        .prepare<
+          ReturnType<typeof buildReleaseSuppressionFilterParams>,
+          { total: number } | undefined
+        >(
+          `
+            SELECT COUNT(*) AS total
+            ${buildReleaseSuppressionFilterSql()}
+          `
+        )
+        .get(buildReleaseSuppressionFilterParams(nowIso, filter));
+
+      return row?.total ?? 0;
+    },
+    listActiveFilteredPage(
+      nowIso: string,
+      limit: number,
+      offset: number,
+      filter: ReleaseSuppressionFilter = {}
+    ): ReleaseSuppressionRecord[] {
+      const rows = database
+        .prepare<
+          ReturnType<typeof buildReleaseSuppressionFilterParams> & {
+            limit: number;
+            offset: number;
+          },
+          ReleaseSuppressionRow
+        >(
+          `
+            SELECT
+              release_suppression.id,
+              release_suppression.media_key,
+              release_suppression.fingerprint_type,
+              release_suppression.fingerprint_value,
+              release_suppression.reason,
+              release_suppression.source,
+              release_suppression.created_at,
+              release_suppression.expires_at
+            ${buildReleaseSuppressionFilterSql()}
+            ORDER BY release_suppression.expires_at ASC, release_suppression.id ASC
+            LIMIT @limit OFFSET @offset
+          `
+        )
+        .all({
+          ...buildReleaseSuppressionFilterParams(nowIso, filter),
+          limit,
+          offset,
+        });
+
+      return rows.map((row) => toReleaseSuppressionRecord(row));
     },
     clearById(id: number): void {
       database.prepare('DELETE FROM release_suppression WHERE id = ?').run(id);
@@ -1204,6 +1913,22 @@ export const createRepositories = (database: SqliteDatabase) => {
       const result = database
         .prepare(`DELETE FROM release_suppression WHERE id IN (${placeholders})`)
         .run(...uniqueIds);
+
+      return result.changes;
+    },
+    clearActiveFiltered(
+      nowIso: string,
+      filter: ReleaseSuppressionFilter = {}
+    ): number {
+      const result = database
+        .prepare(`
+          DELETE FROM release_suppression
+          WHERE id IN (
+            SELECT release_suppression.id
+            ${buildReleaseSuppressionFilterSql()}
+          )
+        `)
+        .run(buildReleaseSuppressionFilterParams(nowIso, filter));
 
       return result.changes;
     },
@@ -1252,64 +1977,20 @@ export const createRepositories = (database: SqliteDatabase) => {
     },
     getByHash(hashString: string): TransmissionTorrentStateRecord | null {
       const row = database
-        .prepare<
-          [string],
-          | {
-              hash_string: string;
-              name: string;
-              status: number;
-              percent_done: number;
-              error_code: number | null;
-              error_string: string | null;
-              first_seen_at: string;
-              last_seen_at: string;
-              linked_media_key: string | null;
-              removed_at: string | null;
-              removal_reason: string | null;
-              no_progress_since: string | null;
-            }
-          | undefined
-        >('SELECT * FROM transmission_torrent_state WHERE hash_string = ?')
+        .prepare<[string], TransmissionTorrentStateRow | undefined>(
+          'SELECT * FROM transmission_torrent_state WHERE hash_string = ?'
+        )
         .get(hashString);
 
       if (!row) {
         return null;
       }
 
-      return {
-        hashString: row.hash_string,
-        name: row.name,
-        status: row.status,
-        percentDone: row.percent_done,
-        errorCode: row.error_code,
-        errorString: row.error_string,
-        firstSeenAt: row.first_seen_at,
-        lastSeenAt: row.last_seen_at,
-        linkedMediaKey: row.linked_media_key,
-        removedAt: row.removed_at,
-        removalReason: row.removal_reason,
-        noProgressSince: row.no_progress_since,
-      };
+      return toTransmissionTorrentStateRecord(row);
     },
     listRecent(limit: number): TransmissionTorrentStateRecord[] {
       const rows = database
-        .prepare<
-          [number],
-          {
-            hash_string: string;
-            name: string;
-            status: number;
-            percent_done: number;
-            error_code: number | null;
-            error_string: string | null;
-            first_seen_at: string;
-            last_seen_at: string;
-            linked_media_key: string | null;
-            removed_at: string | null;
-            removal_reason: string | null;
-            no_progress_since: string | null;
-          }
-        >(
+        .prepare<[number], TransmissionTorrentStateRow>(
           `
             SELECT *
             FROM transmission_torrent_state
@@ -1319,40 +2000,66 @@ export const createRepositories = (database: SqliteDatabase) => {
         )
         .all(limit);
 
-      return rows.map((row) => ({
-        hashString: row.hash_string,
-        name: row.name,
-        status: row.status,
-        percentDone: row.percent_done,
-        errorCode: row.error_code,
-        errorString: row.error_string,
-        firstSeenAt: row.first_seen_at,
-        lastSeenAt: row.last_seen_at,
-        linkedMediaKey: row.linked_media_key,
-        removedAt: row.removed_at,
-        removalReason: row.removal_reason,
-        noProgressSince: row.no_progress_since,
-      }));
+      return rows.map((row) => toTransmissionTorrentStateRecord(row));
+    },
+    count(): number {
+      const row = database
+        .prepare<[], { total: number } | undefined>(
+          `
+            SELECT COUNT(*) AS total
+            FROM transmission_torrent_state
+          `
+        )
+        .get();
+
+      return row?.total ?? 0;
+    },
+    countFiltered(filter: TransmissionTorrentFilter): number {
+      const row = database
+        .prepare<
+          ReturnType<typeof buildTransmissionTorrentFilterParams>,
+          { total: number } | undefined
+        >(
+          `
+            SELECT COUNT(*) AS total
+            FROM (${buildTransmissionTorrentFilterCte('')})
+          `
+        )
+        .get(buildTransmissionTorrentFilterParams(filter));
+
+      return row?.total ?? 0;
+    },
+    listFilteredPage(
+      filter: TransmissionTorrentFilter,
+      limit: number,
+      offset: number
+    ): TransmissionTorrentStateRecord[] {
+      const rows = database
+        .prepare<
+          ReturnType<typeof buildTransmissionTorrentFilterParams> & {
+            limit: number;
+            offset: number;
+          },
+          TransmissionTorrentStateRow
+        >(
+          `
+            ${buildTransmissionTorrentFilterCte(
+              buildTransmissionTorrentSortClause(filter.sort)
+            )}
+            LIMIT @limit OFFSET @offset
+          `
+        )
+        .all({
+          ...buildTransmissionTorrentFilterParams(filter),
+          limit,
+          offset,
+        });
+
+      return rows.map((row) => toTransmissionTorrentStateRecord(row));
     },
     listAll(): TransmissionTorrentStateRecord[] {
       const rows = database
-        .prepare<
-          [],
-          {
-            hash_string: string;
-            name: string;
-            status: number;
-            percent_done: number;
-            error_code: number | null;
-            error_string: string | null;
-            first_seen_at: string;
-            last_seen_at: string;
-            linked_media_key: string | null;
-            removed_at: string | null;
-            removal_reason: string | null;
-            no_progress_since: string | null;
-          }
-        >(
+        .prepare<[], TransmissionTorrentStateRow>(
           `
             SELECT *
             FROM transmission_torrent_state
@@ -1361,20 +2068,7 @@ export const createRepositories = (database: SqliteDatabase) => {
         )
         .all();
 
-      return rows.map((row) => ({
-        hashString: row.hash_string,
-        name: row.name,
-        status: row.status,
-        percentDone: row.percent_done,
-        errorCode: row.error_code,
-        errorString: row.error_string,
-        firstSeenAt: row.first_seen_at,
-        lastSeenAt: row.last_seen_at,
-        linkedMediaKey: row.linked_media_key,
-        removedAt: row.removed_at,
-        removalReason: row.removal_reason,
-        noProgressSince: row.no_progress_since,
-      }));
+      return rows.map((row) => toTransmissionTorrentStateRecord(row));
     },
     deleteAll(): void {
       database.prepare('DELETE FROM transmission_torrent_state').run();
@@ -1393,6 +2087,7 @@ export const createRepositories = (database: SqliteDatabase) => {
     searchAttempts,
     releaseSuppressions,
     transmissionTorrentState,
+    candidatePreview,
   };
 };
 

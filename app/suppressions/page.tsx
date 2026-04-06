@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import { createCsrfToken } from '@/src/auth';
 import {
+  clearAllMatchingSuppressionsAction,
   clearSelectedSuppressionsAction,
   clearSuppressionAction,
 } from '@/src/server/actions';
@@ -156,16 +157,27 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
     typeof searchParams.notice === 'string' ? searchParams.notice : undefined;
   const noticeStatus =
     typeof searchParams.status === 'string' ? searchParams.status : undefined;
-  const suppressions = runtime.database.repositories.releaseSuppressions.listActive(
-    new Date().toISOString()
+  const nowIso = new Date().toISOString();
+  const totalSuppressions =
+    runtime.database.repositories.releaseSuppressions.countActive(nowIso);
+  const filteredSuppressionCount =
+    runtime.database.repositories.releaseSuppressions.countActiveFiltered(nowIso, {
+      query,
+    });
+  const currentPage = clampPage(
+    parsePositivePage(searchParams.page),
+    filteredSuppressionCount
   );
-  const returnToBase = buildSuppressionsHref({
-    page: parsePositivePage(searchParams.page),
-    query,
-  });
+  const pagedSuppressions =
+    runtime.database.repositories.releaseSuppressions.listActiveFilteredPage(
+      nowIso,
+      PAGE_SIZE,
+      (currentPage - 1) * PAGE_SIZE,
+      { query }
+    );
   const displayMediaItems = await hydrateMediaDisplayRecords(
     runtime,
-    suppressions.map((suppression) => suppression.mediaKey)
+    pagedSuppressions.map((suppression) => suppression.mediaKey)
   );
 
   const titleCache = new Map<string, string | null>();
@@ -181,34 +193,6 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
 
     return titleCache.get(mediaKey) ?? null;
   };
-
-  const filteredSuppressions = suppressions.filter((suppression) => {
-    if (!query) {
-      return true;
-    }
-
-    const haystack = [
-      resolveTitle(suppression.mediaKey) ?? '',
-      suppression.mediaKey,
-      suppression.fingerprintType,
-      suppression.fingerprintValue,
-      suppression.reason,
-      suppression.source,
-    ]
-      .join(' ')
-      .toLowerCase();
-
-    return haystack.includes(query.toLowerCase());
-  });
-
-  const currentPage = clampPage(
-    parsePositivePage(searchParams.page),
-    filteredSuppressions.length
-  );
-  const pagedSuppressions = filteredSuppressions.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE
-  );
   const returnTo = buildSuppressionsHref({
     page: currentPage,
     query,
@@ -234,7 +218,7 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
       <SectionCard
         title="Active suppressions"
         subtitle="These blocks expire automatically unless cleared early."
-        actions={renderPagination(currentPage, filteredSuppressions.length, query)}
+        actions={renderPagination(currentPage, filteredSuppressionCount, query)}
       >
         {notice ? (
           <p
@@ -261,8 +245,8 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
           </div>
           <div className="candidate-filters__actions">
             <span className="console-muted">
-              {filteredSuppressions.length} matching suppression
-              {filteredSuppressions.length === 1 ? '' : 's'} of {suppressions.length}
+              {filteredSuppressionCount} matching suppression
+              {filteredSuppressionCount === 1 ? '' : 's'} of {totalSuppressions}
             </span>
             <div className="transmission-controls__links">
               <a href="/suppressions" className="console-link">
@@ -294,27 +278,19 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
               Clear selected
             </ConfirmButton>
           </form>
-          <form
-            action={clearSelectedSuppressionsAction}
-            className="bulk-actions__group"
-          >
+          <form action={clearAllMatchingSuppressionsAction} className="bulk-actions__group">
             <input
               type="hidden"
               name="csrfToken"
               value={runtime.csrfTokens.clearSuppressions}
             />
-            <input type="hidden" name="returnTo" value={returnToBase} />
-            {filteredSuppressions
-              .map((suppression) => suppression.id)
-              .filter((id): id is number => typeof id === 'number')
-              .map((id) => (
-                <input key={id} type="hidden" name="suppressionIds" value={id} />
-              ))}
+            <input type="hidden" name="returnTo" value={returnTo} />
+            <input type="hidden" name="q" value={query} />
             <ConfirmButton
               type="submit"
               className="console-button console-button--ghost"
-              confirmMessage={`Clear all ${filteredSuppressions.length} matching suppressions?`}
-              disabled={filteredSuppressions.length === 0}
+              confirmMessage={`Clear all ${filteredSuppressionCount} matching suppressions?`}
+              disabled={filteredSuppressionCount === 0}
             >
               Clear all matching
             </ConfirmButton>

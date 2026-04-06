@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { loadConfig } from '@/src/config';
+import { createRepositories } from '@/src/db/repositories';
 import { logger } from '@/src/observability';
 
 import { initializeDatabase, type DatabaseContext } from './index';
@@ -50,10 +51,15 @@ const createDatabaseContext = async (): Promise<DatabaseContext> => {
   return database;
 };
 
+const refreshDatabaseRepositories = (database: DatabaseContext): DatabaseContext => {
+  database.repositories = createRepositories(database.connection);
+  return database;
+};
+
 export const getDatabaseContext = async (): Promise<DatabaseContext> => {
   if (!globalThis.__edarrDatabaseContext) {
     globalThis.__edarrDatabaseContext = createDatabaseContext();
   }
 
-  return globalThis.__edarrDatabaseContext;
+  return refreshDatabaseRepositories(await globalThis.__edarrDatabaseContext);
 };

@@ -60,6 +60,52 @@ export async function clearSelectedSuppressionsConsoleAction(formData: FormData)
   }
 }
 
+export async function clearAllMatchingSuppressionsConsoleAction(formData: FormData) {
+  const { runtime } = await authenticateConsoleSubmission(
+    formData,
+    'clear-suppressions'
+  );
+  const returnTo = normalizeReturnTo(formData.get('returnTo'), '/suppressions');
+  const queryValue = formData.get('q');
+  const query = typeof queryValue === 'string' ? queryValue.trim() : '';
+
+  try {
+    const clearedCount = runtime.database.repositories.releaseSuppressions.clearActiveFiltered(
+      new Date().toISOString(),
+      { query }
+    );
+
+    redirect(
+      buildPath(returnTo, {
+        status: 'success',
+        notice:
+          clearedCount === 1
+            ? 'Cleared 1 suppression.'
+            : `Cleared ${clearedCount} suppressions.`,
+      })
+    );
+  } catch (error) {
+    logger.error(
+      {
+        error,
+        event: 'clear_matching_suppressions_failed',
+        query,
+      },
+      'Failed to clear matching suppressions'
+    );
+
+    redirect(
+      buildPath('/suppressions', {
+        status: 'error',
+        notice: normalizeErrorMessage(
+          error,
+          'Unable to clear the matching suppressions.'
+        ),
+      })
+    );
+  }
+}
+
 export async function clearSuppressionConsoleAction(
   suppressionId: number,
   formData: FormData

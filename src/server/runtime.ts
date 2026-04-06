@@ -7,6 +7,7 @@ import {
   runTransmissionGuard,
   syncArrState,
 } from '@/src/domain';
+import { createRepositories } from '@/src/db';
 import { getDatabaseContext } from '@/src/db/runtime';
 import {
   createProwlarrClient,
@@ -286,6 +287,7 @@ export const getRuntimeContext = async (): Promise<RuntimeContext> => {
   }
 
   const runtimeCore = await globalThis.__edarrRuntimeCore;
+  runtimeCore.database.repositories = createRepositories(runtimeCore.database.connection);
   const resolved = resolveRuntimeConfig(runtimeCore.loadedConfig, runtimeCore.database);
 
   return {

@@ -1,7 +1,6 @@
 import Link from 'next/link';
 
 import {
-  getCandidateReleasePreviewMap,
   getDashboardCandidateSnapshot,
   probeDependencyHealth,
 } from '@/src/server/console-data';
@@ -35,55 +34,8 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-const renderCandidateDispatchPath = (preview: {
-  available: boolean;
-  mode: string;
-  reason: string;
-  selectedReleaseTitle: string | null;
-  selectedReleaseQuality: string | null;
-  selectedReleaseIndexer: string | null;
-} | null) => {
-  if (!preview) {
-    return <StatusBadge status="info">n/a</StatusBadge>;
-  }
-
-  if (!preview.available) {
-    return (
-      <StatusBadge status="degraded" title={preview.reason}>
-        Unavailable
-      </StatusBadge>
-    );
-  }
-
-  const label =
-    preview.mode === 'preferred_release'
-      ? 'Direct release'
-      : preview.mode === 'good_enough_release'
-        ? 'Good enough'
-        : preview.mode === 'fallback_then_upgrade'
-          ? 'Fallback + upgrade'
-          : 'Blind search';
-
-  const status =
-    preview.mode === 'preferred_release'
-      ? 'success'
-      : preview.mode === 'fallback_then_upgrade'
-        ? 'degraded'
-        : 'info';
-
-  return (
-    <StatusBadge status={status} title={preview.reason}>
-      {label}
-    </StatusBadge>
-  );
-};
-
 export default async function HomePage() {
   const runtime = await requireAuthenticatedConsoleContext();
-  const [dependencies, latestRun] = await Promise.all([
-    probeDependencyHealth(runtime),
-    Promise.resolve(runtime.database.repositories.runHistory.getLatest()),
-  ]);
   const candidates = getDashboardCandidateSnapshot(runtime);
   const searchRate = getSearchRateSnapshot(runtime.database, runtime.config);
   const suppressions = runtime.database.repositories.releaseSuppressions.listActive(
@@ -91,16 +43,17 @@ export default async function HomePage() {
   );
   const recentTorrents =
     runtime.database.repositories.transmissionTorrentState.listRecent(5);
-  const displayMediaItems = await hydrateMediaDisplayRecords(runtime, [
+  const displayMediaKeys = [
     ...candidates.all.slice(0, 8).map((candidate) => candidate.mediaKey),
     ...recentTorrents
       .map((torrent) => torrent.linkedMediaKey)
       .filter((mediaKey): mediaKey is string => mediaKey !== null),
+  ];
+  const [dependencies, latestRun, displayMediaItems] = await Promise.all([
+    probeDependencyHealth(runtime),
+    Promise.resolve(runtime.database.repositories.runHistory.getLatest()),
+    hydrateMediaDisplayRecords(runtime, displayMediaKeys),
   ]);
-  const candidatePreviewMap = await getCandidateReleasePreviewMap(
-    runtime,
-    candidates.all.slice(0, 8)
-  );
 
   const dispatchableCount = candidates.all.filter(
     (candidate) => candidate.decision === 'dispatch'
@@ -444,8 +397,7 @@ export default async function HomePage() {
             { key: 'app', label: 'App' },
             { key: 'title', label: 'Title' },
             { key: 'decision', label: 'Decision' },
-            { key: 'dispatchPath', label: 'Dispatch path' },
-            { key: 'releasePreview', label: 'Release preview' },
+            { key: 'wantedState', label: 'Wanted state' },
             { key: 'reason', label: 'Reason' },
             { key: 'nextEligibleAt', label: 'Next eligible' },
           ]}
@@ -470,45 +422,7 @@ export default async function HomePage() {
                 {candidate.decision}
               </StatusBadge>
             ),
-            dispatchPath: renderCandidateDispatchPath(
-              candidatePreviewMap.get(candidate.mediaKey) ?? null
-            ),
-            releasePreview: (() => {
-              const preview = candidatePreviewMap.get(candidate.mediaKey);
-
-              if (!preview) {
-                return 'n/a';
-              }
-
-              if (!preview.available) {
-                return (
-                  <div className="release-preview" title={preview.reason}>
-                    <strong>Release preview unavailable</strong>
-                    <small>{preview.reason}</small>
-                  </div>
-                );
-              }
-
-              if (!preview.selectedReleaseTitle) {
-                return (
-                  <div className="release-preview" title={preview.reason}>
-                    <strong>No direct release selected</strong>
-                    <small>{preview.reason}</small>
-                  </div>
-                );
-              }
-
-              return (
-                <div className="release-preview" title={preview.reason}>
-                  <strong>{preview.selectedReleaseTitle}</strong>
-                  <small>
-                    {[preview.selectedReleaseQuality, preview.selectedReleaseIndexer]
-                      .filter(Boolean)
-                      .join(' · ') || preview.reason}
-                  </small>
-                </div>
-              );
-            })(),
+            wantedState: candidate.wantedState.replaceAll('_', ' '),
             reason: <ReasonCodeBadge reasonCode={candidate.reasonCode} />,
             nextEligibleAt: formatRunTimestamp(candidate.nextEligibleAt),
           }))}

@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 
 import type { CandidateDecision } from '@/src/domain';
+import type { CandidatePreviewRecord } from '@/src/db';
 import { manualFetchAction } from '@/src/server/actions';
 import {
   getCandidateReleasePreviewMap,
-  getDashboardCandidateSnapshot,
   probeDependencyHealth,
   type CandidateReleasePreview,
 } from '@/src/server/console-data';
@@ -249,127 +249,6 @@ const renderPagination = (input: {
   );
 };
 
-const getComparableTimestamp = (value: string | null): number | null => {
-  if (!value) {
-    return null;
-  }
-
-  const parsed = new Date(value);
-  return Number.isFinite(parsed.getTime()) ? parsed.getTime() : null;
-};
-
-const compareNullableNumbers = (
-  left: number | null,
-  right: number | null,
-  direction: 'asc' | 'desc'
-): number => {
-  if (left === null && right === null) {
-    return 0;
-  }
-
-  if (left === null) {
-    return 1;
-  }
-
-  if (right === null) {
-    return -1;
-  }
-
-  return direction === 'asc' ? left - right : right - left;
-};
-
-const compareCandidatesBySort = (
-  left: CandidateDecision,
-  right: CandidateDecision,
-  sort: Exclude<CandidateSort, 'engine'>
-): number => {
-  switch (sort) {
-    case 'title_asc':
-      return left.title.localeCompare(right.title);
-    case 'title_desc':
-      return right.title.localeCompare(left.title);
-    case 'retry_desc':
-      return right.retryCount - left.retryCount;
-    case 'retry_asc':
-      return left.retryCount - right.retryCount;
-    case 'next_eligible_asc':
-      return compareNullableNumbers(
-        getComparableTimestamp(left.nextEligibleAt),
-        getComparableTimestamp(right.nextEligibleAt),
-        'asc'
-      );
-    case 'next_eligible_desc':
-      return compareNullableNumbers(
-        getComparableTimestamp(left.nextEligibleAt),
-        getComparableTimestamp(right.nextEligibleAt),
-        'desc'
-      );
-  }
-};
-
-const sortCandidates = (
-  candidates: CandidateDecision[],
-  sort: CandidateSort
-): CandidateDecision[] => {
-  if (sort === DEFAULT_SORT) {
-    return candidates;
-  }
-
-  return candidates
-    .map((candidate, index) => ({ candidate, index }))
-    .sort((left, right) => {
-      const previousComparison = compareCandidatesBySort(
-        left.candidate,
-        right.candidate,
-        sort
-      );
-
-      if (previousComparison !== 0) {
-        return previousComparison;
-      }
-
-      return left.index - right.index;
-    })
-    .map((entry) => entry.candidate);
-};
-
-const filterCandidates = (
-  candidates: CandidateDecision[],
-  filters: CandidateFilters
-): CandidateDecision[] => {
-  const query = filters.query.trim().toLowerCase();
-
-  return candidates.filter((candidate) => {
-    if (filters.app !== 'all' && candidate.app !== filters.app) {
-      return false;
-    }
-
-    if (filters.decision !== 'all' && candidate.decision !== filters.decision) {
-      return false;
-    }
-
-    if (filters.wantedState !== 'all' && candidate.wantedState !== filters.wantedState) {
-      return false;
-    }
-
-    if (!query) {
-      return true;
-    }
-
-    const haystack = [
-      candidate.title,
-      candidate.mediaKey,
-      candidate.reasonCode,
-      candidate.wantedState,
-      candidate.decision,
-    ]
-      .join(' ')
-      .toLowerCase();
-
-    return haystack.includes(query);
-  });
-};
-
 const formatReleaseSelectionMode = (
   preview: CandidateReleasePreview | undefined
 ): { label: string; status: 'info' | 'success' | 'degraded' } => {
@@ -433,7 +312,6 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
   const runtime = await requireAuthenticatedConsoleContext();
   const dependencyCards = await probeDependencyHealth(runtime);
   const searchParams = await props.searchParams;
-  const candidates = getDashboardCandidateSnapshot(runtime);
   const filters: CandidateFilters = {
     query: parseStringParam(searchParams.q).trim(),
     app: parseAppFilter(searchParams.app),
@@ -445,23 +323,88 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
     sonarrCollapsed: parseCollapsed(searchParams.sonarrCollapsed),
     radarrCollapsed: parseCollapsed(searchParams.radarrCollapsed),
   };
-  const filteredCandidates = {
-    sonarr: sortCandidates(filterCandidates(candidates.sonarr, filters), filters.sort),
-    radarr: sortCandidates(filterCandidates(candidates.radarr, filters), filters.sort),
+  const nowIso = new Date().toISOString();
+  const totalCandidates = {
+    sonarr: runtime.database.repositories.mediaItemState.countByMediaType(
+      'sonarr_episode'
+    ),
+    radarr: runtime.database.repositories.mediaItemState.countByMediaType(
+      'radarr_movie'
+    ),
+  };
+  const sonarrBaseQuery = {
+    app: 'sonarr' as const,
+    nowIso,
+    recentReleaseWindowDays: runtime.config.policies.sonarr.recentReleaseWindowDays,
+    excludeUnreleased: runtime.config.policies.sonarr.excludeUnreleased,
+    excludeUnmonitored: runtime.config.policies.sonarr.excludeUnmonitored,
+    appAvailable: runtime.clients.sonarr !== null,
+    panicDisableSearch: runtime.config.safety.panicDisableSearch,
+    globalSearchBlocked: false,
+    appDispatchLimit: runtime.config.policies.sonarr.maxSearchesPerCycle,
+    effectiveGlobalDispatchLimit: runtime.config.safety.maxGlobalDispatchPerCycle,
+  };
+  const sonarrReservedDispatches =
+    runtime.database.repositories.candidatePreview.countReservedDispatches(
+      sonarrBaseQuery
+    );
+  const radarrBaseQuery = {
+    app: 'radarr' as const,
+    nowIso,
+    recentReleaseWindowDays: runtime.config.policies.radarr.recentReleaseWindowDays,
+    excludeUnreleased: runtime.config.policies.radarr.excludeUnreleased,
+    excludeUnmonitored: runtime.config.policies.radarr.excludeUnmonitored,
+    appAvailable: runtime.clients.radarr !== null,
+    panicDisableSearch: runtime.config.safety.panicDisableSearch,
+    globalSearchBlocked: false,
+    appDispatchLimit: runtime.config.policies.radarr.maxSearchesPerCycle,
+    effectiveGlobalDispatchLimit: Math.max(
+      runtime.config.safety.maxGlobalDispatchPerCycle - sonarrReservedDispatches,
+      0
+    ),
+  };
+  const queryFilters = {
+    query: filters.query || null,
+    decision: filters.decision === 'all' ? null : filters.decision,
+    wantedState: filters.wantedState === 'all' ? null : filters.wantedState,
+  };
+  const filteredCounts = {
+    sonarr: runtime.database.repositories.candidatePreview.countFiltered({
+      ...sonarrBaseQuery,
+      ...queryFilters,
+    }),
+    radarr: runtime.database.repositories.candidatePreview.countFiltered({
+      ...radarrBaseQuery,
+      ...queryFilters,
+    }),
   };
   const sonarrPage = clampPage(
     parsePositivePage(searchParams.sonarrPage),
-    filteredCandidates.sonarr.length
+    filteredCounts.sonarr
   );
   const radarrPage = clampPage(
     parsePositivePage(searchParams.radarrPage),
-    filteredCandidates.radarr.length
+    filteredCounts.radarr
   );
-  const sonarrStart = (sonarrPage - 1) * PAGE_SIZE;
-  const radarrStart = (radarrPage - 1) * PAGE_SIZE;
   const pagedCandidates = {
-    sonarr: filteredCandidates.sonarr.slice(sonarrStart, sonarrStart + PAGE_SIZE),
-    radarr: filteredCandidates.radarr.slice(radarrStart, radarrStart + PAGE_SIZE),
+    sonarr: runtime.database.repositories.candidatePreview.listFilteredPage(
+      {
+        ...sonarrBaseQuery,
+        ...queryFilters,
+        sort: filters.sort,
+      },
+      PAGE_SIZE,
+      (sonarrPage - 1) * PAGE_SIZE
+    ),
+    radarr: runtime.database.repositories.candidatePreview.listFilteredPage(
+      {
+        ...radarrBaseQuery,
+        ...queryFilters,
+        sort: filters.sort,
+      },
+      PAGE_SIZE,
+      (radarrPage - 1) * PAGE_SIZE
+    ),
   };
   const displayMediaItems = await hydrateMediaDisplayRecords(runtime, [
     ...pagedCandidates.sonarr.map((candidate) => candidate.mediaKey),
@@ -470,7 +413,7 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
   const releasePreviewMap = await getCandidateReleasePreviewMap(runtime, [
     ...pagedCandidates.sonarr,
     ...pagedCandidates.radarr,
-  ]);
+  ] as CandidateDecision[]);
   const visibleApps: Array<'sonarr' | 'radarr'> =
     filters.app === 'all' ? ['sonarr', 'radarr'] : [filters.app];
 
@@ -564,15 +507,15 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
         <SectionCard
           key={app}
           title={app === 'sonarr' ? 'Sonarr candidates' : 'Radarr candidates'}
-          subtitle={`Separate policy evaluation for ${formatServiceName(app)}. Showing ${pagedCandidates[app].length} of ${filteredCandidates[app].length} matching candidates.`}
+          subtitle={`Separate policy evaluation for ${formatServiceName(app)}. Showing ${pagedCandidates[app].length} of ${filteredCounts[app]} matching candidates.`}
           actions={
             app === 'sonarr'
               ? renderPagination({
                   app: 'sonarr',
                   appLabel: 'Sonarr',
                   currentPage: sonarrPage,
-                  totalItems: filteredCandidates.sonarr.length,
-                  matchingItems: candidates.sonarr.length,
+                  totalItems: filteredCounts.sonarr,
+                  matchingItems: totalCandidates.sonarr,
                   otherPage: radarrPage,
                   filters,
                   sections,
@@ -581,8 +524,8 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
                   app: 'radarr',
                   appLabel: 'Radarr',
                   currentPage: radarrPage,
-                  totalItems: filteredCandidates.radarr.length,
-                  matchingItems: candidates.radarr.length,
+                  totalItems: filteredCounts.radarr,
+                  matchingItems: totalCandidates.radarr,
                   otherPage: sonarrPage,
                   filters,
                   sections,
@@ -614,7 +557,7 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
                   { key: 'nextEligibleAt', label: 'Next eligible' },
                   { key: 'actions', label: 'Actions', align: 'right' },
                 ]}
-                rows={pagedCandidates[app].map((candidate) => {
+                rows={pagedCandidates[app].map((candidate: CandidatePreviewRecord) => {
                   const releasePreview = releasePreviewMap.get(candidate.mediaKey);
                   const dispatchPath = formatReleaseSelectionMode(releasePreview);
 
@@ -647,7 +590,7 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
                       </StatusBadge>
                     ),
                     releasePreview: renderReleasePreview(releasePreview),
-                    reason: <ReasonCodeBadge reasonCode={candidate.reasonCode} />,
+                    reason: <ReasonCodeBadge reasonCode={candidate.reasonCode as never} />,
                     retryCount: candidate.retryCount,
                     nextEligibleAt: formatTimestamp(candidate.nextEligibleAt),
                     actions: (

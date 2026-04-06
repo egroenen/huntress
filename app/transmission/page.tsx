@@ -14,7 +14,6 @@ import {
 
 import {
   clampPage,
-  filterTransmissionTorrents,
   formatDurationFromMs,
   formatDurationSince,
   formatTransmissionState,
@@ -25,7 +24,6 @@ import {
   parseStringParam,
   parseTransmissionFilters,
   renderTransmissionPagination,
-  sortTransmissionTorrents,
 } from './helpers';
 
 export const dynamic = 'force-dynamic';
@@ -39,7 +37,35 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
   const notice = parseStringParam(searchParams.notice);
   const noticeStatus = parseStringParam(searchParams.status);
   const filters = parseTransmissionFilters(searchParams);
-  const allTorrents = runtime.database.repositories.transmissionTorrentState.listAll();
+  const nowIso = new Date().toISOString();
+  const now = new Date(nowIso);
+  const totalTorrents = runtime.database.repositories.transmissionTorrentState.count();
+  const totalFilteredTorrents =
+    runtime.database.repositories.transmissionTorrentState.countFiltered({
+      nowIso,
+      stallNoProgressForMs: runtime.config.transmissionGuard.stallNoProgressForMs,
+      sort: filters.sort,
+      query: filters.query,
+      guard: filters.guard,
+      linked: filters.linked,
+    });
+  const currentPage = clampPage(
+    parsePositivePage(searchParams.page),
+    totalFilteredTorrents
+  );
+  const pagedTorrents =
+    runtime.database.repositories.transmissionTorrentState.listFilteredPage(
+      {
+        nowIso,
+        stallNoProgressForMs: runtime.config.transmissionGuard.stallNoProgressForMs,
+        sort: filters.sort,
+        query: filters.query,
+        guard: filters.guard,
+        linked: filters.linked,
+      },
+      PAGE_SIZE,
+      (currentPage - 1) * PAGE_SIZE
+    );
   const titleCache = new Map<string, string | null>();
   const resolveTitle = (mediaKey: string | null) => {
     if (!mediaKey) {
@@ -56,21 +82,6 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
 
     return titleCache.get(mediaKey) ?? null;
   };
-  const now = new Date();
-  const filteredTorrents = filterTransmissionTorrents({
-    torrents: allTorrents,
-    filters,
-    now,
-    stallNoProgressForMs: runtime.config.transmissionGuard.stallNoProgressForMs,
-    resolveTitle,
-  });
-  const sortedTorrents = sortTransmissionTorrents(filteredTorrents, filters.sort);
-  const currentPage = clampPage(
-    parsePositivePage(searchParams.page),
-    sortedTorrents.length
-  );
-  const start = (currentPage - 1) * PAGE_SIZE;
-  const pagedTorrents = sortedTorrents.slice(start, start + PAGE_SIZE);
   const displayMediaItems = await hydrateMediaDisplayRecords(
     runtime,
     pagedTorrents
@@ -192,8 +203,8 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
                 Clear filters
               </a>
               <span className="console-muted">
-              {sortedTorrents.length} matching observation
-                {sortedTorrents.length === 1 ? '' : 's'} of {allTorrents.length}
+                {totalFilteredTorrents} matching observation
+                {totalFilteredTorrents === 1 ? '' : 's'} of {totalTorrents}
               </span>
             </div>
             <span className="console-muted">
@@ -208,7 +219,7 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
         subtitle={`Rows are sorted using the selected view and can be paged when the cache gets large. Stall removal threshold is ${formatDurationFromMs(runtime.config.transmissionGuard.stallNoProgressForMs)}.`}
         actions={renderTransmissionPagination({
           currentPage,
-          totalItems: sortedTorrents.length,
+          totalItems: totalFilteredTorrents,
           sort: filters.sort,
           query: filters.query,
           guard: filters.guard,

@@ -318,12 +318,15 @@ export const getCandidateReleasePreviewMap = async (
           } satisfies CandidateReleasePreview,
         ] as const;
       } catch (error) {
-        logger.warn({
-          event: 'release_preview_unavailable',
-          app: candidate.app,
-          mediaKey: candidate.mediaKey,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
+        logger.debug(
+          {
+            event: 'release_preview_unavailable',
+            app: candidate.app,
+            mediaKey: candidate.mediaKey,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          },
+          'Release preview unavailable for candidate snapshot'
+        );
 
         return [
           candidate.mediaKey,

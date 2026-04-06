@@ -24,6 +24,7 @@ import {
   testSettingsConnectionAction,
 } from './actions/settings-actions';
 import {
+  clearAllMatchingSuppressionsConsoleAction,
   clearSelectedSuppressionsConsoleAction,
   clearSuppressionConsoleAction,
 } from './actions/suppression-actions';
@@ -62,6 +63,10 @@ export async function resetTransmissionCacheAction(formData: FormData) {
 
 export async function clearSelectedSuppressionsAction(formData: FormData) {
   return clearSelectedSuppressionsConsoleAction(formData);
+}
+
+export async function clearAllMatchingSuppressionsAction(formData: FormData) {
+  return clearAllMatchingSuppressionsConsoleAction(formData);
 }
 
 export async function clearSuppressionAction(
