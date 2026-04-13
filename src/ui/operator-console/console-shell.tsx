@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
@@ -8,7 +9,6 @@ import type { SchedulerCoordinatorStatus } from '@/src/scheduler';
 import { useNavigationProgress } from '@/src/ui/navigation-progress';
 import { formatDisplayMode } from '@/src/ui/formatters';
 
-import { BrandMark } from './brand-mark';
 import { formatConsoleTimestamp, navigationItems } from './helpers';
 import type { DependencyHealthCard } from './layout-primitives';
 
@@ -133,7 +133,14 @@ export const ConsoleShell = ({
     <div className="console-shell">
       <aside className="console-sidebar">
         <div className="console-brand">
-          <BrandMark />
+          <Image
+            src="/icon.png"
+            alt=""
+            width={40}
+            height={40}
+            className="console-brand__mark"
+            priority
+          />
           <div>
             <h1 className="console-brand__title">Operator Console</h1>
           </div>
