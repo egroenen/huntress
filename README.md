@@ -1,4 +1,4 @@
-# edarr
+# huntress
 
 Deterministic re-search orchestration for Sonarr and Radarr, with an operator UI and Transmission loop protection.
 
@@ -16,14 +16,14 @@ Current local runtime note:
 1. Install dependencies with `pnpm install`
 2. Start the dev server with `pnpm dev`
 
-The Next.js dev server uses its own development port. The app's internal orchestration config still lives in [config/config.yaml](/home/eddyg/projects/edarr/config/config.yaml).
+The Next.js dev server uses its own development port. The app's internal orchestration config still lives in [config/config.yaml](/home/eddyg/projects/huntress/config/config.yaml).
 
 Startup behavior:
 
 - If no admin user exists yet, the app redirects to `/setup`.
 - If Sonarr, Radarr, Prowlarr, or Transmission credentials are missing, the app still boots and exposes the settings page so you can configure them in-app.
-- If `APP_SESSION_SECRET` is not set, edarr auto-generates and persists one locally.
-- In local development, if the sample `/data/...` SQLite path is not writable, edarr falls back to a repo-local `./data/...` path automatically.
+- If `APP_SESSION_SECRET` is not set, huntress auto-generates and persists one locally.
+- In local development, if the sample `/data/...` SQLite path is not writable, huntress falls back to a repo-local `./data/...` path automatically.
 
 ### Tooling
 
@@ -44,19 +44,20 @@ Startup behavior:
 
 ## Container packaging
 
-The service is packaged as a single OCI-compatible container using [Containerfile](/home/eddyg/projects/edarr/Containerfile).
+The service is packaged as a single OCI-compatible container using [Containerfile](/home/eddyg/projects/huntress/Containerfile).
 
 Runtime expectations:
 
-- `/config` is mounted read-only
+- `/config` is mounted read-only when you want the host to own `config.yaml`
 - `/data` is mounted read-write
 - the UI/API listens on container port `47892`
 - health checks use `GET /api/readyz`
+- if `/config/config.yaml` is missing, the container falls back to the bundled sample config
 
 ### Build the image
 
 ```bash
-docker build -f Containerfile -t edarr:local .
+docker build -f Containerfile -t huntress:local .
 ```
 
 ### Run locally with Docker
@@ -66,14 +67,36 @@ docker run --rm \
   -p 47892:47892 \
   -v "$(pwd)/config:/config:ro" \
   -v "$(pwd)/data:/data" \
-  edarr:local
+  huntress:local
 ```
 
 You can still supply env vars for secrets in container deployments if you want them to override the saved in-app settings, but they are no longer required for first boot.
 
 ### Compose example
 
-Use [compose.example.yaml](/home/eddyg/projects/edarr/compose.example.yaml) as the starting point for Docker or Podman-compatible compose workflows.
+Use [compose.example.yaml](/home/eddyg/projects/huntress/compose.example.yaml) as the starting point for Docker or Podman-compatible compose workflows.
+
+### Build for Unraid
+
+Unraid installs images from a registry or from images already loaded onto the host.
+
+Registry flow:
+
+```bash
+docker build -f Containerfile -t ghcr.io/YOUR_ACCOUNT/huntress:latest .
+docker push ghcr.io/YOUR_ACCOUNT/huntress:latest
+```
+
+Local import flow:
+
+```bash
+docker build -f Containerfile -t huntress:local .
+docker save huntress:local -o huntress-local.tar
+```
+
+Copy the tarball to Unraid and load it with `docker load -i /path/to/huntress-local.tar`.
+
+Detailed Unraid setup steps live in [docs/unraid.md](/home/eddyg/projects/huntress/docs/unraid.md).
 
 ### Auth recovery
 
@@ -91,25 +114,27 @@ This repo is intended to validate cleanly under Podman in WSL, but the same imag
 
 Suggested Podman validation flow:
 
-1. `podman build -f Containerfile -t edarr:local .`
-2. `podman run --rm -p 47892:47892 ... edarr:local`
+1. `podman build -f Containerfile -t huntress:local .`
+2. `podman run --rm -p 47892:47892 ... huntress:local`
 3. verify `http://127.0.0.1:47892/api/healthz`
 4. verify `http://127.0.0.1:47892/api/readyz`
-5. restart the container and confirm `/data/orchestrator.db` state persists
+5. restart the container and confirm `/data/huntress.db` state persists
 
 ### Unraid deployment notes
 
-- map `/config` to your persistent appdata config directory as read-only
+- map `/config` to your persistent appdata config directory
 - map `/data` to persistent appdata storage as read-write
 - expose `47892/tcp` or remap it to your preferred high port
 - keep `restart: unless-stopped`
 - use the built-in `/api/readyz` health endpoint for container health checks where available
+- if `/config/config.yaml` is absent, the image will boot from the bundled sample config
+- for a full walkthrough, use [docs/unraid.md](/home/eddyg/projects/huntress/docs/unraid.md)
 
 ## Pre-live checklist
 
 Before switching from dry-run to live mode:
 
-1. Keep conservative starting budgets in [config/config.yaml](/home/eddyg/projects/edarr/config/config.yaml), especially:
+1. Keep conservative starting budgets in [config/config.yaml](/home/eddyg/projects/huntress/config/config.yaml), especially:
    - `safety.max_global_dispatch_per_cycle`
    - `safety.rolling_search_limits.per_15m`
    - `safety.rolling_search_limits.per_1h`
@@ -123,9 +148,9 @@ Before switching from dry-run to live mode:
    - next eligible dispatch time
    - throttle reason when a budget is exhausted
 4. Confirm the metrics endpoint exposes throttle and rate data:
-   - `edarr_search_rate_used`
-   - `edarr_search_rate_remaining`
-   - `edarr_search_throttles_total`
+   - `huntress_search_rate_used`
+   - `huntress_search_rate_remaining`
+   - `huntress_search_throttles_total`
 5. Exercise throttle-stop behavior in a safe environment:
    - temporarily lower `rolling_search_limits.per_15m`
    - confirm dispatch stops when the window fills
@@ -137,5 +162,5 @@ Before switching from dry-run to live mode:
 7. Confirm readiness behavior matches your expectation:
    - `/api/healthz` should be `200` when the process is up
    - `/api/readyz` should only be `200` when the service can operate against its dependencies
-8. Back up `/data/orchestrator.db` before the first live enablement.
+8. Back up `/data/huntress.db` before the first live enablement.
 9. Only then switch `mode` from `dry-run` to `live` and watch the first few cycles closely in the run history and overview pages.

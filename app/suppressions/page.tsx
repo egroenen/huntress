@@ -6,7 +6,6 @@ import {
   clearSelectedSuppressionsAction,
   clearSuppressionAction,
 } from '@/src/server/actions';
-import { probeDependencyHealth } from '@/src/server/console-data';
 import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import {
   ConfirmButton,
@@ -14,15 +13,25 @@ import {
   ConsoleShell,
   DataTable,
   MediaItemLink,
+  QueryFilterForm,
+  QueryFilterLink,
   SectionCard,
   SuppressionSelectAll,
+  TablePagination,
 } from '@/src/ui';
 import { formatServiceName } from '@/src/ui/formatters';
+import {
+  readPersistedQueryState,
+  withPersistedQueryState,
+} from '@/src/server/persistent-query';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 
 export const dynamic = 'force-dynamic';
 
-const PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 50;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+const SUPPRESSIONS_FILTER_COOKIE = 'huntress_suppressions_filters';
+const SUPPRESSIONS_PERSISTED_QUERY_KEYS = ['q', 'pageSize'] as const;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -50,16 +59,32 @@ const parsePositivePage = (value: string | string[] | undefined): number => {
   return parsed;
 };
 
-const clampPage = (page: number, totalItems: number): number => {
-  const totalPages = Math.max(Math.ceil(totalItems / PAGE_SIZE), 1);
+const parsePageSize = (value: string | string[] | undefined): number => {
+  const parsed = Number.parseInt(parseStringParam(value), 10);
+
+  return PAGE_SIZE_OPTIONS.includes(parsed as (typeof PAGE_SIZE_OPTIONS)[number])
+    ? parsed
+    : DEFAULT_PAGE_SIZE;
+};
+
+const clampPage = (page: number, totalItems: number, pageSize: number): number => {
+  const totalPages = Math.max(Math.ceil(totalItems / pageSize), 1);
   return Math.min(page, totalPages);
 };
 
-const buildSuppressionsHref = (input: { page: number; query: string }): string => {
+const buildSuppressionsHref = (input: {
+  page: number;
+  pageSize: number;
+  query: string;
+}): string => {
   const params = new URLSearchParams();
 
   if (input.query.trim()) {
     params.set('q', input.query.trim());
+  }
+
+  if (input.pageSize !== DEFAULT_PAGE_SIZE) {
+    params.set('pageSize', String(input.pageSize));
   }
 
   if (input.page > 1) {
@@ -74,44 +99,44 @@ const buildSuppressionsHref = (input: { page: number; query: string }): string =
 const renderPagination = (
   currentPage: number,
   totalItems: number,
+  pageSize: number,
   query: string
 ): ReactNode => {
-  const totalPages = Math.max(Math.ceil(totalItems / PAGE_SIZE), 1);
-
-  if (totalItems <= PAGE_SIZE) {
-    return (
-      <span className="console-muted">Showing all {totalItems} active suppressions.</span>
-    );
-  }
-
+  const totalPages = Math.max(Math.ceil(totalItems / pageSize), 1);
   return (
-    <div className="table-pagination">
-      <span className="console-muted">
-        Page {currentPage} of {totalPages} · {totalItems} active suppressions
-      </span>
-      <div className="table-pagination__links">
-        {currentPage > 1 ? (
-          <a
-            href={buildSuppressionsHref({ page: currentPage - 1, query })}
-            className="console-link"
-          >
-            Previous
-          </a>
-        ) : (
-          <span className="console-muted">Previous</span>
-        )}
-        {currentPage < totalPages ? (
-          <a
-            href={buildSuppressionsHref({ page: currentPage + 1, query })}
-            className="console-link"
-          >
-            Next
-          </a>
-        ) : (
-          <span className="console-muted">Next</span>
-        )}
-      </div>
-    </div>
+    <TablePagination
+      action="/suppressions"
+      currentPage={currentPage}
+      totalPages={totalPages}
+      summary={
+        totalItems <= pageSize
+          ? `Showing all ${totalItems} active suppressions.`
+          : `${totalItems} active suppressions`
+      }
+      pageSize={pageSize}
+      pageSizeOptions={PAGE_SIZE_OPTIONS}
+      hiddenInputs={query ? [{ name: 'q', value: query }] : []}
+      firstHref={
+        currentPage > 1 ? buildSuppressionsHref({ page: 1, pageSize, query }) : null
+      }
+      previousHref={
+        currentPage > 1
+          ? buildSuppressionsHref({ page: currentPage - 1, pageSize, query })
+          : null
+      }
+      nextHref={
+        currentPage < totalPages
+          ? buildSuppressionsHref({ page: currentPage + 1, pageSize, query })
+          : null
+      }
+      lastHref={
+        currentPage < totalPages
+          ? buildSuppressionsHref({ page: totalPages, pageSize, query })
+          : null
+      }
+      persistenceCookieName={SUPPRESSIONS_FILTER_COOKIE}
+      persistedQueryKeys={SUPPRESSIONS_PERSISTED_QUERY_KEYS}
+    />
   );
 };
 
@@ -150,9 +175,15 @@ const truncateValue = (value: string, maxLength = 88): string => {
 
 export default async function SuppressionsPage(props: { searchParams: SearchParams }) {
   const runtime = await requireAuthenticatedConsoleContext();
-  const dependencyCards = await probeDependencyHealth(runtime);
-  const searchParams = await props.searchParams;
+  const searchParams = withPersistedQueryState(
+    await props.searchParams,
+    await readPersistedQueryState(
+      SUPPRESSIONS_FILTER_COOKIE,
+      SUPPRESSIONS_PERSISTED_QUERY_KEYS
+    )
+  );
   const query = parseStringParam(searchParams.q).trim();
+  const pageSize = parsePageSize(searchParams.pageSize);
   const notice =
     typeof searchParams.notice === 'string' ? searchParams.notice : undefined;
   const noticeStatus =
@@ -166,13 +197,14 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
     });
   const currentPage = clampPage(
     parsePositivePage(searchParams.page),
-    filteredSuppressionCount
+    filteredSuppressionCount,
+    pageSize
   );
   const pagedSuppressions =
     runtime.database.repositories.releaseSuppressions.listActiveFilteredPage(
       nowIso,
-      PAGE_SIZE,
-      (currentPage - 1) * PAGE_SIZE,
+      pageSize,
+      (currentPage - 1) * pageSize,
       { query }
     );
   const displayMediaItems = await hydrateMediaDisplayRecords(
@@ -195,6 +227,7 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
   };
   const returnTo = buildSuppressionsHref({
     page: currentPage,
+    pageSize,
     query,
   });
 
@@ -206,7 +239,6 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
-      dependencyCards={dependencyCards}
       headerActions={
         <ConsoleHeaderActions
           mode={runtime.config.mode}
@@ -218,7 +250,7 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
       <SectionCard
         title="Active suppressions"
         subtitle="These blocks expire automatically unless cleared early."
-        actions={renderPagination(currentPage, filteredSuppressionCount, query)}
+        actions={renderPagination(currentPage, filteredSuppressionCount, pageSize, query)}
       >
         {notice ? (
           <p
@@ -231,7 +263,13 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
             {notice}
           </p>
         ) : null}
-        <form action="/suppressions" method="get" className="candidate-filters">
+        <QueryFilterForm
+          action="/suppressions"
+          className="candidate-filters"
+          persistenceCookieName={SUPPRESSIONS_FILTER_COOKIE}
+          persistedQueryKeys={SUPPRESSIONS_PERSISTED_QUERY_KEYS}
+        >
+          <input type="hidden" name="pageSize" value={String(pageSize)} />
           <div className="candidate-filters__grid">
             <label className="candidate-filters__field candidate-filters__field--wide">
               <span>Search</span>
@@ -249,15 +287,20 @@ export default async function SuppressionsPage(props: { searchParams: SearchPara
               {filteredSuppressionCount === 1 ? '' : 's'} of {totalSuppressions}
             </span>
             <div className="transmission-controls__links">
-              <a href="/suppressions" className="console-link">
+              <QueryFilterLink
+                href={buildSuppressionsHref({ page: 1, pageSize, query: '' })}
+                className="console-link"
+                persistenceCookieName={SUPPRESSIONS_FILTER_COOKIE}
+                persistedQueryKeys={SUPPRESSIONS_PERSISTED_QUERY_KEYS}
+              >
                 Clear filters
-              </a>
+              </QueryFilterLink>
               <button type="submit" className="console-button">
                 Apply filters
               </button>
             </div>
           </div>
-        </form>
+        </QueryFilterForm>
         <div className="bulk-actions">
           <form
             id="bulk-clear-selected-form"

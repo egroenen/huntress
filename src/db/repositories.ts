@@ -1641,6 +1641,35 @@ export const createRepositories = (database: SqliteDatabase) => {
 
       return rows.map((row) => toActivityLogRecord(row));
     },
+    countByRunId(runId: string): number {
+      const row = database
+        .prepare<[string], { total: number } | undefined>(
+          `
+            SELECT COUNT(*) AS total
+            FROM activity_log
+            WHERE run_id = ?
+          `
+        )
+        .get(runId);
+
+      return row?.total ?? 0;
+    },
+    listPageByRunId(runId: string, limit: number, offset: number): ActivityLogRecord[] {
+      const rows = database
+        .prepare<[string, number, number], ActivityLogRow>(
+          `
+            SELECT id, occurred_at, level, source, stage, message, detail, run_id, run_type,
+                   progress_current, progress_total, metadata_json
+            FROM activity_log
+            WHERE run_id = ?
+            ORDER BY occurred_at ASC, id ASC
+            LIMIT ? OFFSET ?
+          `
+        )
+        .all(runId, limit, offset);
+
+      return rows.map((row) => toActivityLogRecord(row));
+    },
     pruneToLimit(limit: number): number {
       const result = database
         .prepare(

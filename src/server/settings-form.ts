@@ -91,6 +91,15 @@ export const parseSearchSafetyOverridesForm = (
   formData: FormData
 ): PersistedSearchSafetyOverrides => {
   return {
+    perAppDispatchLimits: {
+      sonarr: readPositiveInteger(formData, 'sonarrDispatchLimit'),
+      radarr: readPositiveInteger(formData, 'radarrDispatchLimit'),
+    },
+    maxGlobalDispatchPerCycle: readPositiveInteger(formData, 'globalDispatchLimit'),
+    minGlobalDispatchSpacingSeconds: readNonNegativeInteger(
+      formData,
+      'globalDispatchSpacingSeconds'
+    ),
     rollingSearchLimits: {
       per15m: readPositiveInteger(formData, 'rollingLimit15m'),
       per1h: readPositiveInteger(formData, 'rollingLimit1h'),

@@ -3,8 +3,11 @@ import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
 
 import type { RunHistoryRecord, SearchAttemptRecord } from '@/src/db';
-import { probeDependencyHealth } from '@/src/server/console-data';
 import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
+import {
+  readPersistedQueryState,
+  withPersistedQueryState,
+} from '@/src/server/persistent-query';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   formatRunDuration,
@@ -18,11 +21,14 @@ import {
   ConsoleShell,
   DataTable,
   MediaItemLink,
+  QueryFilterForm,
+  QueryFilterLink,
   ReasonCodeBadge,
   SectionCard,
   StatCard,
   StatsGrid,
   StatusBadge,
+  TablePagination,
 } from '@/src/ui';
 import {
   formatRunTypeLabel,
@@ -32,7 +38,18 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-const PAGE_SIZE = 100;
+const ATTEMPT_PAGE_SIZE = 100;
+const RUN_EVENT_PAGE_SIZE = 10;
+const ATTEMPT_PAGE_SIZE_OPTIONS = [25, 50, 100, 200] as const;
+const RUN_EVENT_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+const RUN_DETAIL_FILTER_COOKIE = 'huntress_run_detail_filters';
+const RUN_DETAIL_PERSISTED_QUERY_KEYS = [
+  'q',
+  'app',
+  'decision',
+  'attemptPageSize',
+  'eventPageSize',
+] as const;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -73,22 +90,37 @@ const parsePositivePage = (value: string | string[] | undefined): number => {
   return parsed;
 };
 
-const clampPage = (page: number, totalItems: number): number => {
-  const totalPages = Math.max(Math.ceil(totalItems / PAGE_SIZE), 1);
+const parsePageSize = (
+  value: string | string[] | undefined,
+  options: readonly number[],
+  fallback: number
+): number => {
+  const normalized = Array.isArray(value) ? value[0] : value;
+  const parsed = Number.parseInt(normalized ?? '', 10);
+
+  return options.includes(parsed) ? parsed : fallback;
+};
+
+const clampPage = (page: number, totalItems: number, pageSize: number): number => {
+  const totalPages = Math.max(Math.ceil(totalItems / pageSize), 1);
   return Math.min(page, totalPages);
 };
 
-const buildRunDetailHref = (runId: string, page: number): string =>
-  page > 1 ? `/runs/${runId}?page=${page}` : `/runs/${runId}`;
-
-const buildRunDetailSearchHref = (
+const buildRunDetailHref = (
   runId: string,
-  page: number,
-  input: { query: string; app: string; decision: string }
+  input: {
+    attemptPage?: number;
+    eventPage?: number;
+    attemptPageSize?: number;
+    eventPageSize?: number;
+    query?: string;
+    app?: string;
+    decision?: string;
+  } = {}
 ): string => {
   const params = new URLSearchParams();
 
-  if (input.query.trim()) {
+  if (input.query?.trim()) {
     params.set('q', input.query.trim());
   }
 
@@ -100,8 +132,26 @@ const buildRunDetailSearchHref = (
     params.set('decision', input.decision);
   }
 
-  if (page > 1) {
-    params.set('page', String(page));
+  if (
+    input.attemptPageSize !== undefined &&
+    input.attemptPageSize !== ATTEMPT_PAGE_SIZE
+  ) {
+    params.set('attemptPageSize', String(input.attemptPageSize));
+  }
+
+  if (
+    input.eventPageSize !== undefined &&
+    input.eventPageSize !== RUN_EVENT_PAGE_SIZE
+  ) {
+    params.set('eventPageSize', String(input.eventPageSize));
+  }
+
+  if ((input.attemptPage ?? 1) > 1) {
+    params.set('page', String(input.attemptPage));
+  }
+
+  if ((input.eventPage ?? 1) > 1) {
+    params.set('eventPage', String(input.eventPage));
   }
 
   const suffix = params.toString();
@@ -109,50 +159,152 @@ const buildRunDetailSearchHref = (
   return suffix ? `/runs/${runId}?${suffix}` : `/runs/${runId}`;
 };
 
-const renderPagination = (
+const renderAttemptPagination = (
   runId: string,
   currentPage: number,
   totalItems: number,
-  input: { query: string; app: string; decision: string }
-): ReactNode => {
-  const totalPages = Math.max(Math.ceil(totalItems / PAGE_SIZE), 1);
-
-  if (totalItems <= PAGE_SIZE) {
-    return (
-      <span className="console-muted">
-        Showing all {totalItems} attempt rows for this run.
-      </span>
-    );
+  input: {
+    pageSize: number;
+    query: string;
+    app: string;
+    decision: string;
+    eventPage: number;
+    eventPageSize: number;
   }
-
+): ReactNode => {
+  const totalPages = Math.max(Math.ceil(totalItems / input.pageSize), 1);
   return (
-    <div className="table-pagination">
-      <span className="console-muted">
-        Page {currentPage} of {totalPages} · {totalItems} attempt rows
-      </span>
-      <div className="table-pagination__links">
-        {currentPage > 1 ? (
-          <a
-            href={buildRunDetailSearchHref(runId, currentPage - 1, input)}
-            className="console-link"
-          >
-            Previous
-          </a>
-        ) : (
-          <span className="console-muted">Previous</span>
-        )}
-        {currentPage < totalPages ? (
-          <a
-            href={buildRunDetailSearchHref(runId, currentPage + 1, input)}
-            className="console-link"
-          >
-            Next
-          </a>
-        ) : (
-          <span className="console-muted">Next</span>
-        )}
-      </div>
-    </div>
+    <TablePagination
+      action={`/runs/${runId}`}
+      currentPage={currentPage}
+      totalPages={totalPages}
+      summary={
+        totalItems <= input.pageSize
+          ? `Showing all ${totalItems} attempt rows for this run.`
+          : `${totalItems} attempt rows`
+      }
+      pageSize={input.pageSize}
+      pageSizeParamName="attemptPageSize"
+      pageSizeOptions={ATTEMPT_PAGE_SIZE_OPTIONS}
+      hiddenInputs={[
+        ...(input.query ? [{ name: 'q', value: input.query }] : []),
+        ...(input.app ? [{ name: 'app', value: input.app }] : []),
+        ...(input.decision ? [{ name: 'decision', value: input.decision }] : []),
+        ...(input.eventPage > 1 ? [{ name: 'eventPage', value: String(input.eventPage) }] : []),
+        ...(input.eventPageSize !== RUN_EVENT_PAGE_SIZE
+          ? [{ name: 'eventPageSize', value: String(input.eventPageSize) }]
+          : []),
+      ]}
+      firstHref={
+        currentPage > 1
+          ? buildRunDetailHref(runId, { ...input, attemptPage: 1, attemptPageSize: input.pageSize })
+          : null
+      }
+      previousHref={
+        currentPage > 1
+          ? buildRunDetailHref(runId, {
+              ...input,
+              attemptPage: currentPage - 1,
+              attemptPageSize: input.pageSize,
+            })
+          : null
+      }
+      nextHref={
+        currentPage < totalPages
+          ? buildRunDetailHref(runId, {
+              ...input,
+              attemptPage: currentPage + 1,
+              attemptPageSize: input.pageSize,
+            })
+          : null
+      }
+      lastHref={
+        currentPage < totalPages
+          ? buildRunDetailHref(runId, {
+              ...input,
+              attemptPage: totalPages,
+              attemptPageSize: input.pageSize,
+            })
+          : null
+      }
+      persistenceCookieName={RUN_DETAIL_FILTER_COOKIE}
+      persistedQueryKeys={RUN_DETAIL_PERSISTED_QUERY_KEYS}
+    />
+  );
+};
+
+const renderRunEventPagination = (
+  runId: string,
+  currentPage: number,
+  totalItems: number,
+  input: {
+    pageSize: number;
+    attemptPage: number;
+    attemptPageSize: number;
+    query: string;
+    app: string;
+    decision: string;
+  }
+): ReactNode => {
+  const totalPages = Math.max(Math.ceil(totalItems / input.pageSize), 1);
+  return (
+    <TablePagination
+      action={`/runs/${runId}`}
+      currentPage={currentPage}
+      totalPages={totalPages}
+      summary={
+        totalItems <= input.pageSize
+          ? `Showing all ${totalItems} run events.`
+          : `${totalItems} run events`
+      }
+      pageSize={input.pageSize}
+      pageSizeParamName="eventPageSize"
+      pageParamName="eventPage"
+      pageSizeOptions={RUN_EVENT_PAGE_SIZE_OPTIONS}
+      hiddenInputs={[
+        ...(input.attemptPage > 1 ? [{ name: 'page', value: String(input.attemptPage) }] : []),
+        ...(input.attemptPageSize !== ATTEMPT_PAGE_SIZE
+          ? [{ name: 'attemptPageSize', value: String(input.attemptPageSize) }]
+          : []),
+        ...(input.query ? [{ name: 'q', value: input.query }] : []),
+        ...(input.app ? [{ name: 'app', value: input.app }] : []),
+        ...(input.decision ? [{ name: 'decision', value: input.decision }] : []),
+      ]}
+      firstHref={
+        currentPage > 1
+          ? buildRunDetailHref(runId, { ...input, eventPage: 1, eventPageSize: input.pageSize })
+          : null
+      }
+      previousHref={
+        currentPage > 1
+          ? buildRunDetailHref(runId, {
+              ...input,
+              eventPage: currentPage - 1,
+              eventPageSize: input.pageSize,
+            })
+          : null
+      }
+      nextHref={
+        currentPage < totalPages
+          ? buildRunDetailHref(runId, {
+              ...input,
+              eventPage: currentPage + 1,
+              eventPageSize: input.pageSize,
+            })
+          : null
+      }
+      lastHref={
+        currentPage < totalPages
+          ? buildRunDetailHref(runId, {
+              ...input,
+              eventPage: totalPages,
+              eventPageSize: input.pageSize,
+            })
+          : null
+      }
+      persistenceCookieName={RUN_DETAIL_FILTER_COOKIE}
+      persistedQueryKeys={RUN_DETAIL_PERSISTED_QUERY_KEYS}
+    />
   );
 };
 
@@ -518,12 +670,16 @@ export default async function RunDetailPage({
   params: Promise<{ id: string }>;
   searchParams: SearchParams;
 }) {
-  const [{ id }, resolvedSearchParams, runtime] = await Promise.all([
+  const [persistedQueryState, { id }, resolvedSearchParams, runtime] = await Promise.all([
+    readPersistedQueryState(RUN_DETAIL_FILTER_COOKIE, RUN_DETAIL_PERSISTED_QUERY_KEYS),
     params,
     searchParams,
     requireAuthenticatedConsoleContext(),
   ]);
-  const dependencyCards = await probeDependencyHealth(runtime);
+  const persistedSearchParams = withPersistedQueryState(
+    resolvedSearchParams,
+    persistedQueryState
+  );
   const run = runtime.database.repositories.runHistory.getById(id);
 
   if (!run) {
@@ -531,16 +687,36 @@ export default async function RunDetailPage({
   }
 
   const totalAttempts = runtime.database.repositories.searchAttempts.countByRunId(id);
-  const runEvents = runtime.database.repositories.activityLog.listByRunId(id);
-  const attemptQuery = Array.isArray(resolvedSearchParams.q)
-    ? (resolvedSearchParams.q[0] ?? '')
-    : (resolvedSearchParams.q ?? '');
-  const attemptApp = Array.isArray(resolvedSearchParams.app)
-    ? (resolvedSearchParams.app[0] ?? '')
-    : (resolvedSearchParams.app ?? '');
-  const attemptDecision = Array.isArray(resolvedSearchParams.decision)
-    ? (resolvedSearchParams.decision[0] ?? '')
-    : (resolvedSearchParams.decision ?? '');
+  const totalRunEvents = runtime.database.repositories.activityLog.countByRunId(id);
+  const attemptPageSize = parsePageSize(
+    persistedSearchParams.attemptPageSize,
+    ATTEMPT_PAGE_SIZE_OPTIONS,
+    ATTEMPT_PAGE_SIZE
+  );
+  const eventPageSize = parsePageSize(
+    persistedSearchParams.eventPageSize,
+    RUN_EVENT_PAGE_SIZE_OPTIONS,
+    RUN_EVENT_PAGE_SIZE
+  );
+  const attemptQuery = Array.isArray(persistedSearchParams.q)
+    ? (persistedSearchParams.q[0] ?? '')
+    : (persistedSearchParams.q ?? '');
+  const attemptApp = Array.isArray(persistedSearchParams.app)
+    ? (persistedSearchParams.app[0] ?? '')
+    : (persistedSearchParams.app ?? '');
+  const attemptDecision = Array.isArray(persistedSearchParams.decision)
+    ? (persistedSearchParams.decision[0] ?? '')
+    : (persistedSearchParams.decision ?? '');
+  const currentEventPage = clampPage(
+    parsePositivePage(persistedSearchParams.eventPage),
+    totalRunEvents,
+    eventPageSize
+  );
+  const runEvents = runtime.database.repositories.activityLog.listPageByRunId(
+    id,
+    eventPageSize,
+    (currentEventPage - 1) * eventPageSize
+  );
   const allAttempts = runtime.database.repositories.searchAttempts.listByRunId(id);
   const summary = toRunSummaryShape(run.summary);
   const titleCache = new Map<string, string | null>();
@@ -589,12 +765,13 @@ export default async function RunDetailPage({
     return true;
   });
   const currentPage = clampPage(
-    parsePositivePage(resolvedSearchParams.page),
-    filteredAttempts.length
+    parsePositivePage(persistedSearchParams.page),
+    filteredAttempts.length,
+    attemptPageSize
   );
   const attempts = filteredAttempts.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE
+    (currentPage - 1) * attemptPageSize,
+    currentPage * attemptPageSize
   );
   const displayMediaItems = await hydrateMediaDisplayRecords(runtime, [
     ...attempts.map((attempt) => attempt.mediaKey),
@@ -613,7 +790,6 @@ export default async function RunDetailPage({
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
-      dependencyCards={dependencyCards}
       headerActions={
         <ConsoleHeaderActions
           mode={runtime.config.mode}
@@ -633,6 +809,14 @@ export default async function RunDetailPage({
       <SectionCard
         title="Run event log"
         subtitle="Detailed stage-by-stage events recorded for this run."
+        actions={renderRunEventPagination(id, currentEventPage, totalRunEvents, {
+          pageSize: eventPageSize,
+          attemptPage: currentPage,
+          attemptPageSize,
+          query: attemptQuery,
+          app: attemptApp,
+          decision: attemptDecision,
+        })}
       >
         <DataTable
           columns={[
@@ -668,16 +852,24 @@ export default async function RunDetailPage({
       <SectionCard
         title="Attempt log"
         subtitle="One row per evaluated or dispatched item, with current title lookup where available."
-        actions={renderPagination(id, currentPage, filteredAttempts.length, {
+        actions={renderAttemptPagination(id, currentPage, filteredAttempts.length, {
+          pageSize: attemptPageSize,
           query: attemptQuery,
           app: attemptApp,
           decision: attemptDecision,
+          eventPage: currentEventPage,
+          eventPageSize,
         })}
       >
-        <form
-          action={buildRunDetailHref(id, 1)}
-          method="get"
+        <QueryFilterForm
+          action={buildRunDetailHref(id, {
+            eventPage: currentEventPage,
+            attemptPageSize,
+            eventPageSize,
+          })}
           className="candidate-filters"
+          persistenceCookieName={RUN_DETAIL_FILTER_COOKIE}
+          persistedQueryKeys={RUN_DETAIL_PERSISTED_QUERY_KEYS}
         >
           <div className="candidate-filters__grid">
             <label className="candidate-filters__field candidate-filters__field--wide">
@@ -712,15 +904,24 @@ export default async function RunDetailPage({
               {filteredAttempts.length === 1 ? '' : 's'} of {totalAttempts}
             </span>
             <div className="transmission-controls__links">
-              <a href={buildRunDetailHref(id, 1)} className="console-link">
+              <QueryFilterLink
+                href={buildRunDetailHref(id, {
+                  eventPage: currentEventPage,
+                  attemptPageSize,
+                  eventPageSize,
+                })}
+                className="console-link"
+                persistenceCookieName={RUN_DETAIL_FILTER_COOKIE}
+                persistedQueryKeys={RUN_DETAIL_PERSISTED_QUERY_KEYS}
+              >
                 Clear filters
-              </a>
+              </QueryFilterLink>
               <button type="submit" className="console-button">
                 Apply filters
               </button>
             </div>
           </div>
-        </form>
+        </QueryFilterForm>
         <DataTable
           columns={[
             { key: 'attemptedAt', label: 'Time' },

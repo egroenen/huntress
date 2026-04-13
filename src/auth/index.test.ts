@@ -13,6 +13,7 @@ import {
   logoutSession,
   resolveAuthenticatedSession,
 } from './service';
+import { resolveSecureCookieSetting } from './session';
 
 const authConfig = {
   sessionSecret: 'test-secret',
@@ -21,7 +22,7 @@ const authConfig = {
 };
 
 const createDatabasePath = async (): Promise<string> => {
-  const directory = await mkdtemp(join(tmpdir(), 'edarr-auth-'));
+  const directory = await mkdtemp(join(tmpdir(), 'huntress-auth-'));
   return join(directory, 'auth.sqlite');
 };
 
@@ -165,4 +166,16 @@ test('bootstrap rejects an empty password', async () => {
   } finally {
     database.close();
   }
+});
+
+test('resolveSecureCookieSetting only enables secure cookies for https requests', () => {
+  assert.equal(
+    resolveSecureCookieSetting(new Headers({ 'x-forwarded-proto': 'https' })),
+    true
+  );
+
+  assert.equal(
+    resolveSecureCookieSetting(new Headers({ origin: 'http://192.168.69.212:47892' })),
+    false
+  );
 });

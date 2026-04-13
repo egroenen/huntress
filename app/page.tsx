@@ -1,9 +1,6 @@
 import Link from 'next/link';
 
-import {
-  getDashboardCandidateSnapshot,
-  probeDependencyHealth,
-} from '@/src/server/console-data';
+import { getDashboardCandidateSnapshot } from '@/src/server/console-data';
 import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
 import { getSearchRateSnapshot } from '@/src/observability';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
@@ -17,7 +14,7 @@ import {
   ConsoleHeaderActions,
   ConsoleShell,
   DataTable,
-  DependencyHealthGrid,
+  LazyDependencyHealthGrid,
   MediaItemLink,
   RelativeTimeLabel,
   ReasonCodeBadge,
@@ -49,8 +46,7 @@ export default async function HomePage() {
       .map((torrent) => torrent.linkedMediaKey)
       .filter((mediaKey): mediaKey is string => mediaKey !== null),
   ];
-  const [dependencies, latestRun, displayMediaItems] = await Promise.all([
-    probeDependencyHealth(runtime),
+  const [latestRun, displayMediaItems] = await Promise.all([
     Promise.resolve(runtime.database.repositories.runHistory.getLatest()),
     hydrateMediaDisplayRecords(runtime, displayMediaKeys),
   ]);
@@ -72,7 +68,6 @@ export default async function HomePage() {
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
-      dependencyCards={dependencies}
       headerActions={
         <ConsoleHeaderActions
           mode={runtime.config.mode}
@@ -159,7 +154,7 @@ export default async function HomePage() {
         title="Dependency health"
         subtitle="Live probes against the four external systems this service depends on."
       >
-        <DependencyHealthGrid dependencies={dependencies} />
+        <LazyDependencyHealthGrid />
       </SectionCard>
 
       <SectionCard

@@ -28,6 +28,12 @@ export interface PersistedConnectionSettings {
 }
 
 export interface PersistedSearchSafetyOverrides {
+  perAppDispatchLimits: {
+    sonarr: number | null;
+    radarr: number | null;
+  };
+  maxGlobalDispatchPerCycle: number | null;
+  minGlobalDispatchSpacingSeconds: number | null;
   rollingSearchLimits: {
     per15m: number | null;
     per1h: number | null;
@@ -94,6 +100,14 @@ const redact = (value: string | null): '[redacted]' | null =>
 
 const positiveIntOrNull = (value: number | null | undefined): number | null => {
   if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    return null;
+  }
+
+  return value;
+};
+
+const nonNegativeIntOrNull = (value: number | null | undefined): number | null => {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
     return null;
   }
 
@@ -223,6 +237,12 @@ const ensurePersistedConnectionSettings = (
 
 const createDefaultSearchSafetyOverrides = (): PersistedSearchSafetyOverrides => {
   return {
+    perAppDispatchLimits: {
+      sonarr: null,
+      radarr: null,
+    },
+    maxGlobalDispatchPerCycle: null,
+    minGlobalDispatchSpacingSeconds: null,
     rollingSearchLimits: {
       per15m: null,
       per1h: null,
@@ -264,6 +284,14 @@ const normalizePersistedSearchSafetyOverrides = (
   overrides: PersistedSearchSafetyOverrides | null
 ): PersistedSearchSafetyOverrides => {
   return {
+    perAppDispatchLimits: {
+      sonarr: positiveIntOrNull(overrides?.perAppDispatchLimits?.sonarr),
+      radarr: positiveIntOrNull(overrides?.perAppDispatchLimits?.radarr),
+    },
+    maxGlobalDispatchPerCycle: positiveIntOrNull(overrides?.maxGlobalDispatchPerCycle),
+    minGlobalDispatchSpacingSeconds: nonNegativeIntOrNull(
+      overrides?.minGlobalDispatchSpacingSeconds
+    ),
     rollingSearchLimits: {
       per15m: positiveIntOrNull(overrides?.rollingSearchLimits.per15m),
       per1h: positiveIntOrNull(overrides?.rollingSearchLimits.per1h),
@@ -582,6 +610,13 @@ export const resolveRuntimeConfig = (
     },
     safety: {
       ...loadedConfig.config.safety,
+      maxGlobalDispatchPerCycle:
+        persistedSearchSafetyOverrides.maxGlobalDispatchPerCycle ??
+        loadedConfig.config.safety.maxGlobalDispatchPerCycle,
+      minGlobalDispatchSpacingMs:
+        persistedSearchSafetyOverrides.minGlobalDispatchSpacingSeconds !== null
+          ? persistedSearchSafetyOverrides.minGlobalDispatchSpacingSeconds * 1_000
+          : loadedConfig.config.safety.minGlobalDispatchSpacingMs,
       rollingSearchLimits: {
         per15m:
           persistedSearchSafetyOverrides.rollingSearchLimits.per15m ??
@@ -597,10 +632,16 @@ export const resolveRuntimeConfig = (
     policies: {
       sonarr: {
         ...loadedConfig.config.policies.sonarr,
+        maxSearchesPerCycle:
+          persistedSearchSafetyOverrides.perAppDispatchLimits.sonarr ??
+          loadedConfig.config.policies.sonarr.maxSearchesPerCycle,
         releaseSelection: persistedReleaseSelectionOverrides.sonarr,
       },
       radarr: {
         ...loadedConfig.config.policies.radarr,
+        maxSearchesPerCycle:
+          persistedSearchSafetyOverrides.perAppDispatchLimits.radarr ??
+          loadedConfig.config.policies.radarr.maxSearchesPerCycle,
         releaseSelection: persistedReleaseSelectionOverrides.radarr,
       },
     },
@@ -733,6 +774,20 @@ export const buildSearchSafetyOverridesFromConfig = (
   const persistedOverrides = ensurePersistedSearchSafetyOverrides(database);
 
   return {
+    perAppDispatchLimits: {
+      sonarr:
+        persistedOverrides.perAppDispatchLimits.sonarr ??
+        config.policies.sonarr.maxSearchesPerCycle,
+      radarr:
+        persistedOverrides.perAppDispatchLimits.radarr ??
+        config.policies.radarr.maxSearchesPerCycle,
+    },
+    maxGlobalDispatchPerCycle:
+      persistedOverrides.maxGlobalDispatchPerCycle ??
+      config.safety.maxGlobalDispatchPerCycle,
+    minGlobalDispatchSpacingSeconds:
+      persistedOverrides.minGlobalDispatchSpacingSeconds ??
+      Math.max(Math.round(config.safety.minGlobalDispatchSpacingMs / 1_000), 0),
     rollingSearchLimits: {
       per15m:
         persistedOverrides.rollingSearchLimits.per15m ??

@@ -1,6 +1,11 @@
-import type { ReactNode } from 'react';
+'use client';
+
+import Link from 'next/link';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 
 import type { SchedulerCoordinatorStatus } from '@/src/scheduler';
+import { useNavigationProgress } from '@/src/ui/navigation-progress';
 import { formatDisplayMode } from '@/src/ui/formatters';
 
 import { BrandMark } from './brand-mark';
@@ -15,6 +20,30 @@ type NavPath =
   | '/suppressions'
   | '/transmission'
   | '/settings';
+
+const shouldHandleNavigationClick = (
+  event: MouseEvent<HTMLAnchorElement>,
+  href: string,
+  currentUrl: string
+) => {
+  if (event.defaultPrevented) {
+    return false;
+  }
+
+  if (event.button !== 0) {
+    return false;
+  }
+
+  if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) {
+    return false;
+  }
+
+  if (href === currentUrl) {
+    return false;
+  }
+
+  return true;
+};
 
 export const ConsoleShell = ({
   title,
@@ -37,8 +66,58 @@ export const ConsoleShell = ({
   headerActions?: ReactNode;
   children: ReactNode;
 }) => {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { pendingNavigation, startNavigation } = useNavigationProgress();
+  const [resolvedDependencyCards, setResolvedDependencyCards] = useState<
+    DependencyHealthCard[] | null
+  >(dependencyCards ?? null);
+  const effectiveDependencyCards = dependencyCards ?? resolvedDependencyCards ?? [];
+
+  useEffect(() => {
+    if (dependencyCards) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    let active = true;
+
+    void fetch('/api/console/dependencies', {
+      cache: 'no-store',
+      signal: abortController.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Dependency request failed with status ${response.status}`);
+        }
+
+        return (await response.json()) as {
+          dependencyCards?: DependencyHealthCard[];
+        };
+      })
+      .then((payload) => {
+        if (!active) {
+          return;
+        }
+
+        setResolvedDependencyCards(payload.dependencyCards ?? []);
+      })
+      .catch(() => {
+        if (!active) {
+          return;
+        }
+
+        setResolvedDependencyCards([]);
+      });
+
+    return () => {
+      active = false;
+      abortController.abort();
+    };
+  }, [dependencyCards, pathname]);
+
   const activeDependencyIssues =
-    dependencyCards?.filter((card) => card.status !== 'healthy') ?? [];
+    effectiveDependencyCards.filter((card) => card.status !== 'healthy') ?? [];
   const hasUnavailableDependency = activeDependencyIssues.some(
     (card) => card.status === 'unavailable'
   );
@@ -46,6 +125,9 @@ export const ConsoleShell = ({
     activeDependencyIssues.length === 1
       ? `${activeDependencyIssues[0]?.name}: ${activeDependencyIssues[0]?.summary}`
       : `${activeDependencyIssues.length} dependency issues active`;
+  const highlightedPath = (pendingNavigation?.href as NavPath | undefined) ?? activePath;
+  const isNavigating = Boolean(pendingNavigation);
+  const currentUrl = searchParams.size > 0 ? `${pathname}?${searchParams.toString()}` : pathname;
 
   return (
     <div className="console-shell">
@@ -59,17 +141,24 @@ export const ConsoleShell = ({
 
         <nav className="console-nav" aria-label="Primary">
           {navigationItems.map((item) => {
-            const active = item.href === activePath;
+            const active = item.href === highlightedPath;
 
             return (
-              <a
+              <Link
                 key={item.href}
                 href={item.href}
                 className={active ? 'console-nav__link is-active' : 'console-nav__link'}
+                onClick={(event) => {
+                  if (!shouldHandleNavigationClick(event, item.href, currentUrl)) {
+                    return;
+                  }
+
+                  startNavigation({ href: item.href, label: item.label });
+                }}
               >
                 <span>{item.label}</span>
                 {item.badge ? <small>{item.badge}</small> : null}
-              </a>
+              </Link>
             );
           })}
         </nav>
@@ -116,13 +205,29 @@ export const ConsoleShell = ({
                   .join(' · ')}
               </p>
             </div>
-            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-            <a href="/" className="console-link">
+            <Link href="/" className="console-link">
               Review dependency health
-            </a>
+            </Link>
           </div>
         ) : null}
-        <div className="console-content">{children}</div>
+        <div
+          className={
+            isNavigating
+              ? 'console-content console-content--is-navigating'
+              : 'console-content'
+          }
+        >
+          {children}
+          {isNavigating ? (
+            <div className="console-content__loading-overlay" aria-live="polite">
+              <div className="console-content__loading-card">
+                <span className="console-content__spinner" aria-hidden="true" />
+                <strong>Opening {pendingNavigation?.label ?? 'page'}...</strong>
+                <small>Loading content...</small>
+              </div>
+            </div>
+          ) : null}
+        </div>
       </main>
     </div>
   );

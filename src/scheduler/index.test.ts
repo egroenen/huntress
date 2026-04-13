@@ -9,7 +9,7 @@ import { initializeDatabase } from '@/src/db';
 import { createSchedulerCoordinator } from './run-coordinator';
 
 const createDatabasePath = async (): Promise<string> => {
-  const directory = await mkdtemp(join(tmpdir(), 'edarr-scheduler-'));
+  const directory = await mkdtemp(join(tmpdir(), 'huntress-scheduler-'));
   return join(directory, 'orchestrator.sqlite');
 };
 

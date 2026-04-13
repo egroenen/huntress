@@ -1,4 +1,3 @@
-import { probeDependencyHealth } from '@/src/server/console-data';
 import { saveSettingsAction, testConnectionAction } from '@/src/server/actions';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
@@ -25,7 +24,6 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function SettingsPage(props: { searchParams: SearchParams }) {
   const runtime = await requireAuthenticatedConsoleContext();
-  const dependencyCards = await probeDependencyHealth(runtime);
   const searchParams = await props.searchParams;
   const notice =
     typeof searchParams.notice === 'string' ? searchParams.notice : undefined;
@@ -61,7 +59,6 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
-      dependencyCards={dependencyCards}
       headerActions={
         <ConsoleHeaderActions
           mode={runtime.config.mode}
@@ -276,12 +273,52 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
 
           <section className="settings-form__section">
             <div className="settings-form__heading">
-              <h4>Dispatch safety budgets</h4>
+              <h4>Dispatch throughput</h4>
             </div>
             <p className="settings-form__hint">
-              Override the rolling live-dispatch budgets used to protect trackers.
-              Leave a field blank to fall back to the config file default.
+              Tune how aggressively live runs are allowed to search. Leave a field
+              blank to fall back to the config file default.
             </p>
+            <label>
+              <span>Sonarr searches per cycle</span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                name="sonarrDispatchLimit"
+                defaultValue={searchSafetyOverrides.perAppDispatchLimits.sonarr ?? ''}
+              />
+            </label>
+            <label>
+              <span>Radarr searches per cycle</span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                name="radarrDispatchLimit"
+                defaultValue={searchSafetyOverrides.perAppDispatchLimits.radarr ?? ''}
+              />
+            </label>
+            <label>
+              <span>Global searches per cycle</span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                name="globalDispatchLimit"
+                defaultValue={searchSafetyOverrides.maxGlobalDispatchPerCycle ?? ''}
+              />
+            </label>
+            <label>
+              <span>Minimum spacing between live dispatches (seconds)</span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                name="globalDispatchSpacingSeconds"
+                defaultValue={searchSafetyOverrides.minGlobalDispatchSpacingSeconds ?? ''}
+              />
+            </label>
             <label>
               <span>15 minute limit</span>
               <input
@@ -312,6 +349,10 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
                 defaultValue={searchSafetyOverrides.rollingSearchLimits.per24h ?? ''}
               />
             </label>
+            <p className="settings-form__hint">
+              Lower spacing and higher per-cycle budgets make live runs feel much
+              more assertive. The rolling limits still cap total tracker pressure.
+            </p>
           </section>
 
           <div className="settings-form__actions">

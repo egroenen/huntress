@@ -4,7 +4,7 @@ server:
 mode: 'live'
 
 storage:
-  sqlite_path: '/data/orchestrator.db'
+  sqlite_path: '/data/huntress.db'
 
 auth:
   enabled: true
@@ -41,9 +41,9 @@ sync:
 
 policies:
   sonarr:
-    max_searches_per_cycle: 6
-    missing_retry_intervals: ['12h', '24h', '72h', '168h']
-    cutoff_retry_intervals: ['48h', '168h', '336h']
+    max_searches_per_cycle: 12
+    missing_retry_intervals: ['2h', '8h', '24h', '72h']
+    cutoff_retry_intervals: ['12h', '48h', '168h']
     recent_release_window_days: 30
     exclude_unreleased: true
     exclude_unmonitored: true
@@ -57,9 +57,9 @@ policies:
       require_english: false
       upgrade_retry_after_fallback: '30m'
   radarr:
-    max_searches_per_cycle: 3
-    missing_retry_intervals: ['24h', '72h', '168h', '336h']
-    cutoff_retry_intervals: ['72h', '168h', '336h']
+    max_searches_per_cycle: 6
+    missing_retry_intervals: ['6h', '24h', '72h', '168h']
+    cutoff_retry_intervals: ['24h', '72h', '168h']
     recent_release_window_days: 30
     exclude_unreleased: true
     exclude_unmonitored: true
@@ -83,12 +83,12 @@ transmission_guard:
 safety:
   panic_disable_search: false
   stop_on_prowlarr_outage: true
-  max_global_dispatch_per_cycle: 8
-  min_global_dispatch_spacing: '45s'
+  max_global_dispatch_per_cycle: 16
+  min_global_dispatch_spacing: '10s'
   rolling_search_limits:
-    per_15m: 4
-    per_1h: 10
-    per_24h: 40
+    per_15m: 16
+    per_1h: 48
+    per_24h: 160
 
 logging:
   level: 'info'

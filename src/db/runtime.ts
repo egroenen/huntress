@@ -9,7 +9,7 @@ import { initializeDatabase, type DatabaseContext } from './index';
 const AUTH_RESET_STATE_KEY = 'auth_reset_state';
 
 declare global {
-  var __edarrDatabaseContext: Promise<DatabaseContext> | undefined;
+  var __huntressDatabaseContext: Promise<DatabaseContext> | undefined;
 }
 
 const maybeApplyAuthReset = async (database: DatabaseContext): Promise<void> => {
@@ -57,9 +57,9 @@ const refreshDatabaseRepositories = (database: DatabaseContext): DatabaseContext
 };
 
 export const getDatabaseContext = async (): Promise<DatabaseContext> => {
-  if (!globalThis.__edarrDatabaseContext) {
-    globalThis.__edarrDatabaseContext = createDatabaseContext();
+  if (!globalThis.__huntressDatabaseContext) {
+    globalThis.__huntressDatabaseContext = createDatabaseContext();
   }
 
-  return refreshDatabaseRepositories(await globalThis.__edarrDatabaseContext);
+  return refreshDatabaseRepositories(await globalThis.__huntressDatabaseContext);
 };

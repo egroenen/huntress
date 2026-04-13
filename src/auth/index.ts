@@ -8,4 +8,4 @@ export {
   resolveAuthenticatedSession,
 } from './service';
 export type { AuthConfiguration, AuthenticatedSession, RequestMetadata } from './service';
-export { SESSION_COOKIE_NAME } from './session';
+export { resolveSecureCookieSetting, SESSION_COOKIE_NAME } from './session';

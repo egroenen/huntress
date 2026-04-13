@@ -7,7 +7,11 @@ import test from 'node:test';
 
 import type { ResolvedConfig } from '@/src/config';
 import { initializeDatabase } from '@/src/db';
-import { createRadarrClient, createSonarrClient } from '@/src/integrations';
+import {
+  createRadarrClient,
+  createSonarrClient,
+  IntegrationError,
+} from '@/src/integrations';
 
 import { executeManualFetch, executeSearchDispatchRun } from './search-dispatch';
 
@@ -17,7 +21,7 @@ interface TestServerContext {
 }
 
 const createDatabasePath = async (): Promise<string> => {
-  const directory = await mkdtemp(join(tmpdir(), 'edarr-dispatch-'));
+  const directory = await mkdtemp(join(tmpdir(), 'huntress-dispatch-'));
   return join(directory, 'orchestrator.sqlite');
 };
 
@@ -61,7 +65,7 @@ const createResolvedConfig = (): ResolvedConfig => {
     },
     mode: 'dry-run',
     storage: {
-      sqlitePath: '/tmp/edarr.sqlite',
+      sqlitePath: '/tmp/huntress.sqlite',
     },
     auth: {
       enabled: true,
@@ -864,6 +868,85 @@ test('executeManualFetch can take a fallback release and shorten the retry windo
       true
     );
     assert.equal(nextEligibleAt, new Date('2026-04-04T12:30:00.000Z').getTime());
+  } finally {
+    database.close();
+    await server.close();
+  }
+});
+
+test('executeSearchDispatchRun falls back to blind search when release preview times out', async () => {
+  let commandPosts = 0;
+  const server = await startJsonServer((request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+
+    if (request.method === 'POST' && url.pathname === '/api/v3/command') {
+      commandPosts += 1;
+      response.end(JSON.stringify({ id: 999, name: 'EpisodeSearch', status: 'queued' }));
+      return;
+    }
+
+    response.statusCode = 404;
+    response.end(JSON.stringify({ message: 'not found' }));
+  });
+
+  const databasePath = await createDatabasePath();
+  const database = await seedEligibleItems(databasePath);
+  const config = createResolvedConfig();
+  config.mode = 'live';
+  config.safety.minGlobalDispatchSpacingMs = 1;
+  config.policies.sonarr.releaseSelection = {
+    enabled: true,
+    strategy: 'best_only',
+    preferredMinResolution: 1080,
+    fallbackMinResolution: 720,
+    minimumSeeders: 1,
+    minimumCustomFormatScore: 0,
+    requireEnglish: false,
+    upgradeRetryAfterFallbackMs: 30 * 60_000,
+  };
+
+  const sonarrClient = createSonarrClient({
+    baseUrl: server.url,
+    apiKey: 'sonarr-key',
+  });
+  const clients = {
+    sonarr: {
+      ...sonarrClient,
+      async listEpisodeReleases() {
+        throw new IntegrationError({
+          code: 'timeout',
+          endpoint: `${server.url}/api/v3/release?episodeId=101`,
+          message: `Request to ${server.url}/api/v3/release?episodeId=101 timed out after 10000ms`,
+        });
+      },
+    },
+    radarr: null,
+  };
+
+  database.repositories.runHistory.create(
+    createRunHistoryRecord('release-preview-fallback', 'manual_live')
+  );
+
+  try {
+    const summary = await executeSearchDispatchRun({
+      database,
+      config,
+      clients,
+      runId: 'release-preview-fallback',
+      live: true,
+      now: new Date('2026-04-04T12:00:00.000Z'),
+      sleep: async () => {},
+    });
+
+    const attempts =
+      database.repositories.searchAttempts.listByRunId('release-preview-fallback');
+    const dispatchAttempt = attempts.find((attempt) => attempt.decision === 'dispatch');
+
+    assert.equal(commandPosts, 1);
+    assert.equal(summary.dispatchCount, 1);
+    assert.equal(summary.errorCount, 0);
+    assert.equal(dispatchAttempt?.outcome, 'accepted');
   } finally {
     database.close();
     await server.close();

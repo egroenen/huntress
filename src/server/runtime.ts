@@ -47,7 +47,7 @@ export interface RuntimeContext {
 }
 
 declare global {
-  var __edarrRuntimeCore:
+  var __huntressRuntimeCore:
     | Promise<{
         loadedConfig: Awaited<ReturnType<typeof loadConfig>>;
         database: Awaited<ReturnType<typeof getDatabaseContext>>;
@@ -282,11 +282,11 @@ const buildRuntimeCore = async () => {
 };
 
 export const getRuntimeContext = async (): Promise<RuntimeContext> => {
-  if (!globalThis.__edarrRuntimeCore) {
-    globalThis.__edarrRuntimeCore = buildRuntimeCore();
+  if (!globalThis.__huntressRuntimeCore) {
+    globalThis.__huntressRuntimeCore = buildRuntimeCore();
   }
 
-  const runtimeCore = await globalThis.__edarrRuntimeCore;
+  const runtimeCore = await globalThis.__huntressRuntimeCore;
   runtimeCore.database.repositories = createRepositories(runtimeCore.database.connection);
   const resolved = resolveRuntimeConfig(runtimeCore.loadedConfig, runtimeCore.database);
 

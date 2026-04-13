@@ -1,25 +1,32 @@
 import { resetTransmissionCacheAction } from '@/src/server/actions';
-import { probeDependencyHealth } from '@/src/server/console-data';
 import { hydrateMediaDisplayRecords } from '@/src/server/media-display';
+import {
+  readPersistedQueryState,
+  withPersistedQueryState,
+} from '@/src/server/persistent-query';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   ConsoleHeaderActions,
   ConsoleShell,
   DataTable,
   MediaItemLink,
+  QueryFilterForm,
+  QueryFilterLink,
   ReasonCodeBadge,
   SectionCard,
   StatusBadge,
 } from '@/src/ui';
 
 import {
-  clampPage,
+  buildTransmissionHref,
+  clampPageToSize,
+  DEFAULT_SORT,
   formatDurationFromMs,
   formatDurationSince,
   formatTransmissionState,
   formatTransmissionTimestamp,
   getGuardInsight,
-  PAGE_SIZE,
+  parsePageSize,
   parsePositivePage,
   parseStringParam,
   parseTransmissionFilters,
@@ -27,16 +34,30 @@ import {
 } from './helpers';
 
 export const dynamic = 'force-dynamic';
+const TRANSMISSION_FILTER_COOKIE = 'huntress_transmission_filters';
+const TRANSMISSION_PERSISTED_QUERY_KEYS = [
+  'pageSize',
+  'q',
+  'guard',
+  'linked',
+  'sort',
+] as const;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function TransmissionPage(props: { searchParams: SearchParams }) {
   const runtime = await requireAuthenticatedConsoleContext();
-  const dependencyCards = await probeDependencyHealth(runtime);
-  const searchParams = await props.searchParams;
+  const searchParams = withPersistedQueryState(
+    await props.searchParams,
+    await readPersistedQueryState(
+      TRANSMISSION_FILTER_COOKIE,
+      TRANSMISSION_PERSISTED_QUERY_KEYS
+    )
+  );
   const notice = parseStringParam(searchParams.notice);
   const noticeStatus = parseStringParam(searchParams.status);
   const filters = parseTransmissionFilters(searchParams);
+  const pageSize = parsePageSize(searchParams.pageSize);
   const nowIso = new Date().toISOString();
   const now = new Date(nowIso);
   const totalTorrents = runtime.database.repositories.transmissionTorrentState.count();
@@ -49,9 +70,10 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
       guard: filters.guard,
       linked: filters.linked,
     });
-  const currentPage = clampPage(
+  const currentPage = clampPageToSize(
     parsePositivePage(searchParams.page),
-    totalFilteredTorrents
+    totalFilteredTorrents,
+    pageSize
   );
   const pagedTorrents =
     runtime.database.repositories.transmissionTorrentState.listFilteredPage(
@@ -63,8 +85,8 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
         guard: filters.guard,
         linked: filters.linked,
       },
-      PAGE_SIZE,
-      (currentPage - 1) * PAGE_SIZE
+      pageSize,
+      (currentPage - 1) * pageSize
     );
   const titleCache = new Map<string, string | null>();
   const resolveTitle = (mediaKey: string | null) => {
@@ -97,7 +119,6 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
-      dependencyCards={dependencyCards}
       headerActions={
         <ConsoleHeaderActions
           mode={runtime.config.mode}
@@ -140,7 +161,13 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
             </p>
           ) : null}
 
-          <form action="/transmission" method="get" className="candidate-filters">
+          <QueryFilterForm
+            action="/transmission"
+            className="candidate-filters"
+            persistenceCookieName={TRANSMISSION_FILTER_COOKIE}
+            persistedQueryKeys={TRANSMISSION_PERSISTED_QUERY_KEYS}
+          >
+            <input type="hidden" name="pageSize" value={String(pageSize)} />
             <div className="candidate-filters__grid">
               <label className="candidate-filters__field candidate-filters__field--wide">
                 <span>Search</span>
@@ -195,13 +222,25 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
                 Apply filters
               </button>
             </div>
-          </form>
+          </QueryFilterForm>
 
           <div className="candidate-filters__actions">
             <div className="transmission-controls__links">
-              <a href="/transmission" className="console-link">
+              <QueryFilterLink
+                href={buildTransmissionHref({
+                  sort: DEFAULT_SORT,
+                  page: 1,
+                  pageSize,
+                  query: '',
+                  guard: 'all',
+                  linked: 'all',
+                })}
+                className="console-link"
+                persistenceCookieName={TRANSMISSION_FILTER_COOKIE}
+                persistedQueryKeys={TRANSMISSION_PERSISTED_QUERY_KEYS}
+              >
                 Clear filters
-              </a>
+              </QueryFilterLink>
               <span className="console-muted">
                 {totalFilteredTorrents} matching observation
                 {totalFilteredTorrents === 1 ? '' : 's'} of {totalTorrents}
@@ -220,6 +259,7 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
         actions={renderTransmissionPagination({
           currentPage,
           totalItems: totalFilteredTorrents,
+          pageSize,
           sort: filters.sort,
           query: filters.query,
           guard: filters.guard,

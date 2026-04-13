@@ -1,8 +1,8 @@
 import type { Route } from 'next';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { SESSION_COOKIE_NAME } from '@/src/auth';
+import { resolveSecureCookieSetting, SESSION_COOKIE_NAME } from '@/src/auth';
 import {
   authenticateConsoleFormAction,
   type ActionName,
@@ -71,11 +71,12 @@ export const normalizeReturnTo = (
 
 export const clearSessionCookie = async () => {
   const cookieStore = await cookies();
+  const secureCookies = resolveSecureCookieSetting(await headers());
 
   cookieStore.set(SESSION_COOKIE_NAME, '', {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: secureCookies,
     path: '/',
     expires: new Date(0),
   });

@@ -264,11 +264,11 @@ export const resolveConfigPathFromArgs = (
         type: 'string',
       },
     },
-    strict: true,
-    allowPositionals: false,
+    strict: false,
+    allowPositionals: true,
   });
 
-  return values.config;
+  return typeof values.config === 'string' ? values.config : undefined;
 };
 
 export const loadConfig = async (

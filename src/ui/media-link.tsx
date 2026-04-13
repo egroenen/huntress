@@ -6,6 +6,8 @@ const buildAppUrl = (baseUrl: string, path: string): string => {
   return new URL(path.replace(/^\//, ''), normalizedBaseUrl).toString();
 };
 
+const SONARR_EPISODE_MARKER_PATTERN = /^(?:S\d{1,2}\s?E\d{1,3}|\d{1,2}x\d{1,3})\b/i;
+
 const splitSonarrEpisodeTitle = (
   title: string
 ): { seriesTitle: string; episodeTitle: string } | null => {
@@ -15,7 +17,11 @@ const splitSonarrEpisodeTitle = (
     const [seriesTitle, ...episodeParts] = delimitedParts;
     const episodeTitle = episodeParts.join(' - ').trim();
 
-    if (seriesTitle && episodeTitle) {
+    if (
+      seriesTitle &&
+      episodeTitle &&
+      !SONARR_EPISODE_MARKER_PATTERN.test(seriesTitle.trim())
+    ) {
       return {
         seriesTitle: seriesTitle.trim(),
         episodeTitle,

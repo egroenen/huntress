@@ -47,7 +47,7 @@ export default async function LoginPage(props: { searchParams: SearchParams }) {
     <main className="auth-page">
       <section className="auth-panel">
         <p className="eyebrow">Login</p>
-        <h1>Sign in to edarr.</h1>
+        <h1>Sign in to Huntress.</h1>
         <p className="lede">
           Use the built-in local admin account created during first-run setup.
         </p>

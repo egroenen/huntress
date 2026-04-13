@@ -105,6 +105,22 @@ const buildMediaKey = (app: ArrAppName, arrId: number): string => {
   return app === 'sonarr' ? `sonarr:episode:${arrId}` : `radarr:movie:${arrId}`;
 };
 
+const SONARR_EPISODE_MARKER_PATTERN = /^(?:S\d{1,2}\s?E\d{1,3}|\d{1,2}x\d{1,3})\b/i;
+
+const hasSonarrDisplayContext = (title: string): boolean => {
+  const trimmedTitle = title.trim();
+
+  if (!trimmedTitle || SONARR_EPISODE_MARKER_PATTERN.test(trimmedTitle)) {
+    return false;
+  }
+
+  return (
+    /\s-\s/.test(trimmedTitle) ||
+    /\sS\d{1,2}\s?E\d{1,3}\b/i.test(trimmedTitle) ||
+    /\s\d{1,2}x\d{1,3}\b/i.test(trimmedTitle)
+  );
+};
+
 const buildSnapshot = (
   app: ArrAppName,
   wantedState: Exclude<WantedState, 'ignored'>,
@@ -194,13 +210,21 @@ const buildPersistedRecord = (
   inQueue: boolean,
   syncedAt: string
 ): MediaItemStateRecord => {
+  const title =
+    snapshot.mediaType === SONARR_MEDIA_TYPE &&
+    !hasSonarrDisplayContext(snapshot.title) &&
+    currentRecord?.mediaType === SONARR_MEDIA_TYPE &&
+    hasSonarrDisplayContext(currentRecord.title)
+      ? currentRecord.title
+      : snapshot.title;
+
   return {
     mediaKey: snapshot.mediaKey,
     mediaType: snapshot.mediaType,
     arrId: snapshot.arrId,
     parentArrId: snapshot.parentArrId,
     externalPath: snapshot.externalPath ?? currentRecord?.externalPath ?? null,
-    title: snapshot.title,
+    title,
     monitored: snapshot.monitored,
     releaseDate: snapshot.releaseDate,
     wantedState: snapshot.wantedState,
@@ -215,6 +239,7 @@ const buildPersistedRecord = (
     stateHash: getSnapshotStateHash({
       ...snapshot,
       externalPath: snapshot.externalPath ?? currentRecord?.externalPath ?? null,
+      title,
       wantedState: snapshot.wantedState,
       inQueue,
     }),
@@ -283,8 +308,11 @@ const enrichSonarrWantedRecords = async (input: {
         const currentRecord = input.currentRecords.get(buildMediaKey('sonarr', record.itemId));
         const hasKnownPath =
           record.externalPath !== null || currentRecord?.externalPath != null;
+        const hasKnownDisplayTitle =
+          hasSonarrDisplayContext(record.title) ||
+          hasSonarrDisplayContext(currentRecord?.title ?? '');
 
-        return hasKnownPath ? [] : [record.parentId];
+        return hasKnownPath && hasKnownDisplayTitle ? [] : [record.parentId];
       })
     )
   );
@@ -314,11 +342,18 @@ const enrichSonarrWantedRecords = async (input: {
       record.externalPath ??
       currentRecord?.externalPath ??
       (series?.titleSlug ? `series/${series.titleSlug}` : null);
+    const title = hasSonarrDisplayContext(record.title)
+      ? record.title
+      : hasSonarrDisplayContext(currentRecord?.title ?? '')
+        ? (currentRecord?.title ?? record.title)
+        : series
+          ? ensureSonarrSeriesTitle(record.title, series.title)
+          : record.title;
 
     return {
       ...record,
       externalPath,
-      title: series ? ensureSonarrSeriesTitle(record.title, series.title) : record.title,
+      title,
     };
   });
 };

@@ -1,6 +1,9 @@
 import { getActivityFeedState } from '@/src/observability';
 import { recoverRunAction } from '@/src/server/actions';
-import { probeDependencyHealth } from '@/src/server/console-data';
+import {
+  readPersistedQueryState,
+  withPersistedQueryState,
+} from '@/src/server/persistent-query';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import { AutoRefresh } from '@/src/ui/auto-refresh';
 import {
@@ -11,6 +14,7 @@ import {
   StatCard,
   StatsGrid,
   StatusBadge,
+  TablePagination,
 } from '@/src/ui';
 import {
   formatRunTypeLabel,
@@ -20,7 +24,10 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-const PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 50;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+const STATUS_FILTER_COOKIE = 'huntress_status_filters';
+const STATUS_PERSISTED_QUERY_KEYS = ['pageSize'] as const;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -76,36 +83,54 @@ const parsePositivePage = (value: string | string[] | undefined): number => {
   return parsed;
 };
 
-const clampPage = (page: number, totalItems: number): number => {
-  const totalPages = Math.max(Math.ceil(totalItems / PAGE_SIZE), 1);
+const parsePageSize = (value: string | string[] | undefined): number => {
+  const parsed = Number.parseInt(parseStringParam(value) ?? '', 10);
+
+  return PAGE_SIZE_OPTIONS.includes(parsed as (typeof PAGE_SIZE_OPTIONS)[number])
+    ? parsed
+    : DEFAULT_PAGE_SIZE;
+};
+
+const clampPage = (page: number, totalItems: number, pageSize: number): number => {
+  const totalPages = Math.max(Math.ceil(totalItems / pageSize), 1);
   return Math.min(page, totalPages);
 };
 
-const buildStatusHref = (page: number): string => {
-  if (page <= 1) {
-    return '/status';
+const buildStatusHref = (page: number, pageSize: number): string => {
+  const params = new URLSearchParams();
+
+  if (pageSize !== DEFAULT_PAGE_SIZE) {
+    params.set('pageSize', String(pageSize));
   }
 
-  return `/status?page=${page}`;
+  if (page > 1) {
+    params.set('page', String(page));
+  }
+
+  const suffix = params.toString();
+  return suffix ? `/status?${suffix}` : '/status';
 };
 
 export default async function StatusPage(props: { searchParams: SearchParams }) {
-  const searchParams = await props.searchParams;
+  const searchParams = withPersistedQueryState(
+    await props.searchParams,
+    await readPersistedQueryState(STATUS_FILTER_COOKIE, STATUS_PERSISTED_QUERY_KEYS)
+  );
   const runtime = await requireAuthenticatedConsoleContext();
-  const dependencyCards = await probeDependencyHealth(runtime);
   const notice = parseStringParam(searchParams.notice);
   const noticeStatus = parseStringParam(searchParams.status);
+  const pageSize = parsePageSize(searchParams.pageSize);
   const requestedPage = parsePositivePage(searchParams.page);
   let activity = getActivityFeedState(runtime.database, {
-    limit: PAGE_SIZE,
-    offset: (requestedPage - 1) * PAGE_SIZE,
+    limit: pageSize,
+    offset: (requestedPage - 1) * pageSize,
   });
-  const currentPage = clampPage(requestedPage, activity.totalRecent);
+  const currentPage = clampPage(requestedPage, activity.totalRecent, pageSize);
 
   if (currentPage !== requestedPage) {
     activity = getActivityFeedState(runtime.database, {
-      limit: PAGE_SIZE,
-      offset: (currentPage - 1) * PAGE_SIZE,
+      limit: pageSize,
+      offset: (currentPage - 1) * pageSize,
     });
   }
 
@@ -113,7 +138,7 @@ export default async function StatusPage(props: { searchParams: SearchParams }) 
   const schedulerStatus = runtime.scheduler.getStatus();
   const activeRun = schedulerStatus.activeRun;
   const autoRefreshEnabled = Boolean(activeRun);
-  const totalPages = Math.max(Math.ceil(activity.totalRecent / PAGE_SIZE), 1);
+  const totalPages = Math.max(Math.ceil(activity.totalRecent / pageSize), 1);
 
   return (
     <ConsoleShell
@@ -123,7 +148,6 @@ export default async function StatusPage(props: { searchParams: SearchParams }) 
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={schedulerStatus}
-      dependencyCards={dependencyCards}
       headerActions={
         <ConsoleHeaderActions
           mode={runtime.config.mode}
@@ -283,33 +307,32 @@ export default async function StatusPage(props: { searchParams: SearchParams }) 
         title="Recent event feed"
         subtitle="Newest first. This is the detailed step-by-step trail for the current and recent runs."
         actions={
-          activity.totalRecent <= PAGE_SIZE ? (
-            <span className="console-muted">
-              Showing all {activity.totalRecent} recent events.
-            </span>
-          ) : (
-            <div className="table-pagination">
-              <span className="console-muted">
-                Page {currentPage} of {totalPages} · {activity.totalRecent} recent events
-              </span>
-              <div className="table-pagination__links">
-                {currentPage > 1 ? (
-                  <a href={buildStatusHref(currentPage - 1)} className="console-link">
-                    Previous
-                  </a>
-                ) : (
-                  <span className="console-muted">Previous</span>
-                )}
-                {currentPage < totalPages ? (
-                  <a href={buildStatusHref(currentPage + 1)} className="console-link">
-                    Next
-                  </a>
-                ) : (
-                  <span className="console-muted">Next</span>
-                )}
-              </div>
-            </div>
-          )
+          <TablePagination
+            action="/status"
+            currentPage={currentPage}
+            totalPages={totalPages}
+            summary={
+              activity.totalRecent <= pageSize
+                ? `Showing all ${activity.totalRecent} recent events.`
+                : `${activity.totalRecent} recent events`
+            }
+            pageSize={pageSize}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            firstHref={currentPage > 1 ? buildStatusHref(1, pageSize) : null}
+            previousHref={
+              currentPage > 1 ? buildStatusHref(currentPage - 1, pageSize) : null
+            }
+            nextHref={
+              currentPage < totalPages
+                ? buildStatusHref(currentPage + 1, pageSize)
+                : null
+            }
+            lastHref={
+              currentPage < totalPages ? buildStatusHref(totalPages, pageSize) : null
+            }
+            persistenceCookieName={STATUS_FILTER_COOKIE}
+            persistedQueryKeys={STATUS_PERSISTED_QUERY_KEYS}
+          />
         }
       >
         <DataTable

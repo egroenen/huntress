@@ -15,3 +15,4 @@ next-env.d.ts
 coverage/
 tsconfig.tsbuildinfo
 tsconfig.typecheck.tsbuildinfo
+huntress-local.tar

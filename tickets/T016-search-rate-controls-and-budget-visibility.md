@@ -1,6 +1,6 @@
 # T016: Search Rate Controls and Budget Visibility
 
-Status: Backlog
+Status: Done
 
 ## Goal
 

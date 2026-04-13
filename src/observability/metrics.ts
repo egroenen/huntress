@@ -8,18 +8,18 @@ const registry = new Registry();
 
 collectDefaultMetrics({
   register: registry,
-  prefix: 'edarr_',
+  prefix: 'huntress_',
 });
 
 const runCounter = new Counter({
-  name: 'edarr_runs_total',
+  name: 'huntress_runs_total',
   help: 'Total scheduler and manual runs completed by status.',
   labelNames: ['run_type', 'status'] as const,
   registers: [registry],
 });
 
 const runDurationHistogram = new Histogram({
-  name: 'edarr_run_duration_seconds',
+  name: 'huntress_run_duration_seconds',
   help: 'Duration of scheduler and manual runs.',
   labelNames: ['run_type', 'status'] as const,
   buckets: [0.1, 0.5, 1, 2, 5, 10, 30, 60, 120],
@@ -27,68 +27,68 @@ const runDurationHistogram = new Histogram({
 });
 
 const candidateDecisionCounter = new Counter({
-  name: 'edarr_candidate_decisions_total',
+  name: 'huntress_candidate_decisions_total',
   help: 'Candidate evaluation decisions emitted by the decision engine.',
   labelNames: ['app', 'decision', 'reason_code'] as const,
   registers: [registry],
 });
 
 const searchDispatchCounter = new Counter({
-  name: 'edarr_search_dispatches_total',
+  name: 'huntress_search_dispatches_total',
   help: 'Scoped searches submitted to Sonarr or Radarr.',
   labelNames: ['app', 'outcome'] as const,
   registers: [registry],
 });
 
 const searchThrottleCounter = new Counter({
-  name: 'edarr_search_throttles_total',
+  name: 'huntress_search_throttles_total',
   help: 'Search attempts blocked by throttle policies.',
   labelNames: ['reason_code'] as const,
   registers: [registry],
 });
 
 const transmissionRemovalCounter = new Counter({
-  name: 'edarr_transmission_removals_total',
+  name: 'huntress_transmission_removals_total',
   help: 'Transmission torrents removed by the guard layer.',
   labelNames: ['reason_code'] as const,
   registers: [registry],
 });
 
 const activeSuppressionsGauge = new Gauge({
-  name: 'edarr_active_suppressions',
+  name: 'huntress_active_suppressions',
   help: 'Current number of active suppressions.',
   registers: [registry],
 });
 
 const dependencyHealthGauge = new Gauge({
-  name: 'edarr_dependency_health',
+  name: 'huntress_dependency_health',
   help: 'Dependency health by component and status.',
   labelNames: ['dependency', 'status'] as const,
   registers: [registry],
 });
 
 const searchRateUsedGauge = new Gauge({
-  name: 'edarr_search_rate_used',
+  name: 'huntress_search_rate_used',
   help: 'Search dispatches used in each rolling window.',
   labelNames: ['window'] as const,
   registers: [registry],
 });
 
 const searchRateRemainingGauge = new Gauge({
-  name: 'edarr_search_rate_remaining',
+  name: 'huntress_search_rate_remaining',
   help: 'Remaining search dispatches available in each rolling window.',
   labelNames: ['window'] as const,
   registers: [registry],
 });
 
 const searchRateNextEligibleGauge = new Gauge({
-  name: 'edarr_search_rate_next_eligible_timestamp',
+  name: 'huntress_search_rate_next_eligible_timestamp',
   help: 'Unix timestamp at which the next dispatch becomes eligible again.',
   registers: [registry],
 });
 
 const searchSpacingRemainingGauge = new Gauge({
-  name: 'edarr_search_spacing_remaining_seconds',
+  name: 'huntress_search_spacing_remaining_seconds',
   help: 'Seconds remaining before the min global dispatch spacing clears.',
   registers: [registry],
 });

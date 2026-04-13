@@ -38,8 +38,20 @@ const buildStateHash = (record: MediaItemStateRecord): string => {
 const buildDisplayCacheKey = (mediaKey: string): string =>
   `${MEDIA_DISPLAY_CACHE_PREFIX}${mediaKey}`;
 
+const SONARR_EPISODE_MARKER_PATTERN = /^(?:S\d{1,2}\s?E\d{1,3}|\d{1,2}x\d{1,3})\b/i;
+
 const hasSonarrDisplayContext = (title: string): boolean => {
-  return /\s-\s/.test(title) || /\sS\d{1,2}\s?E\d{1,3}\b/i.test(title) || /\s\d{1,2}x\d{1,3}\b/i.test(title);
+  const trimmedTitle = title.trim();
+
+  if (!trimmedTitle || SONARR_EPISODE_MARKER_PATTERN.test(trimmedTitle)) {
+    return false;
+  }
+
+  return (
+    /\s-\s/.test(trimmedTitle) ||
+    /\sS\d{1,2}\s?E\d{1,3}\b/i.test(trimmedTitle) ||
+    /\s\d{1,2}x\d{1,3}\b/i.test(trimmedTitle)
+  );
 };
 
 const formatEpisodeCode = (

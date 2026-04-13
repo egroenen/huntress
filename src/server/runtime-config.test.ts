@@ -19,7 +19,7 @@ server:
   listen: "127.0.0.1:47892"
 mode: "dry-run"
 storage:
-  sqlite_path: "/data/orchestrator.db"
+  sqlite_path: "/data/huntress.db"
 auth:
   enabled: true
   session_secret_env: "APP_SESSION_SECRET"
@@ -84,14 +84,14 @@ logging:
 `;
 
 const createConfigFile = async (contents: string): Promise<string> => {
-  const directory = await mkdtemp(join(tmpdir(), 'edarr-runtime-config-'));
+  const directory = await mkdtemp(join(tmpdir(), 'huntress-runtime-config-'));
   const configPath = join(directory, 'config.yaml');
   await writeFile(configPath, contents, 'utf8');
   return configPath;
 };
 
 const createDatabasePath = async (): Promise<string> => {
-  const directory = await mkdtemp(join(tmpdir(), 'edarr-runtime-db-'));
+  const directory = await mkdtemp(join(tmpdir(), 'huntress-runtime-db-'));
   return join(directory, 'orchestrator.sqlite');
 };
 
@@ -221,6 +221,12 @@ test('resolveRuntimeConfig applies persisted rolling search limit overrides', as
     });
 
     savePersistedSearchSafetyOverrides(database, {
+      perAppDispatchLimits: {
+        sonarr: 12,
+        radarr: 7,
+      },
+      maxGlobalDispatchPerCycle: 18,
+      minGlobalDispatchSpacingSeconds: 8,
       rollingSearchLimits: {
         per15m: 2,
         per1h: 6,
@@ -230,6 +236,10 @@ test('resolveRuntimeConfig applies persisted rolling search limit overrides', as
 
     const resolved = resolveRuntimeConfig(loadedConfig, database);
 
+    assert.equal(resolved.config.policies.sonarr.maxSearchesPerCycle, 12);
+    assert.equal(resolved.config.policies.radarr.maxSearchesPerCycle, 7);
+    assert.equal(resolved.config.safety.maxGlobalDispatchPerCycle, 18);
+    assert.equal(resolved.config.safety.minGlobalDispatchSpacingMs, 8_000);
     assert.equal(resolved.config.safety.rollingSearchLimits.per15m, 2);
     assert.equal(resolved.config.safety.rollingSearchLimits.per1h, 6);
     assert.equal(resolved.config.safety.rollingSearchLimits.per24h, 18);

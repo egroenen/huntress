@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
+import { NavigationProgressProvider } from '@/src/ui/navigation-progress';
+
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'edarr',
+  title: 'huntress',
   description: 'Deterministic Arr re-search orchestrator',
 };
 
@@ -15,7 +17,9 @@ interface RootLayoutProps {
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <NavigationProgressProvider>{children}</NavigationProgressProvider>
+      </body>
     </html>
   );
 }

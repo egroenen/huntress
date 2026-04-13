@@ -3,13 +3,37 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import BetterSqlite3 from 'better-sqlite3';
 
 import { initializeDatabase } from './index';
 
 const createDatabasePath = async (): Promise<string> => {
-  const directory = await mkdtemp(join(tmpdir(), 'edarr-db-'));
-  return join(directory, 'orchestrator.sqlite');
+  const directory = await mkdtemp(join(tmpdir(), 'huntress-db-'));
+  return join(directory, 'huntress.sqlite');
 };
+
+test('initializeDatabase adopts the legacy orchestrator.db filename automatically', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'huntress-db-legacy-'));
+  const legacyPath = join(directory, 'orchestrator.db');
+  const nextPath = join(directory, 'huntress.db');
+
+  const legacyDatabase = new BetterSqlite3(legacyPath);
+  legacyDatabase.exec('CREATE TABLE sample (value TEXT NOT NULL);');
+  legacyDatabase.exec(`INSERT INTO sample (value) VALUES ('carried-forward');`);
+  legacyDatabase.close();
+
+  const database = await initializeDatabase(nextPath);
+
+  try {
+    const row = database.connection
+      .prepare<[], { value: string } | undefined>('SELECT value FROM sample LIMIT 1')
+      .get();
+
+    assert.equal(row?.value, 'carried-forward');
+  } finally {
+    database.close();
+  }
+});
 
 test('initializeDatabase creates the schema on an empty database', async () => {
   const databasePath = await createDatabasePath();
@@ -330,6 +354,21 @@ test('run history and attempt repositories support paged queries', async () => {
         outcome: null,
       },
     ]);
+    for (let index = 1; index <= 3; index += 1) {
+      database.repositories.activityLog.insert({
+        occurredAt: `2026-04-03T12:00:0${index}.000Z`,
+        level: 'info',
+        source: 'scheduler',
+        stage: `stage_${index}`,
+        message: `Event ${index}`,
+        detail: null,
+        runId: 'run-3',
+        runType: 'scheduled',
+        progressCurrent: index,
+        progressTotal: 3,
+        metadata: {},
+      });
+    }
 
     assert.equal(database.repositories.runHistory.countAll(), 3);
     assert.deepEqual(
@@ -353,6 +392,19 @@ test('run history and attempt repositories support paged queries', async () => {
         .repositories.searchAttempts.listPageByRunId('run-3', 2, 2)
         .map((attempt) => attempt.mediaKey),
       ['sonarr:episode:3']
+    );
+    assert.equal(database.repositories.activityLog.countByRunId('run-3'), 3);
+    assert.deepEqual(
+      database
+        .repositories.activityLog.listPageByRunId('run-3', 2, 0)
+        .map((event) => event.stage),
+      ['stage_1', 'stage_2']
+    );
+    assert.deepEqual(
+      database
+        .repositories.activityLog.listPageByRunId('run-3', 2, 2)
+        .map((event) => event.stage),
+      ['stage_3']
     );
   } finally {
     database.close();

@@ -4,14 +4,14 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { loadConfig } from './load-config';
+import { loadConfig, resolveConfigPathFromArgs } from './load-config';
 
 const baseConfig = `
 server:
   listen: "127.0.0.1:47892"
 mode: "dry-run"
 storage:
-  sqlite_path: "/data/orchestrator.db"
+  sqlite_path: "/data/huntress.db"
 auth:
   enabled: true
   session_secret_env: "APP_SESSION_SECRET"
@@ -76,7 +76,7 @@ logging:
 `;
 
 const createConfigFile = async (contents: string): Promise<string> => {
-  const directory = await mkdtemp(join(tmpdir(), 'edarr-config-'));
+  const directory = await mkdtemp(join(tmpdir(), 'huntress-config-'));
   const configPath = join(directory, 'config.yaml');
   await writeFile(configPath, contents, 'utf8');
   return configPath;
@@ -143,5 +143,12 @@ test('loadConfig fails when absolute session TTL is not greater than idle TTL', 
         env: validEnv,
       }),
     /session_absolute_ttl must be greater than auth\.session_idle_ttl/
+  );
+});
+
+test('resolveConfigPathFromArgs ignores unrelated Next.js positional arguments', () => {
+  assert.equal(
+    resolveConfigPathFromArgs(['start', '--hostname', '0.0.0.0', '--port', '47892']),
+    undefined
   );
 });

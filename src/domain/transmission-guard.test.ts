@@ -18,7 +18,7 @@ interface TestServerContext {
 }
 
 const createDatabasePath = async (): Promise<string> => {
-  const directory = await mkdtemp(join(tmpdir(), 'edarr-transmission-'));
+  const directory = await mkdtemp(join(tmpdir(), 'huntress-transmission-'));
   return join(directory, 'orchestrator.sqlite');
 };
 
@@ -81,7 +81,7 @@ const createResolvedConfig = (): ResolvedConfig => {
     },
     mode: 'dry-run',
     storage: {
-      sqlitePath: '/tmp/edarr.sqlite',
+      sqlitePath: '/tmp/huntress.sqlite',
     },
     auth: {
       enabled: true,

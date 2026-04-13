@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import {
@@ -7,6 +7,7 @@ import {
   isBootstrapRequired,
   loginUser,
   logoutSession,
+  resolveSecureCookieSetting,
   SESSION_COOKIE_NAME,
   verifyCsrfToken,
 } from '@/src/auth';
@@ -17,6 +18,7 @@ import { buildPath, clearSessionCookie, normalizeErrorMessage } from './shared';
 
 export async function runLoginAction(formData: FormData) {
   const { config, database, requestMetadata } = await getAppContext();
+  const secureCookies = resolveSecureCookieSetting(await headers());
 
   if (isBootstrapRequired(database)) {
     redirect('/setup');
@@ -70,7 +72,7 @@ export async function runLoginAction(formData: FormData) {
         sessionSecret: config.auth.sessionSecret,
         sessionAbsoluteTtlMs: config.auth.sessionAbsoluteTtlMs,
         sessionIdleTtlMs: config.auth.sessionIdleTtlMs,
-      })
+      })(secureCookies)
     );
   } catch (error) {
     redirect(
@@ -86,6 +88,7 @@ export async function runLoginAction(formData: FormData) {
 
 export async function runSetupAction(formData: FormData) {
   const { config, database, requestMetadata } = await getAppContext();
+  const secureCookies = resolveSecureCookieSetting(await headers());
 
   if (!isBootstrapRequired(database)) {
     redirect('/login');
@@ -153,7 +156,7 @@ export async function runSetupAction(formData: FormData) {
         sessionSecret: config.auth.sessionSecret,
         sessionAbsoluteTtlMs: config.auth.sessionAbsoluteTtlMs,
         sessionIdleTtlMs: config.auth.sessionIdleTtlMs,
-      })
+      })(secureCookies)
     );
   } catch (error) {
     redirect(

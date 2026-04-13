@@ -17,10 +17,12 @@ RUN pnpm build
 
 FROM node:22-bookworm-slim AS runner
 
+LABEL org.opencontainers.image.title="huntress"
+LABEL org.opencontainers.image.description="Deterministic Arr re-search orchestrator with operator UI"
+
 ENV NODE_ENV="production"
 ENV PORT="47892"
 ENV HOSTNAME="0.0.0.0"
-ENV CONFIG_PATH="/config/config.yaml"
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 

@@ -16,7 +16,7 @@ interface TestServerContext {
 }
 
 const createDatabasePath = async (): Promise<string> => {
-  const directory = await mkdtemp(join(tmpdir(), 'edarr-domain-'));
+  const directory = await mkdtemp(join(tmpdir(), 'huntress-domain-'));
   return join(directory, 'orchestrator.sqlite');
 };
 
@@ -407,6 +407,115 @@ test('syncArrState preserves retry history and marks disappeared items as ignore
     assert.equal(disappearedRadarrRecord?.wantedState, 'ignored');
     assert.equal(disappearedRadarrRecord?.lastSeenAt, '2026-04-05T12:00:00.000Z');
     assert.equal(disappearedRadarrRecord?.retryCount, 0);
+  } finally {
+    database.close();
+    await server.close();
+  }
+});
+
+test('syncArrState preserves Sonarr series title when later sync payloads omit it', async () => {
+  let cycle = 1;
+  const server = await startJsonServer((request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+
+    if (url.pathname === '/sonarr/api/v3/wanted/missing') {
+      response.end(
+        JSON.stringify([
+          {
+            id: 101,
+            seriesId: 55,
+            title: cycle === 1 ? 'Pilot' : 'S1 E1 - Pilot',
+            monitored: true,
+            airDateUtc: '2026-03-30T00:00:00Z',
+            series: { title: 'Example Show' },
+          },
+        ])
+      );
+      return;
+    }
+
+    if (url.pathname === '/sonarr/api/v3/wanted/cutoff') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    if (url.pathname === '/sonarr/api/v3/queue/details') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    if (url.pathname === '/sonarr/api/v3/series/55') {
+      response.end(
+        JSON.stringify({
+          id: 55,
+          title: 'Example Show',
+          titleSlug: 'example-show',
+        })
+      );
+      return;
+    }
+
+    if (url.pathname === '/radarr/api/v3/wanted/missing') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    if (url.pathname === '/radarr/api/v3/wanted/cutoff') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    if (url.pathname === '/radarr/api/v3/queue/details') {
+      response.end(JSON.stringify([]));
+      return;
+    }
+
+    response.statusCode = 404;
+    response.end(JSON.stringify({ error: 'not found' }));
+  });
+
+  const databasePath = await createDatabasePath();
+  const database = await initializeDatabase(databasePath);
+
+  try {
+    await syncArrState({
+      database,
+      clients: {
+        sonarr: createSonarrClient({
+          baseUrl: `${server.url}/sonarr`,
+          apiKey: 'sonarr-key',
+        }),
+        radarr: createRadarrClient({
+          baseUrl: `${server.url}/radarr`,
+          apiKey: 'radarr-key',
+        }),
+      },
+      now: new Date('2026-04-04T12:00:00.000Z'),
+    });
+
+    cycle = 2;
+
+    await syncArrState({
+      database,
+      clients: {
+        sonarr: createSonarrClient({
+          baseUrl: `${server.url}/sonarr`,
+          apiKey: 'sonarr-key',
+        }),
+        radarr: createRadarrClient({
+          baseUrl: `${server.url}/radarr`,
+          apiKey: 'radarr-key',
+        }),
+      },
+      now: new Date('2026-04-05T12:00:00.000Z'),
+    });
+
+    const sonarrRecord =
+      database.repositories.mediaItemState.getByMediaKey('sonarr:episode:101');
+
+    assert.equal(sonarrRecord?.title, 'Example Show - S1 E1 - Pilot');
+    assert.equal(sonarrRecord?.externalPath, 'series/example-show');
   } finally {
     database.close();
     await server.close();

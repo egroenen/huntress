@@ -290,16 +290,57 @@ const dispatchWithOptionalReleaseSelection = async (input: {
   clients: SearchDispatchClients;
   item: MediaItemStateRecord;
   now: Date;
+  runId: string;
+  activityTracker?: ActivityTracker;
 }): Promise<DispatchExecutionResult> => {
   const app = getDecisionAppFromItem(input.item);
-  const releaseSelection = await planReleaseSelection({
-    database: input.database,
-    config: input.config,
-    clients: input.clients,
-    item: input.item,
-    app,
-    now: input.now,
-  });
+  let releaseSelection: PlannedReleaseSelection | null;
+
+  try {
+    releaseSelection = await planReleaseSelection({
+      database: input.database,
+      config: input.config,
+      clients: input.clients,
+      item: input.item,
+      app,
+      now: input.now,
+    });
+  } catch (error) {
+    input.activityTracker?.warn({
+      source: app,
+      stage: 'release_selection_unavailable',
+      message: `Release preview timed out for ${input.item.title}; falling back to blind search`,
+      detail: error instanceof Error ? error.message : 'Unknown release-selection error',
+    });
+    logger.warn({
+      event: 'release_selection_unavailable',
+      runId: input.runId,
+      app,
+      mediaKey: input.item.mediaKey,
+      title: input.item.title,
+      error:
+        error instanceof Error
+          ? {
+              name: error.name,
+              message: error.message,
+            }
+          : {
+              message: 'Unknown release-selection error',
+            },
+    });
+
+    releaseSelection = {
+      mode: 'blind_search',
+      reason: 'Release preview failed, so the dispatcher fell back to an Arr search command.',
+      selectedRelease: null,
+      availableReleaseCount: 0,
+      eligibleReleaseCount: 0,
+      filteredSuppressedCount: 0,
+      filteredUnsafeCount: 0,
+      filteredFloorCount: 0,
+      upgradePriority: false,
+    };
+  }
 
   if (releaseSelection.selectedRelease) {
     return {
@@ -352,6 +393,8 @@ export const executeManualFetch = async (
       clients: input.clients,
       item,
       now: attemptAt,
+      runId: input.runId,
+      ...(input.activityTracker ? { activityTracker: input.activityTracker } : {}),
     });
     const command = dispatchResult.command;
     const releaseSelection = dispatchResult.releaseSelection;
@@ -736,6 +779,8 @@ export const executeSearchDispatchRun = async (
         clients: input.clients,
         item,
         now: new Date(attemptAtIso),
+        runId: input.runId,
+        ...(input.activityTracker ? { activityTracker: input.activityTracker } : {}),
       });
       const command = dispatchResult.command;
       const releaseSelection = dispatchResult.releaseSelection;

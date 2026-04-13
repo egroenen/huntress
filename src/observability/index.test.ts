@@ -13,7 +13,7 @@ import { getMetricsText, recordRunCompletion, updateSearchRateMetrics } from './
 import { getSearchRateSnapshot } from './search-rate';
 
 const createDatabasePath = async (): Promise<string> => {
-  const directory = await mkdtemp(join(tmpdir(), 'edarr-observability-'));
+  const directory = await mkdtemp(join(tmpdir(), 'huntress-observability-'));
   return join(directory, 'orchestrator.sqlite');
 };
 
@@ -25,7 +25,7 @@ const createResolvedConfig = (): ResolvedConfig => {
     },
     mode: 'dry-run',
     storage: {
-      sqlitePath: '/tmp/edarr.sqlite',
+      sqlitePath: '/tmp/huntress.sqlite',
     },
     auth: {
       enabled: true,
@@ -274,6 +274,6 @@ test('healthz and metrics endpoints return scrapeable observability responses', 
   const metricsText = await getMetricsText();
 
   assert.equal(healthBody.ok, true);
-  assert.match(metricsText, /edarr_runs_total/);
-  assert.match(metricsText, /edarr_search_rate_used/);
+  assert.match(metricsText, /huntress_runs_total/);
+  assert.match(metricsText, /huntress_search_rate_used/);
 });

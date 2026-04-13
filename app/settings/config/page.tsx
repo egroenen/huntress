@@ -4,13 +4,11 @@ import {
   ConsoleShell,
   SectionCard,
 } from '@/src/ui';
-import { probeDependencyHealth } from '@/src/server/console-data';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SettingsConfigPage() {
   const runtime = await requireAuthenticatedConsoleContext();
-  const dependencyCards = await probeDependencyHealth(runtime);
 
   return (
     <ConsoleShell
@@ -20,7 +18,6 @@ export default async function SettingsConfigPage() {
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
-      dependencyCards={dependencyCards}
       headerActions={
         <ConsoleHeaderActions
           mode={runtime.config.mode}

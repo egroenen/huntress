@@ -1,5 +1,6 @@
-import { mkdir } from 'node:fs/promises';
+import { access, mkdir, rename } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
+import { constants } from 'node:fs';
 
 import BetterSqlite3, { type Database as SqliteDatabase } from 'better-sqlite3';
 
@@ -77,6 +78,40 @@ const applyMigrations = (database: SqliteDatabase): AppliedMigration[] => {
   return appliedMigrations;
 };
 
+const maybeAdoptLegacyDatabasePath = async (databasePath: string): Promise<void> => {
+  const resolvedPath = resolve(databasePath);
+  const expectedSuffix = `${join('', 'huntress.db')}`;
+
+  if (!resolvedPath.endsWith(expectedSuffix)) {
+    return;
+  }
+
+  const legacyPath = resolvedPath.slice(0, -'huntress.db'.length) + 'orchestrator.db';
+
+  try {
+    await access(resolvedPath, constants.F_OK);
+    return;
+  } catch {
+    // Continue and check for the legacy path instead.
+  }
+
+  try {
+    await access(legacyPath, constants.F_OK);
+  } catch {
+    return;
+  }
+
+  for (const suffix of ['', '-shm', '-wal']) {
+    try {
+      await rename(`${legacyPath}${suffix}`, `${resolvedPath}${suffix}`);
+    } catch (error) {
+      if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+  }
+};
+
 export const initializeDatabase = async (
   databasePath: string
 ): Promise<DatabaseContext> => {
@@ -103,6 +138,8 @@ export const initializeDatabase = async (
     );
     await mkdir(dirname(writablePath), { recursive: true });
   }
+
+  await maybeAdoptLegacyDatabasePath(writablePath);
 
   const connection = new BetterSqlite3(writablePath);
   configureDatabase(connection);

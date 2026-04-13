@@ -234,5 +234,9 @@ export const logoutSession = (
 };
 
 export const getSessionCookieOptions = (authConfig: AuthConfiguration) => {
-  return createSessionCookieOptions(Math.floor(authConfig.sessionAbsoluteTtlMs / 1_000));
+  return (secure: boolean) =>
+    createSessionCookieOptions(
+      Math.floor(authConfig.sessionAbsoluteTtlMs / 1_000),
+      secure
+    );
 };

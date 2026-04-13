@@ -6,9 +6,19 @@ import type {
   TransmissionTorrentSort,
   TransmissionTorrentStateRecord,
 } from '@/src/db';
+import { TablePagination } from '@/src/ui';
 
-export const PAGE_SIZE = 50;
+export const DEFAULT_PAGE_SIZE = 50;
+export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 export const DEFAULT_SORT = 'recent_desc';
+const TRANSMISSION_FILTER_COOKIE = 'huntress_transmission_filters';
+const TRANSMISSION_PERSISTED_QUERY_KEYS = [
+  'pageSize',
+  'q',
+  'guard',
+  'linked',
+  'sort',
+] as const;
 
 export interface TransmissionFilters {
   sort: TransmissionTorrentSort;
@@ -261,13 +271,31 @@ export const parseTransmissionFilters = (
 };
 
 export const clampPage = (page: number, totalItems: number): number => {
-  const totalPages = Math.max(Math.ceil(totalItems / PAGE_SIZE), 1);
+  const totalPages = Math.max(Math.ceil(totalItems / DEFAULT_PAGE_SIZE), 1);
+  return Math.min(page, totalPages);
+};
+
+export const parsePageSize = (value: string | string[] | undefined): number => {
+  const parsed = Number.parseInt(parseStringParam(value), 10);
+
+  return PAGE_SIZE_OPTIONS.includes(parsed as (typeof PAGE_SIZE_OPTIONS)[number])
+    ? parsed
+    : DEFAULT_PAGE_SIZE;
+};
+
+export const clampPageToSize = (
+  page: number,
+  totalItems: number,
+  pageSize: number
+): number => {
+  const totalPages = Math.max(Math.ceil(totalItems / pageSize), 1);
   return Math.min(page, totalPages);
 };
 
 const buildTransmissionParams = (input: {
   sort: TransmissionTorrentSort;
   page: number;
+  pageSize: number;
   query: string;
   guard: TransmissionTorrentGuardFilter;
   linked: TransmissionTorrentLinkedFilter;
@@ -290,6 +318,10 @@ const buildTransmissionParams = (input: {
     params.set('linked', input.linked);
   }
 
+  if (input.pageSize !== DEFAULT_PAGE_SIZE) {
+    params.set('pageSize', String(input.pageSize));
+  }
+
   if (input.page > 1) {
     params.set('page', String(input.page));
   }
@@ -300,6 +332,7 @@ const buildTransmissionParams = (input: {
 export const buildTransmissionHref = (input: {
   sort: TransmissionTorrentSort;
   page: number;
+  pageSize: number;
   query: string;
   guard: TransmissionTorrentGuardFilter;
   linked: TransmissionTorrentLinkedFilter;
@@ -436,61 +469,82 @@ export const filterTransmissionTorrents = (input: {
 export const renderTransmissionPagination = (input: {
   currentPage: number;
   totalItems: number;
+  pageSize: number;
   sort: TransmissionTorrentSort;
   query: string;
   guard: TransmissionTorrentGuardFilter;
   linked: TransmissionTorrentLinkedFilter;
 }): ReactNode => {
-  const totalPages = Math.max(Math.ceil(input.totalItems / PAGE_SIZE), 1);
-
-  if (input.totalItems <= PAGE_SIZE) {
-    return (
-      <span className="console-muted">
-        Showing all {input.totalItems} cached torrent observations.
-      </span>
-    );
-  }
+  const totalPages = Math.max(Math.ceil(input.totalItems / input.pageSize), 1);
 
   return (
-    <div className="table-pagination">
-      <span className="console-muted">
-        Page {input.currentPage} of {totalPages} · {input.totalItems} cached torrent
-        observations
-      </span>
-      <div className="table-pagination__links">
-        {input.currentPage > 1 ? (
-          <a
-            href={buildTransmissionHref({
+    <TablePagination
+      action="/transmission"
+      currentPage={input.currentPage}
+      totalPages={totalPages}
+      summary={
+        input.totalItems <= input.pageSize
+          ? `Showing all ${input.totalItems} cached torrent observations.`
+          : `${input.totalItems} cached torrent observations`
+      }
+      pageSize={input.pageSize}
+      pageSizeOptions={PAGE_SIZE_OPTIONS}
+      hiddenInputs={[
+        ...(input.sort !== DEFAULT_SORT ? [{ name: 'sort', value: input.sort }] : []),
+        ...(input.query ? [{ name: 'q', value: input.query }] : []),
+        ...(input.guard !== 'all' ? [{ name: 'guard', value: input.guard }] : []),
+        ...(input.linked !== 'all' ? [{ name: 'linked', value: input.linked }] : []),
+      ]}
+      firstHref={
+        input.currentPage > 1
+          ? buildTransmissionHref({
+              sort: input.sort,
+              page: 1,
+              pageSize: input.pageSize,
+              query: input.query,
+              guard: input.guard,
+              linked: input.linked,
+            })
+          : null
+      }
+      previousHref={
+        input.currentPage > 1
+          ? buildTransmissionHref({
               sort: input.sort,
               page: input.currentPage - 1,
+              pageSize: input.pageSize,
               query: input.query,
               guard: input.guard,
               linked: input.linked,
-            })}
-            className="console-link"
-          >
-            Previous
-          </a>
-        ) : (
-          <span className="console-muted">Previous</span>
-        )}
-        {input.currentPage < totalPages ? (
-          <a
-            href={buildTransmissionHref({
+            })
+          : null
+      }
+      nextHref={
+        input.currentPage < totalPages
+          ? buildTransmissionHref({
               sort: input.sort,
               page: input.currentPage + 1,
+              pageSize: input.pageSize,
               query: input.query,
               guard: input.guard,
               linked: input.linked,
-            })}
-            className="console-link"
-          >
-            Next
-          </a>
-        ) : (
-          <span className="console-muted">Next</span>
-        )}
-      </div>
-    </div>
+            })
+          : null
+      }
+      lastHref={
+        input.currentPage < totalPages
+          ? buildTransmissionHref({
+              sort: input.sort,
+              page: totalPages,
+              pageSize: input.pageSize,
+              query: input.query,
+              guard: input.guard,
+              linked: input.linked,
+            })
+          : null
+      }
+      persistenceCookieName={TRANSMISSION_FILTER_COOKIE}
+      persistedQueryKeys={TRANSMISSION_PERSISTED_QUERY_KEYS}
+    />
   );
 };

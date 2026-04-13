@@ -28,7 +28,7 @@ export default async function SetupPage(props: { searchParams: SearchParams }) {
     <main className="auth-page">
       <section className="auth-panel">
         <p className="eyebrow">Initial Setup</p>
-        <h1>Create the first edarr admin account.</h1>
+        <h1>Create the first Huntress admin account.</h1>
         <p className="lede">
           This bootstrap flow is only available until the first local admin user is
           created.

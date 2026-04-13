@@ -1,14 +1,19 @@
 import Link from 'next/link';
-import type { ReactNode } from 'react';
 
-import { probeDependencyHealth } from '@/src/server/console-data';
+import {
+  readPersistedQueryState,
+  withPersistedQueryState,
+} from '@/src/server/persistent-query';
 import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   ConsoleHeaderActions,
   ConsoleShell,
   DataTable,
+  QueryFilterForm,
+  QueryFilterLink,
   SectionCard,
   StatusBadge,
+  TablePagination,
 } from '@/src/ui';
 import { formatRunTypeLabel } from '@/src/ui/formatters';
 
@@ -16,6 +21,8 @@ export const dynamic = 'force-dynamic';
 
 const DEFAULT_PAGE_SIZE = 25;
 const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
+const RUNS_FILTER_COOKIE = 'huntress_runs_filters';
+const RUNS_PERSISTED_QUERY_KEYS = ['pageSize', 'runType', 'status', 'from', 'to'] as const;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -141,58 +148,12 @@ const buildRunsHref = (input: {
   return suffix ? `/runs?${suffix}` : '/runs';
 };
 
-const renderPagination = (
-  currentPage: number,
-  totalItems: number,
-  input: {
-    pageSize: number;
-    runType: string;
-    status: string;
-    from: string;
-    to: string;
-  }
-): ReactNode => {
-  const totalPages = Math.max(Math.ceil(totalItems / input.pageSize), 1);
-
-  if (totalItems <= input.pageSize) {
-    return <span className="console-muted">Showing all {totalItems} recorded runs.</span>;
-  }
-
-  return (
-    <div className="table-pagination">
-      <span className="console-muted">
-        Page {currentPage} of {totalPages} · {totalItems} recorded runs
-      </span>
-      <div className="table-pagination__links">
-        {currentPage > 1 ? (
-          <a
-            href={buildRunsHref({ ...input, page: currentPage - 1 })}
-            className="console-link"
-          >
-            Previous
-          </a>
-        ) : (
-          <span className="console-muted">Previous</span>
-        )}
-        {currentPage < totalPages ? (
-          <a
-            href={buildRunsHref({ ...input, page: currentPage + 1 })}
-            className="console-link"
-          >
-            Next
-          </a>
-        ) : (
-          <span className="console-muted">Next</span>
-        )}
-      </div>
-    </div>
-  );
-};
-
 export default async function RunsPage(props: { searchParams: SearchParams }) {
-  const searchParams = await props.searchParams;
+  const searchParams = withPersistedQueryState(
+    await props.searchParams,
+    await readPersistedQueryState(RUNS_FILTER_COOKIE, RUNS_PERSISTED_QUERY_KEYS)
+  );
   const runtime = await requireAuthenticatedConsoleContext();
-  const dependencyCards = await probeDependencyHealth(runtime);
   const notice = parseStringParam(searchParams.notice).trim();
   const noticeStatus = parseStringParam(searchParams.status).trim();
   const pageSize = parsePageSize(searchParams.pageSize);
@@ -222,7 +183,6 @@ export default async function RunsPage(props: { searchParams: SearchParams }) {
       currentUser={runtime.authenticated.user.username}
       mode={runtime.config.mode}
       schedulerStatus={runtime.scheduler.getStatus()}
-      dependencyCards={dependencyCards}
       headerActions={
         <ConsoleHeaderActions
           mode={runtime.config.mode}
@@ -235,13 +195,63 @@ export default async function RunsPage(props: { searchParams: SearchParams }) {
         title="Recent runs"
         subtitle="Newest runs appear first."
         actions={
-          renderPagination(currentPage, totalRuns, {
-            pageSize,
-            runType,
-            status,
-            from,
-            to,
-          })
+          <TablePagination
+            action="/runs"
+            currentPage={currentPage}
+            totalPages={Math.max(Math.ceil(totalRuns / pageSize), 1)}
+            summary={
+              totalRuns <= pageSize
+                ? `Showing all ${totalRuns} recorded runs.`
+                : `${totalRuns} recorded runs`
+            }
+            pageSize={pageSize}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            hiddenInputs={[
+              ...(runType ? [{ name: 'runType', value: runType }] : []),
+              ...(status ? [{ name: 'status', value: status }] : []),
+              ...(from ? [{ name: 'from', value: from }] : []),
+              ...(to ? [{ name: 'to', value: to }] : []),
+            ]}
+            firstHref={currentPage > 1 ? buildRunsHref({ page: 1, pageSize, runType, status, from, to }) : null}
+            previousHref={
+              currentPage > 1
+                ? buildRunsHref({
+                    page: currentPage - 1,
+                    pageSize,
+                    runType,
+                    status,
+                    from,
+                    to,
+                  })
+                : null
+            }
+            nextHref={
+              currentPage < Math.max(Math.ceil(totalRuns / pageSize), 1)
+                ? buildRunsHref({
+                    page: currentPage + 1,
+                    pageSize,
+                    runType,
+                    status,
+                    from,
+                    to,
+                  })
+                : null
+            }
+            lastHref={
+              currentPage < Math.max(Math.ceil(totalRuns / pageSize), 1)
+                ? buildRunsHref({
+                    page: Math.max(Math.ceil(totalRuns / pageSize), 1),
+                    pageSize,
+                    runType,
+                    status,
+                    from,
+                    to,
+                  })
+                : null
+            }
+            persistenceCookieName={RUNS_FILTER_COOKIE}
+            persistedQueryKeys={RUNS_PERSISTED_QUERY_KEYS}
+          />
         }
       >
         {notice ? (
@@ -256,7 +266,13 @@ export default async function RunsPage(props: { searchParams: SearchParams }) {
           </p>
         ) : null}
 
-        <form action="/runs" method="get" className="candidate-filters">
+        <QueryFilterForm
+          action="/runs"
+          className="candidate-filters"
+          persistenceCookieName={RUNS_FILTER_COOKIE}
+          persistedQueryKeys={RUNS_PERSISTED_QUERY_KEYS}
+        >
+          <input type="hidden" name="pageSize" value={String(pageSize)} />
           <div className="candidate-filters__grid">
             <label className="candidate-filters__field">
               <span>Run type</span>
@@ -286,31 +302,33 @@ export default async function RunsPage(props: { searchParams: SearchParams }) {
               <span>To</span>
               <input type="date" name="to" defaultValue={to} />
             </label>
-            <label className="candidate-filters__field">
-              <span>Page size</span>
-              <select name="pageSize" defaultValue={String(pageSize)}>
-                {PAGE_SIZE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option} per page
-                  </option>
-                ))}
-              </select>
-            </label>
           </div>
           <div className="candidate-filters__actions">
             <span className="console-muted">
               {totalRuns} matching run{totalRuns === 1 ? '' : 's'}
             </span>
             <div className="transmission-controls__links">
-              <Link href="/runs" className="console-link">
+              <QueryFilterLink
+                href={buildRunsHref({
+                  page: 1,
+                  pageSize,
+                  runType: '',
+                  status: '',
+                  from: '',
+                  to: '',
+                })}
+                className="console-link"
+                persistenceCookieName={RUNS_FILTER_COOKIE}
+                persistedQueryKeys={RUNS_PERSISTED_QUERY_KEYS}
+              >
                 Clear filters
-              </Link>
+              </QueryFilterLink>
               <button type="submit" className="console-button">
                 Apply filters
               </button>
             </div>
           </div>
-        </form>
+        </QueryFilterForm>
         <DataTable
           columns={[
             { key: 'runType', label: 'Run type' },

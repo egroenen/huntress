@@ -4,7 +4,7 @@ import type { ResponseCookie } from 'next/dist/compiled/@edge-runtime/cookies';
 
 import type { AppSessionRecord } from '@/src/db';
 
-export const SESSION_COOKIE_NAME = 'edarr_session';
+export const SESSION_COOKIE_NAME = 'huntress_session';
 
 const signValue = (value: string, secret: string): string => {
   return createHmac('sha256', secret).update(value).digest('base64url');
@@ -61,13 +61,34 @@ export const createSessionRecord = (
   };
 };
 
+export const resolveSecureCookieSetting = (headers: Headers): boolean => {
+  const forwardedProto = headers
+    .get('x-forwarded-proto')
+    ?.split(',')[0]
+    ?.trim()
+    .toLowerCase();
+
+  if (forwardedProto) {
+    return forwardedProto === 'https';
+  }
+
+  const origin = headers.get('origin') ?? headers.get('referer');
+
+  if (origin) {
+    return origin.startsWith('https://');
+  }
+
+  return false;
+};
+
 export const createSessionCookieOptions = (
-  maxAgeSeconds: number
+  maxAgeSeconds: number,
+  secure: boolean
 ): Partial<ResponseCookie> => {
   return {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure,
     path: '/',
     maxAge: maxAgeSeconds,
   };
