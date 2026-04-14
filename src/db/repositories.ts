@@ -235,6 +235,7 @@ export type TransmissionTorrentLinkedFilter = 'all' | 'linked' | 'unlinked';
 export interface TransmissionTorrentFilter {
   nowIso: string;
   stallNoProgressForMs: number;
+  stallNearCompleteForMs: number;
   sort: TransmissionTorrentSort;
   query?: string | null;
   guard?: TransmissionTorrentGuardFilter | null;
@@ -351,12 +352,14 @@ const buildTransmissionTorrentFilterCte = (sortClause: string) => `
           THEN 'active'
         WHEN (
           CAST(strftime('%s', transmission_torrent_state.no_progress_since) AS INTEGER) * 1000
-          + @stallNoProgressForMs
+          + CASE WHEN transmission_torrent_state.percent_done >= 0.95
+              THEN @stallNearCompleteForMs ELSE @stallNoProgressForMs END
         ) <= (CAST(strftime('%s', @nowIso) AS INTEGER) * 1000)
           THEN 'stalled_removable'
         WHEN (
           CAST(strftime('%s', transmission_torrent_state.no_progress_since) AS INTEGER) * 1000
-          + @stallNoProgressForMs
+          + CASE WHEN transmission_torrent_state.percent_done >= 0.95
+              THEN @stallNearCompleteForMs ELSE @stallNoProgressForMs END
           - (CAST(strftime('%s', @nowIso) AS INTEGER) * 1000)
         ) <= 3600000
           THEN 'remove_soon'
@@ -457,6 +460,7 @@ const buildTransmissionTorrentFilterParams = (
   return {
     nowIso: filter.nowIso,
     stallNoProgressForMs: filter.stallNoProgressForMs,
+    stallNearCompleteForMs: filter.stallNearCompleteForMs,
     linkedFilter: filter.linked ?? 'all',
     guardFilter: filter.guard ?? 'all',
     queryFilter: normalizedQuery,

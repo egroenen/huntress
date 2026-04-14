@@ -92,6 +92,7 @@ export const rawConfigSchema = z.object({
   transmission_guard: z.object({
     enabled: z.boolean(),
     stall_no_progress_for: durationStringSchema,
+    stall_near_complete_for: durationStringSchema.default('2h'),
     suppress_same_release_for: durationStringSchema,
     item_cooldown_after_loop: durationStringSchema,
     delete_local_data: z.boolean(),
@@ -196,6 +197,7 @@ export const resolvedConfigSchema = z
     transmissionGuard: z.object({
       enabled: z.boolean(),
       stallNoProgressForMs: z.number().int().positive(),
+      stallNearCompleteForMs: z.number().int().positive(),
       suppressSameReleaseForMs: z.number().int().positive(),
       itemCooldownAfterLoopMs: z.number().int().positive(),
       deleteLocalData: z.boolean(),

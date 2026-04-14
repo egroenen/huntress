@@ -185,6 +185,9 @@ const resolveConfig = (
       stallNoProgressForMs: durationToMs(
         rawConfig.transmission_guard.stall_no_progress_for
       ),
+      stallNearCompleteForMs: durationToMs(
+        rawConfig.transmission_guard.stall_near_complete_for
+      ),
       suppressSameReleaseForMs: durationToMs(
         rawConfig.transmission_guard.suppress_same_release_for
       ),

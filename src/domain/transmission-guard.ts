@@ -239,10 +239,13 @@ const buildTorrentStateRecord = (
   };
 };
 
+const NEAR_COMPLETE_THRESHOLD = 0.95;
+
 const isStalledTorrent = (
   torrent: TransmissionTorrentRecord,
   state: TransmissionTorrentStateRecord,
   stallNoProgressForMs: number,
+  stallNearCompleteForMs: number,
   now: Date
 ): boolean => {
   if (torrent.error > 0 || torrent.percentDone >= 1 || torrent.rateDownload > 0) {
@@ -253,9 +256,13 @@ const isStalledTorrent = (
     return false;
   }
 
-  return (
-    now.getTime() - new Date(state.noProgressSince).getTime() >= stallNoProgressForMs
-  );
+  const stalledForMs = now.getTime() - new Date(state.noProgressSince).getTime();
+  const threshold =
+    torrent.percentDone >= NEAR_COMPLETE_THRESHOLD
+      ? stallNearCompleteForMs
+      : stallNoProgressForMs;
+
+  return stalledForMs >= threshold;
 };
 
 const hasActiveSuppressedRelease = (
@@ -741,6 +748,7 @@ export const runTransmissionGuard = async (input: {
         torrent,
         torrentState,
         input.config.transmissionGuard.stallNoProgressForMs,
+        input.config.transmissionGuard.stallNearCompleteForMs,
         now
       )
     ) {

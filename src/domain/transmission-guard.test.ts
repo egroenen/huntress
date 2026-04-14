@@ -147,6 +147,7 @@ const createResolvedConfig = (): ResolvedConfig => {
     transmissionGuard: {
       enabled: true,
       stallNoProgressForMs: 12 * 3_600_000,
+      stallNearCompleteForMs: 2 * 3_600_000,
       suppressSameReleaseForMs: 7 * 86_400_000,
       itemCooldownAfterLoopMs: 24 * 3_600_000,
       deleteLocalData: true,

@@ -65,6 +65,7 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
     runtime.database.repositories.transmissionTorrentState.countFiltered({
       nowIso,
       stallNoProgressForMs: runtime.config.transmissionGuard.stallNoProgressForMs,
+      stallNearCompleteForMs: runtime.config.transmissionGuard.stallNearCompleteForMs,
       sort: filters.sort,
       query: filters.query,
       guard: filters.guard,
@@ -80,6 +81,7 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
       {
         nowIso,
         stallNoProgressForMs: runtime.config.transmissionGuard.stallNoProgressForMs,
+        stallNearCompleteForMs: runtime.config.transmissionGuard.stallNearCompleteForMs,
         sort: filters.sort,
         query: filters.query,
         guard: filters.guard,
@@ -278,6 +280,7 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
               percentDone: torrent.percentDone,
               noProgressSince: torrent.noProgressSince,
               stallNoProgressForMs: runtime.config.transmissionGuard.stallNoProgressForMs,
+              stallNearCompleteForMs: runtime.config.transmissionGuard.stallNearCompleteForMs,
               now,
             });
             const dangerousRemoval =

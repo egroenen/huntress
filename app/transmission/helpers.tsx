@@ -96,6 +96,8 @@ export const formatTransmissionState = (status: number): string => {
   }
 };
 
+const NEAR_COMPLETE_THRESHOLD = 0.95;
+
 export const getGuardInsight = (input: {
   removedAt: string | null;
   removalReason: string | null;
@@ -103,6 +105,7 @@ export const getGuardInsight = (input: {
   percentDone: number;
   noProgressSince: string | null;
   stallNoProgressForMs: number;
+  stallNearCompleteForMs: number;
   now: Date;
 }): GuardInsight => {
   if (input.removedAt) {
@@ -152,8 +155,12 @@ export const getGuardInsight = (input: {
     };
   }
 
-  const removeAt = new Date(noProgressAt + input.stallNoProgressForMs).toISOString();
-  const remainingMs = noProgressAt + input.stallNoProgressForMs - input.now.getTime();
+  const effectiveStallMs =
+    input.percentDone >= NEAR_COMPLETE_THRESHOLD
+      ? input.stallNearCompleteForMs
+      : input.stallNoProgressForMs;
+  const removeAt = new Date(noProgressAt + effectiveStallMs).toISOString();
+  const remainingMs = noProgressAt + effectiveStallMs - input.now.getTime();
 
   if (remainingMs <= 0) {
     return {
@@ -416,6 +423,7 @@ export const filterTransmissionTorrents = (input: {
   filters: TransmissionFilters;
   now: Date;
   stallNoProgressForMs: number;
+  stallNearCompleteForMs: number;
   resolveTitle: (mediaKey: string | null) => string | null;
 }): TransmissionTorrentStateRecord[] => {
   return input.torrents.filter((torrent) => {
@@ -426,6 +434,7 @@ export const filterTransmissionTorrents = (input: {
       percentDone: torrent.percentDone,
       noProgressSince: torrent.noProgressSince,
       stallNoProgressForMs: input.stallNoProgressForMs,
+      stallNearCompleteForMs: input.stallNearCompleteForMs,
       now: input.now,
     });
 
