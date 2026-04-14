@@ -26,4 +26,5 @@ export { RelativeTimeLabel } from './relative-time-label';
 export { BudgetMeter } from './budget-meter';
 export { LazyDependencyHealthGrid } from './lazy-dependency-health-grid';
 export { QueryFilterForm, QueryFilterLink } from './query-filter-form';
+export { SortableDataTable } from './sortable-data-table';
 export { TablePagination } from './table-pagination';

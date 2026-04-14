@@ -79,6 +79,7 @@ transmission_guard:
   suppress_same_release_for: '7d'
   item_cooldown_after_loop: '24h'
   delete_local_data: true
+  dangerous_extensions: '.exe,.scr'
 
 safety:
   panic_disable_search: false

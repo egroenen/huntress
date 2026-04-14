@@ -29,7 +29,7 @@ export interface TransmissionFilters {
 
 export interface GuardInsight {
   label: string;
-  tone: 'healthy' | 'degraded' | 'unavailable' | 'success';
+  tone: 'healthy' | 'degraded' | 'unavailable' | 'success' | 'info' | 'running' | 'failed';
   removeAt: string | null;
   countdown: string;
 }
@@ -117,7 +117,7 @@ export const getGuardInsight = (input: {
   if ((input.errorCode ?? 0) > 0) {
     return {
       label: 'error removable',
-      tone: 'unavailable',
+      tone: 'failed',
       removeAt: input.now.toISOString(),
       countdown: 'eligible now',
     };
@@ -126,7 +126,7 @@ export const getGuardInsight = (input: {
   if (input.percentDone >= 1) {
     return {
       label: 'complete',
-      tone: 'healthy',
+      tone: 'success',
       removeAt: null,
       countdown: 'safe',
     };
@@ -158,7 +158,7 @@ export const getGuardInsight = (input: {
   if (remainingMs <= 0) {
     return {
       label: 'stalled removable',
-      tone: 'unavailable',
+      tone: 'degraded',
       removeAt,
       countdown: 'eligible now',
     };
@@ -167,7 +167,7 @@ export const getGuardInsight = (input: {
   if (remainingMs <= 60 * 60 * 1000) {
     return {
       label: 'remove soon',
-      tone: 'degraded',
+      tone: 'running',
       removeAt,
       countdown: formatDurationFromMs(remainingMs),
     };
@@ -175,7 +175,7 @@ export const getGuardInsight = (input: {
 
   return {
     label: 'stalling',
-    tone: 'degraded',
+    tone: 'info',
     removeAt,
     countdown: formatDurationFromMs(remainingMs),
   };

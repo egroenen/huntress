@@ -282,6 +282,18 @@ const hasActiveSuppressedRelease = (
     );
 };
 
+const hasDangerousExtension = (
+  torrentName: string,
+  dangerousExtensions: string[]
+): boolean => {
+  if (dangerousExtensions.length === 0) {
+    return false;
+  }
+
+  const normalizedName = torrentName.toLowerCase();
+  return dangerousExtensions.some((ext) => normalizedName.endsWith(ext));
+};
+
 const isDangerousStatusMessage = (message: string): boolean => {
   const normalized = message.toLowerCase();
   return (
@@ -706,7 +718,14 @@ export const runTransmissionGuard = async (input: {
     input.database.repositories.transmissionTorrentState.upsert(torrentState);
 
     let reason: TransmissionGuardReason | null = null;
-    if (torrent.error > 0) {
+    if (
+      hasDangerousExtension(
+        torrent.name,
+        input.config.transmissionGuard.dangerousExtensions
+      )
+    ) {
+      reason = 'TX_DANGEROUS_DOWNLOAD_REMOVE';
+    } else if (torrent.error > 0) {
       reason = 'TX_ERROR_REMOVE';
     } else if (
       hasActiveSuppressedRelease(
@@ -748,12 +767,15 @@ export const runTransmissionGuard = async (input: {
       progressCurrent: index + 1,
       progressTotal: torrents.length,
     });
+    const isDangerous = reason === 'TX_DANGEROUS_DOWNLOAD_REMOVE';
     const result = await removeTorrentAndSuppress({
       database: input.database,
       client: input.client,
       torrentState,
-      deleteLocalData: input.config.transmissionGuard.deleteLocalData,
-      suppressDurationMs: input.config.transmissionGuard.suppressSameReleaseForMs,
+      deleteLocalData: isDangerous || input.config.transmissionGuard.deleteLocalData,
+      suppressDurationMs: isDangerous
+        ? new Date(PERMANENT_SUPPRESSION_EXPIRES_AT).getTime() - now.getTime()
+        : input.config.transmissionGuard.suppressSameReleaseForMs,
       now,
       reason,
     });
@@ -763,7 +785,7 @@ export const runTransmissionGuard = async (input: {
       name: torrent.name,
       linkedMediaKey: torrentState.linkedMediaKey,
       reasonCode: reason,
-      deleteLocalData: input.config.transmissionGuard.deleteLocalData,
+      deleteLocalData: isDangerous || input.config.transmissionGuard.deleteLocalData,
     });
     recordTransmissionRemoval(reason);
     removedCount += 1;

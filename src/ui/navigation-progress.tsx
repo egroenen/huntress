@@ -3,6 +3,7 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -29,6 +30,11 @@ export const NavigationProgressProvider = ({
 }) => {
   const pathname = usePathname();
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
+
+  useEffect(() => {
+    setPendingNavigation(null);
+  }, [pathname]);
+
   const activePendingNavigation =
     pendingNavigation && pendingNavigation.href !== pathname ? pendingNavigation : null;
 

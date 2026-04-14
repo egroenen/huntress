@@ -95,6 +95,7 @@ export const rawConfigSchema = z.object({
     suppress_same_release_for: durationStringSchema,
     item_cooldown_after_loop: durationStringSchema,
     delete_local_data: z.boolean(),
+    dangerous_extensions: z.string().default('.exe,.scr'),
   }),
   safety: z.object({
     panic_disable_search: z.boolean(),
@@ -198,6 +199,7 @@ export const resolvedConfigSchema = z
       suppressSameReleaseForMs: z.number().int().positive(),
       itemCooldownAfterLoopMs: z.number().int().positive(),
       deleteLocalData: z.boolean(),
+      dangerousExtensions: z.array(z.string().min(1)).default([]),
     }),
     safety: z.object({
       panicDisableSearch: z.boolean(),

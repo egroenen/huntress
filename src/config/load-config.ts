@@ -192,6 +192,11 @@ const resolveConfig = (
         rawConfig.transmission_guard.item_cooldown_after_loop
       ),
       deleteLocalData: rawConfig.transmission_guard.delete_local_data,
+      dangerousExtensions: rawConfig.transmission_guard.dangerous_extensions
+        .split(',')
+        .map((ext) => ext.trim().toLowerCase())
+        .filter((ext) => ext.length > 0)
+        .map((ext) => (ext.startsWith('.') ? ext : `.${ext}`)),
     },
     safety: {
       panicDisableSearch: rawConfig.safety.panic_disable_search,

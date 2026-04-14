@@ -51,4 +51,6 @@ export interface TableColumn {
   key: string;
   label: ReactNode;
   align?: 'left' | 'right';
+  sortAsc?: string;
+  sortDesc?: string;
 }

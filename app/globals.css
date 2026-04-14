@@ -223,11 +223,15 @@ select {
   gap: 0.22rem;
 }
 
-.console-sidebar__meta strong,
+.console-sidebar__meta strong {
+  display: block;
+  color: var(--text-strong);
+}
+
 .activity-panel__header strong,
 .latest-run__summary strong {
   display: block;
-  color: var(--text-strong);
+  color: #3a2518;
 }
 
 .console-main {
@@ -513,9 +517,9 @@ select {
 }
 
 .status-badge--info {
-  background: #faf0d8;
-  border-color: #c8a050;
-  color: #5c4012;
+  background: #dde8f0;
+  border-color: #7a9bb5;
+  color: #2c4f6e;
 }
 
 .status-badge--degraded,
@@ -525,16 +529,21 @@ select {
   color: #5f4300;
 }
 
-.status-badge--unavailable,
+.status-badge--unavailable {
+  background: #e8d5d7;
+  border-color: #a68085;
+  color: #6e3a40;
+}
+
 .status-badge--failed {
   background: rgba(220, 93, 103, 0.16);
   color: #a62f39;
 }
 
 .status-badge--running {
-  background: #f5e8d0;
-  border-color: #c8963e;
-  color: #5c3a10;
+  background: #fce4cc;
+  border-color: #d48a3c;
+  color: #6e3e0a;
 }
 
 .data-table {
@@ -579,6 +588,56 @@ select {
 .data-table__empty {
   color: var(--content-muted);
   text-align: center;
+}
+
+.data-table th.is-sortable {
+  padding: 0;
+}
+
+.data-table th.is-sortable .sortable-header {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.82rem 1rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  user-select: none;
+}
+
+.data-table th.is-right .sortable-header {
+  justify-content: flex-end;
+}
+
+.data-table th.is-sortable .sortable-header:hover {
+  background: rgba(200, 150, 62, 0.12);
+}
+
+.data-table th.is-sortable .sortable-header:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.sort-indicator {
+  font-size: 0.6rem;
+  opacity: 0.35;
+  transition: opacity 0.15s;
+}
+
+.data-table th.is-sorted-asc .sort-indicator,
+.data-table th.is-sorted-desc .sort-indicator {
+  opacity: 1;
+}
+
+.data-table[data-pending="true"] {
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .reason-code {

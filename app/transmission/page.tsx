@@ -8,12 +8,12 @@ import { requireAuthenticatedConsoleContext } from '@/src/server/require-auth';
 import {
   ConsoleHeaderActions,
   ConsoleShell,
-  DataTable,
   MediaItemLink,
   QueryFilterForm,
   QueryFilterLink,
   ReasonCodeBadge,
   SectionCard,
+  SortableDataTable,
   StatusBadge,
 } from '@/src/ui';
 
@@ -202,19 +202,7 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
                 </select>
               </label>
 
-              <label className="candidate-filters__field">
-                <span>Sort</span>
-                <select name="sort" defaultValue={filters.sort}>
-                  <option value="recent_desc">Most recent first</option>
-                  <option value="recent_asc">Oldest first</option>
-                  <option value="name_asc">Torrent name A-Z</option>
-                  <option value="name_desc">Torrent name Z-A</option>
-                  <option value="progress_desc">Progress high-low</option>
-                  <option value="progress_asc">Progress low-high</option>
-                  <option value="linked_media_asc">Linked media A-Z</option>
-                  <option value="linked_media_desc">Linked media Z-A</option>
-                </select>
-              </label>
+              <input type="hidden" name="sort" value={filters.sort} />
             </div>
 
             <div className="transmission-controls__actions">
@@ -255,7 +243,7 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
 
       <SectionCard
         title="Recent torrent observations"
-        subtitle={`Rows are sorted using the selected view and can be paged when the cache gets large. Stall removal threshold is ${formatDurationFromMs(runtime.config.transmissionGuard.stallNoProgressForMs)}.`}
+        subtitle={`Click column headers to sort. Stall removal threshold is ${formatDurationFromMs(runtime.config.transmissionGuard.stallNoProgressForMs)}.`}
         actions={renderTransmissionPagination({
           currentPage,
           totalItems: totalFilteredTorrents,
@@ -266,16 +254,21 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
           linked: filters.linked,
         })}
       >
-        <DataTable
+        <SortableDataTable
+          basePath="/transmission"
+          sortParam="sort"
+          defaultSort={DEFAULT_SORT}
+          persistenceCookieName={TRANSMISSION_FILTER_COOKIE}
+          persistedQueryKeys={TRANSMISSION_PERSISTED_QUERY_KEYS}
           columns={[
-            { key: 'name', label: 'Torrent' },
+            { key: 'name', label: 'Torrent', sortAsc: 'name_asc', sortDesc: 'name_desc' },
             { key: 'state', label: 'State' },
             { key: 'guard', label: 'Guard status' },
-            { key: 'progress', label: 'Progress', align: 'right' },
-            { key: 'linkedMediaKey', label: 'Linked media' },
+            { key: 'progress', label: 'Progress', align: 'right', sortAsc: 'progress_asc', sortDesc: 'progress_desc' },
+            { key: 'linkedMediaKey', label: 'Linked media', sortAsc: 'linked_media_asc', sortDesc: 'linked_media_desc' },
             { key: 'noProgressSince', label: 'No progress' },
             { key: 'removeIn', label: 'Remove in' },
-            { key: 'details', label: 'Details' },
+            { key: 'details', label: 'Recent', sortAsc: 'recent_asc', sortDesc: 'recent_desc' },
           ]}
           rows={pagedTorrents.map((torrent) => {
             const insight = getGuardInsight({
@@ -369,6 +362,7 @@ export default async function TransmissionPage(props: { searchParams: SearchPara
           emptyMessage="No Transmission torrent observations have been stored yet."
         />
       </SectionCard>
+
     </ConsoleShell>
   );
 }

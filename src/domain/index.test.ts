@@ -857,6 +857,7 @@ test('sync and dispatch work together in a mocked end-to-end cycle', async () =>
           suppressSameReleaseForMs: 7 * 86_400_000,
           itemCooldownAfterLoopMs: 24 * 3_600_000,
           deleteLocalData: true,
+          dangerousExtensions: ['.exe', '.scr'],
         },
         safety: {
           panicDisableSearch: false,

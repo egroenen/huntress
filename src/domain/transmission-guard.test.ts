@@ -150,6 +150,7 @@ const createResolvedConfig = (): ResolvedConfig => {
       suppressSameReleaseForMs: 7 * 86_400_000,
       itemCooldownAfterLoopMs: 24 * 3_600_000,
       deleteLocalData: true,
+      dangerousExtensions: ['.exe', '.scr'],
     },
     safety: {
       panicDisableSearch: false,
@@ -914,5 +915,114 @@ test('runTransmissionGuard removes dangerous Radarr queue items and permanently 
     assert.equal(torrentState?.linkedMediaKey, 'radarr:movie:3476');
   } finally {
     database.close();
+  }
+});
+
+test('runTransmissionGuard immediately removes torrents with dangerous file extensions and creates permanent suppressions', async () => {
+  const server = await startTransmissionServer((_, response, body) => {
+    const method =
+      typeof body === 'object' && body !== null && 'method' in body
+        ? (body as { method: string }).method
+        : null;
+
+    if (method === 'torrent-get') {
+      response.end(
+        JSON.stringify({
+          result: 'success',
+          arguments: {
+            torrents: [
+              {
+                id: 10,
+                hashString: 'hash-dangerous-exe',
+                name: 'Example Movie 1080p.exe',
+                status: 4,
+                percentDone: 0.05,
+                error: 0,
+                errorString: null,
+                eta: 3600,
+                rateDownload: 50000,
+                rateUpload: 0,
+                addedDate: 1,
+                doneDate: 0,
+                activityDate: 1,
+              },
+              {
+                id: 11,
+                hashString: 'hash-dangerous-scr',
+                name: 'Another Movie 720p.scr',
+                status: 4,
+                percentDone: 0.1,
+                error: 0,
+                errorString: null,
+                eta: 7200,
+                rateDownload: 100000,
+                rateUpload: 0,
+                addedDate: 1,
+                doneDate: 0,
+                activityDate: 1,
+              },
+              {
+                id: 12,
+                hashString: 'hash-safe-mkv',
+                name: 'Safe Movie 1080p.mkv',
+                status: 4,
+                percentDone: 0.5,
+                error: 0,
+                errorString: null,
+                eta: 1800,
+                rateDownload: 200000,
+                rateUpload: 0,
+                addedDate: 1,
+                doneDate: 0,
+                activityDate: 1,
+              },
+            ],
+          },
+        })
+      );
+      return;
+    }
+
+    if (method === 'torrent-remove') {
+      response.end(JSON.stringify({ result: 'success', arguments: {} }));
+      return;
+    }
+
+    response.statusCode = 404;
+    response.end(JSON.stringify({ result: 'unknown', arguments: {} }));
+  });
+
+  const databasePath = await createDatabasePath();
+  const database = await seedMediaItem(databasePath);
+  const config = createResolvedConfig();
+
+  try {
+    const summary = await runTransmissionGuard({
+      database,
+      config,
+      client: createTransmissionClient({
+        baseUrl: server.url,
+        username: 'user',
+        password: 'pass',
+      }),
+      now: new Date('2026-04-04T12:00:00.000Z'),
+    });
+
+    const exeTorrentState =
+      database.repositories.transmissionTorrentState.getByHash('hash-dangerous-exe');
+    const scrTorrentState =
+      database.repositories.transmissionTorrentState.getByHash('hash-dangerous-scr');
+    const safeTorrentState =
+      database.repositories.transmissionTorrentState.getByHash('hash-safe-mkv');
+
+    assert.equal(summary.observedCount, 3);
+    assert.equal(summary.removedCount, 2);
+    assert.equal(exeTorrentState?.removalReason, 'TX_DANGEROUS_DOWNLOAD_REMOVE');
+    assert.equal(scrTorrentState?.removalReason, 'TX_DANGEROUS_DOWNLOAD_REMOVE');
+    assert.equal(safeTorrentState?.removalReason, null);
+    assert.equal(safeTorrentState?.removedAt, null);
+  } finally {
+    database.close();
+    await server.close();
   }
 });

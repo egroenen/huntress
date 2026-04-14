@@ -15,13 +15,13 @@ import {
   CandidateSectionToggle,
   ConsoleHeaderActions,
   ConsoleShell,
-  DataTable,
   ManualFetchButton,
   MediaItemLink,
   QueryFilterForm,
   QueryFilterLink,
   ReasonCodeBadge,
   SectionCard,
+  SortableDataTable,
   StatusBadge,
   TablePagination,
 } from '@/src/ui';
@@ -380,8 +380,8 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
       }
     >
       <SectionCard
-        title="Search, filter, and sort"
-        subtitle="Apply one shared view across both Sonarr and Radarr candidate lists."
+        title="Search and filter"
+        subtitle="Apply one shared view across both Sonarr and Radarr candidate lists. Click column headers to sort."
       >
         <QueryFilterForm
           action="/candidates"
@@ -429,18 +429,7 @@ export default async function CandidatesPage(props: { searchParams: SearchParams
               </select>
             </label>
 
-            <label className="candidate-filters__field">
-              <span>Sort</span>
-              <select name="sort" defaultValue={filters.sort}>
-                <option value="engine">Decision engine order</option>
-                <option value="title_asc">Title A-Z</option>
-                <option value="title_desc">Title Z-A</option>
-                <option value="retry_desc">Retry count high-low</option>
-                <option value="retry_asc">Retry count low-high</option>
-                <option value="next_eligible_asc">Next eligible soonest</option>
-                <option value="next_eligible_desc">Next eligible latest</option>
-              </select>
-            </label>
+            <input type="hidden" name="sort" value={filters.sort} />
           </div>
 
           <div className="candidate-filters__actions">
@@ -663,17 +652,22 @@ const CandidatesResults = async ({
                   decision: candidate.decision,
                 }))}
               >
-                <DataTable
+                <SortableDataTable
+                  basePath="/candidates"
+                  sortParam="sort"
+                  defaultSort={DEFAULT_SORT}
+                  persistenceCookieName={CANDIDATES_FILTER_COOKIE}
+                  persistedQueryKeys={CANDIDATES_PERSISTED_QUERY_KEYS}
                   columns={[
-                    { key: 'title', label: 'Title' },
+                    { key: 'title', label: 'Title', sortAsc: 'title_asc', sortDesc: 'title_desc' },
                     { key: 'mediaKey', label: 'Media key' },
                     { key: 'wantedState', label: 'Wanted state' },
                     { key: 'decision', label: 'Decision' },
                     { key: 'dispatchPath', label: 'Dispatch path' },
                     { key: 'releasePreview', label: 'Release preview' },
                     { key: 'reason', label: 'Reason code' },
-                    { key: 'retryCount', label: 'Retries', align: 'right' },
-                    { key: 'nextEligibleAt', label: 'Next eligible' },
+                    { key: 'retryCount', label: 'Retries', align: 'right', sortAsc: 'retry_asc', sortDesc: 'retry_desc' },
+                    { key: 'nextEligibleAt', label: 'Next eligible', sortAsc: 'next_eligible_asc', sortDesc: 'next_eligible_desc' },
                     { key: 'actions', label: 'Actions', align: 'right' },
                   ]}
                   rows={pagedCandidates[app].map((candidate: CandidatePreviewRecord) => ({

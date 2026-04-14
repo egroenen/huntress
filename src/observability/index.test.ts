@@ -94,6 +94,7 @@ const createResolvedConfig = (): ResolvedConfig => {
       suppressSameReleaseForMs: 7 * 86_400_000,
       itemCooldownAfterLoopMs: 24 * 3_600_000,
       deleteLocalData: true,
+      dangerousExtensions: ['.exe', '.scr'],
     },
     safety: {
       panicDisableSearch: false,
